@@ -135,7 +135,7 @@ spec:
       public: true
       rate_limit: { max: 10, per: 1m, scope: ip }
       impl: { type: script_ref, ref: demo/echo }
-`, "public_entities")
+`, "Service action")
 	})
 
 	t.Run("well-formed public action is accepted", func(t *testing.T) {

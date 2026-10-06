@@ -14,6 +14,19 @@
 #   3. halaman entity turunan → `order-page` (= {entity}-page)
 # Bentuk (3) yang paling ringkas untuk master/transaksi; (2) untuk layar khas.
 #
+# ─── ROW SCOPE PER ACTION ───
+# Setiap action boleh membawa `row_scope` — filter baris yang ditegakkan
+# SERVER, dari grant, bukan dari klien (10.67 + GAP-08):
+#   - `{field, op, value}`            → konstanta manifest, tak bisa dilebarkan
+#   - `{field, op, from: session}`    → atribut sesi (mis. cabang)
+#   - `{field, op, from: route}`      → parameter request (mis. token tamu)
+# Ini yang membedakannya dari `fixed_filters` di kind (Kanban/Table): yang itu
+# digabung BROWSER dan bisa dihilangkan `curl`, jadi bukan batas otorisasi.
+#
+# PENTING: `from: session` gagal-closed bila akun tidak punya assignment dimensi
+# itu — pemegang role yang di-scope harus punya `assignments` (lihat bagian
+# `user` di bawah), atau setiap list-nya membalas 403.
+#
 # PENTING: nama page/action yang TIDAK dikenal membuat `Materialize` gagal, dan
 # resolver **melewati role itu tanpa suara** (`resolver.go`: `continue // malformed
 # grant — skip role`). Jadi role yang salah ketik akan tampak "tidak punya
@@ -80,12 +93,27 @@ spec:
 
         # BARISTA — layar dapur (bar): memajukan status pesanan minuman.
         # Hanya kanban + baca pesanan; tidak menyentuh uang sama sekali.
+        #
+        # `row_scope` pada grant menutup DUA temuan sekaligus (10.67 + GAP-08):
+        #   - aturan bisnis #1 ("hanya pesanan LUNAS yang masuk dapur") sebelumnya
+        #     hanya berlaku karena kolom Kanban — `list`/`view` langsung ke API
+        #     masih memuat `draft`. Kini batasnya ada di otorisasi.
+        #   - penyaring cabang KDS sebelumnya `fixed_filters` di klien (bisa
+        #     dihilangkan `curl`). Kini server yang menegakkannya.
+        # Nilai `value` adalah konstanta manifest (tak bisa dilebarkan klien);
+        # `from: session` membaca cabang sesi (barista → KFE-JKT-01 di seed).
         - name: barista
           app: kafe-kds
           description: "Barista — majukan status pesanan minuman di KDS"
           grants:
             - { page: "kanban:order-board-kds", actions: [{ name: view }] }
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }, { name: start-preparing }, { name: mark-ready }] }
+            - page: "order-page"
+              actions:
+                - { name: list, row_scope: [{ field: status, op: in, value: "paid,in_kitchen,ready,served" }, { field: branch_id, op: eq, from: session }] }
+                - { name: view, row_scope: [{ field: status, op: in, value: "paid,in_kitchen,ready,served" }, { field: branch_id, op: eq, from: session }] }
+                - { name: update, row_scope: [{ field: status, op: in, value: "paid,in_kitchen,ready,served" }, { field: branch_id, op: eq, from: session }] }
+                - { name: start-preparing }
+                - { name: mark-ready }
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
 
         # DAPUR — sama dengan barista; dipisah karena `prep_station` memisahkan
@@ -96,17 +124,34 @@ spec:
           description: "Dapur — majukan status pesanan makanan di KDS"
           grants:
             - { page: "kanban:order-board-kds", actions: [{ name: view }] }
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }, { name: start-preparing }, { name: mark-ready }] }
+            - page: "order-page"
+              actions:
+                - { name: list, row_scope: [{ field: status, op: in, value: "paid,in_kitchen,ready,served" }, { field: branch_id, op: eq, from: session }] }
+                - { name: view, row_scope: [{ field: status, op: in, value: "paid,in_kitchen,ready,served" }, { field: branch_id, op: eq, from: session }] }
+                - { name: update, row_scope: [{ field: status, op: in, value: "paid,in_kitchen,ready,served" }, { field: branch_id, op: eq, from: session }] }
+                - { name: start-preparing }
+                - { name: mark-ready }
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
             - { page: "recipe-page", actions: [{ name: list }, { name: view }] }
             - { page: "ingredient-page", actions: [{ name: list }, { name: view }] }
 
         # PELAYAN — antar pesanan & tandai tersaji.
+        # `row_scope` di sini adalah separuh aturan #1 dari sisi depan rumah:
+        # pelayan melayani yang sudah siap, bukan draft yang sedang disusun
+        # kasir. Ia tetap melihat pesanannya sendiri di cabangnya (`session`).
         - name: pelayan
           app: kafe-pos
           description: "Pelayan — antar & tandai pesanan tersaji"
           grants:
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }, { name: mark-served }, { name: complete-order }, { name: submit-order }, { name: abandon }] }
+            - page: "order-page"
+              actions:
+                - { name: list, row_scope: [{ field: status, op: in, value: "ready,served,completed" }, { field: branch_id, op: eq, from: session }] }
+                - { name: view, row_scope: [{ field: status, op: in, value: "ready,served,completed" }, { field: branch_id, op: eq, from: session }] }
+                - { name: update, row_scope: [{ field: status, op: in, value: "ready,served,completed" }, { field: branch_id, op: eq, from: session }] }
+                - { name: mark-served }
+                - { name: complete-order }
+                - { name: submit-order }
+                - { name: abandon }
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
             # Pelayan yang menandai pesanan tersaji, jadi ia yang menggerakkan
             # meja `occupied → served` (dan kembali `occupied` bila tamu
@@ -146,6 +191,25 @@ spec:
             - { page: "report:sales-by-period", actions: [{ name: view }] }
             - { page: "report:shift-recap", actions: [{ name: view }] }
             - { page: "print:receipt-thermal", actions: [{ name: view }] }
+            # ── DUTY APPROVAL ──
+            # Menyetujui void adalah PERMISSION, bukan nama role: grant ini
+            # menunjuk step `supervisor-check` pada approval gate di transisi
+            # `order.void-order`, dan mematerialisasi
+            # `workflow.cafe-order.order.void-order.supervisor-check`
+            # (`navigationFootprint` case `workflow`).
+            #
+            # Bentuk `{kind}:{name}` sama dengan `report:`/`print:`/`kanban:` di
+            # atas — bukan kosakata baru.
+            #
+            # Inilah yang menggantikan `roles: [...]` di dalam gate: siapa boleh
+            # menandatangani ditentukan DI SINI, bukan oleh nama role yang
+            # ditulis di deklarasi approval.
+            - { page: "workflow:order.void-order", actions: [{ name: supervisor-check }] }
+            # DUTY TAKEOVER: bila supervisor tidak bertindak dalam 4 jam,
+            # `escalation.reassign: manager-check` memindahkan hak persetujuan ke
+            # pemegang duty ini — jadi ia harus punya grant-nya, atau eskalasinya
+            # menunjuk permission yang tak dipegang siapa pun.
+            - { page: "workflow:order.void-order", actions: [{ name: manager-check }] }
 
         # MANAJER — hampir penuh: master, stok, laporan, dashboard.
         # Tanpa `delete` (aturan bisnis #14: data penjualan tidak pernah dihapus

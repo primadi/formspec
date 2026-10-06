@@ -173,7 +173,7 @@ Resolusi `ref` mencoba tiga format berurutan — exact `TypeName.MethodName`,
 
 Skema `Document`/`Entity` (yang di-load engine ini) didefinisikan normatif di `docs/spec/backend/01-core-basic.md` dan `docs/spec/backend/03-entity-extension.md` — dokumen ini tidak mengulang skemanya, hanya perilaku runtime-nya. Struct Go yang relevan ada di `pkg/spec/entity.go`: `EntitySpec`, `Field`, `Action`, `StateMachine`, `EventDecl`, `UsesDecl`, `ExposeConfig`.
 
-Kind lain yang parse valid tapi **belum dikonsumsi runtime apapun** (lihat §7): `Page`, `Form`, `Table`, `Dashboard`, `Workflow`, `Api`, `Webhook`, `Environment`, `Policy`, `Datastore`, dan kind frontend lain di `pkg/spec/frontend.go`.
+Kind lain yang parse valid tapi **belum dikonsumsi runtime apapun** (lihat §7): `Page`, `Form`, `Table`, `Dashboard`, `Api`, `Webhook`, `Environment`, `Policy`, `Datastore`, dan kind frontend lain di `pkg/spec/frontend.go`. (Approval bukan kind — ia `state_machine.transitions[].approval` pada Entity, dan **sudah** dikonsumsi runtime approval.)
 
 ---
 

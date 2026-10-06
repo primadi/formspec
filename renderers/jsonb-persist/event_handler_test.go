@@ -97,18 +97,55 @@ func TestDeliveryEventHandler_LookupMiss_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestDeliveryEventHandler_UnimplementedChannel_ReturnsNilNotError(t *testing.T) {
+// TestDeliveryEventHandler_UnwiredChannel_FailsNotSilentlyDelivered is the 7.7.6
+// correction.
+//
+// This test used to pin the opposite: an unimplemented channel returned nil,
+// "treated as delivered, not retried". That was the polite reading of a
+// delivery that never happened — the outbox marked the entry COMPLETED, so
+// nothing in the data showed the consequence was missing, and `formspec
+// validate` stayed green over a manifest whose consequence could never occur.
+// The honest outcome is a failure: the worker retries, then dead-letters
+// (`status='failed'`), which an operator can see and query.
+//
+// Every channel is now delivered by SOMEONE; what this pins is the WIRING GAP —
+// a channel whose dispatcher was not wired must fail, not report success.
+func TestDeliveryEventHandler_UnwiredChannel_FailsNotSilentlyDelivered(t *testing.T) {
 	hub := &fakeHub{}
 	eventLog := newEventLogStore(t)
 	lookup := func(resource, eventName string) ([]spec.EventDeliveryDecl, bool) {
-		return []spec.EventDeliveryDecl{{Channel: "webhook"}}, true
+		return []spec.EventDeliveryDecl{{Channel: "webhook", Webhook: &spec.WebhookDeliveryDecl{URL: "https://example.com/h"}}}, true
 	}
 	handler := &DeliveryEventHandler{Hub: hub, EventLog: eventLog, Lookup: lookup}
 
 	payload, _ := json.Marshal(events.EventMessage{Event: "completed", Resource: "clinic/visit"})
 	err := handler.HandleEvent(context.Background(), "demo", "completed", "clinic/visit", string(payload))
-	if err != nil {
-		t.Fatalf("expected nil (treated as delivered, not retried) for an unimplemented channel, got %v", err)
+	if err == nil {
+		t.Fatal("an unwired channel must fail, not be reported as delivered")
+	}
+	if !strings.Contains(err.Error(), "no webhook sender is wired") {
+		t.Errorf("error %q should say the wiring is missing", err.Error())
+	}
+}
+
+// TestDeliveryEventHandler_UnknownChannel_FailsToo keeps a value outside the
+// declared set from slipping through: the struct can be built programmatically,
+// so the handler must not rely on the schema having filtered it.
+func TestDeliveryEventHandler_UnknownChannel_FailsToo(t *testing.T) {
+	hub := &fakeHub{}
+	eventLog := newEventLogStore(t)
+	lookup := func(resource, eventName string) ([]spec.EventDeliveryDecl, bool) {
+		return []spec.EventDeliveryDecl{{Channel: "carrier-pigeon"}}, true
+	}
+	handler := &DeliveryEventHandler{Hub: hub, EventLog: eventLog, Lookup: lookup}
+
+	payload, _ := json.Marshal(events.EventMessage{Event: "completed", Resource: "clinic/visit"})
+	err := handler.HandleEvent(context.Background(), "demo", "completed", "clinic/visit", string(payload))
+	if err == nil {
+		t.Fatal("an unknown channel must fail rather than complete")
+	}
+	if !strings.Contains(err.Error(), "carrier-pigeon") {
+		t.Errorf("error %q should name the channel", err.Error())
 	}
 }
 
@@ -126,6 +163,81 @@ func TestDeliveryEventHandler_MalformedPayload_ReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unmarshal") {
 		t.Errorf("error = %v, want it to mention unmarshal", err)
+	}
+}
+
+// TestDeliveryEventHandler_ReliableEventPassesTheWholeEntry is the plumbing half
+// of todo 7.7.5: the consequence dispatcher cannot enforce
+// `deliver[].idempotency_key` unless the entry that declares it is handed over.
+// Passing only `ch.Target` — which is what the handler used to do — dropped the
+// key on the floor, so the outbox retry could not check it and re-applied the
+// consequence.
+func TestDeliveryEventHandler_ReliableEventPassesTheWholeEntry(t *testing.T) {
+	hub := &fakeHub{}
+	eventLog := newEventLogStore(t)
+
+	want := spec.EventDeliveryDecl{
+		Channel:        "reliable_event",
+		Target:         &spec.DeliveryTarget{Resource: "gl.gl-balance", Action: "update"},
+		IdempotencyKey: "balance.{id}",
+	}
+	lookup := func(resource, eventName string) ([]spec.EventDeliveryDecl, bool) {
+		return []spec.EventDeliveryDecl{want}, true
+	}
+
+	var got spec.EventDeliveryDecl
+	var called bool
+	handler := &DeliveryEventHandler{
+		Hub: hub, EventLog: eventLog, Lookup: lookup,
+		Actions: func(_ context.Context, _, _, _ string, _ map[string]any, ch spec.EventDeliveryDecl) error {
+			called = true
+			got = ch
+			return nil
+		},
+	}
+
+	payload, _ := json.Marshal(events.EventMessage{
+		Event: "journal-posted", Resource: "gl/journal-entry", Payload: map[string]any{"id": "jrn-1"},
+	})
+	if err := handler.HandleEvent(context.Background(), "demo", "journal-posted", "gl/journal-entry", string(payload)); err != nil {
+		t.Fatalf("delivery: %v", err)
+	}
+	if !called {
+		t.Fatal("the target action dispatch must be invoked for a reliable_event with a target")
+	}
+	if got.IdempotencyKey != "balance.{id}" {
+		t.Fatalf("idempotency_key = %q, want balance.{id} — dropping it makes the retry check impossible", got.IdempotencyKey)
+	}
+	if got.Target == nil || got.Target.Resource != "gl.gl-balance" || got.Target.Action != "update" {
+		t.Fatalf("target = %+v, want gl.gl-balance.update", got.Target)
+	}
+}
+
+// TestDeliveryEventHandler_ReliableEventWithoutTargetSkipsDispatch keeps the
+// durability-only entry (no target) from invoking anything — its job was the
+// outbox itself, and Subscription fan-out is a separate pass.
+func TestDeliveryEventHandler_ReliableEventWithoutTargetSkipsDispatch(t *testing.T) {
+	hub := &fakeHub{}
+	eventLog := newEventLogStore(t)
+	lookup := func(resource, eventName string) ([]spec.EventDeliveryDecl, bool) {
+		return []spec.EventDeliveryDecl{{Channel: "reliable_event"}}, true
+	}
+
+	called := false
+	handler := &DeliveryEventHandler{
+		Hub: hub, EventLog: eventLog, Lookup: lookup,
+		Actions: func(_ context.Context, _, _, _ string, _ map[string]any, _ spec.EventDeliveryDecl) error {
+			called = true
+			return nil
+		},
+	}
+
+	payload, _ := json.Marshal(events.EventMessage{Event: "completed", Resource: "clinic/visit"})
+	if err := handler.HandleEvent(context.Background(), "demo", "completed", "clinic/visit", string(payload)); err != nil {
+		t.Fatalf("delivery: %v", err)
+	}
+	if called {
+		t.Fatal("an entry with no target must not invoke a consequence")
 	}
 }
 

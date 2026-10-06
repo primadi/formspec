@@ -44,6 +44,7 @@ import (
 	"github.com/primadi/formspec/internal/action"
 	"github.com/primadi/formspec/internal/api"
 	formspec_app "github.com/primadi/formspec/internal/app"
+	"github.com/primadi/formspec/internal/approval"
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/auth/oauth"
 	"github.com/primadi/formspec/internal/config"
@@ -52,6 +53,7 @@ import (
 	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/mail"
 	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/notify"
 	"github.com/primadi/formspec/internal/observability"
 	"github.com/primadi/formspec/internal/period"
 	"github.com/primadi/formspec/internal/permission"
@@ -62,7 +64,7 @@ import (
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/internal/vendor"
 	"github.com/primadi/formspec/internal/webhook"
-	"github.com/primadi/formspec/internal/workflow"
+	"github.com/primadi/formspec/internal/webhookout"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/memory"
@@ -257,7 +259,7 @@ type App struct {
 	idempotency     *db.IdempotencyStore
 	httpServer      *http.Server
 	// escalationWorker escalates stale workflow approvals (todo 7.4.4).
-	escalationWorker *workflow.EscalationWorker
+	escalationWorker *approval.EscalationWorker
 	// linkSweeper enforces storage-link TTLs (delete_if_untouched) and
 	// purges consumed link rows (todo 7.17.6).
 	linkSweeper *api.StorageLinkSweeper
@@ -283,6 +285,10 @@ type App struct {
 	// a ReloadSpec() reuses the same backend (and its consumer groups) while
 	// rebuilding the streaming worker.
 	stream stream.Stream
+	// grantScope carries the per-role row-scope resolver into the script
+	// executor's wiring (kafe 10.74). Filled once the auth service exists; a
+	// script read of a scoped entity denies until it is wired, never widens.
+	grantScope *grantScopeHolder
 	// subReg is the live subscription registry (Tier 1 + Tier 2). Held so
 	// `formspec summary rebuild` can resolve which durable streams feed a
 	// summary projection (todo 3.6.4) without re-parsing manifests.
@@ -465,6 +471,13 @@ func New(cfg Config) (*App, error) {
 	if err := period.RegisterCoreEntities(reg); err != nil {
 		return nil, fmt.Errorf("register period core entities: %w", err)
 	}
+	// Register the framework-owned notification entity
+	// (formspec.core.notification, todo 7.7.6) — the row the `notification`
+	// delivery channel writes and `kind: NotificationCenter` lists. Without it
+	// the channel has no destination and the page has no source.
+	if err := notify.RegisterCoreEntities(reg); err != nil {
+		return nil, fmt.Errorf("register notify core entities: %w", err)
+	}
 	for _, loadErr := range reg.LoadEntities() {
 		_, _ = fmt.Fprintf(os.Stderr, "formspec: load warning: %v\n", loadErr)
 	}
@@ -558,9 +571,9 @@ func New(cfg Config) (*App, error) {
 	// Subscription registry (todo 7.3.1): load kind: Subscription manifests
 	// for event → handler dispatch.
 	subReg := buildSubscriptionRegistry(specManifests.Manifests)
-	// Workflow registry (todo 7.4.1): load kind: Workflow manifests for
+	// Workflow registry (todo 7.4.1): derive approval gates from entity
 	// state-machine transition interception.
-	wfReg := buildWorkflowRegistry(specManifests.Manifests)
+	wfReg := buildApprovalRegistry(specManifests.Manifests)
 	// Integrator registry (todo 7.7.1): load kind: Integrator manifests for
 	// cross-module event → action bridging.
 	itReg := buildIntegratorRegistry(specManifests.Manifests)
@@ -634,7 +647,11 @@ func New(cfg Config) (*App, error) {
 		},
 	})
 
-	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, jobTracker, dsReg, sharedPubSub)
+	// Row-scope resolver for script reads (kafe 10.74). Declared here because the
+	// dispatcher is built before the auth service; filled in once it exists.
+	appGrantScope := &grantScopeHolder{}
+
+	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, jobTracker, dsReg, appGrantScope, sharedPubSub)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
 	rb.SetUIRegistry(uiReg)
@@ -745,7 +762,20 @@ func New(cfg Config) (*App, error) {
 	if roleStore, err := authRoles.Resolve(auth.RoleRole); err == nil {
 		authSvc.SetRoleStore(auth.NewRoleStore(roleStore))
 	}
-	authSvc.SetMaterializer(auth.NewMaterializer(uiReg, reg))
+	// Approval duties are granted by name (`{ page: "workflow:{name}", actions:
+	// [{name: "{step}"}] }`), so the materializer must be able to resolve a
+	// workflow to its module + steps. Without this the grant materializes to
+	// nothing — measured on kafe: the supervisor's 44 permissions contained no
+	// `workflow.*` at all (plan approval-duty-permission.md, Fase 4).
+	materializer := auth.NewMaterializer(uiReg, reg)
+	materializer.SetApprovalDuties(func(name string) (string, []spec.DutyRef, bool) {
+		module, a, ok := wfReg.GetByName(name)
+		if !ok || a == nil {
+			return "", nil, false
+		}
+		return module, spec.ApprovalDuties(module, name, a), true
+	})
+	authSvc.SetMaterializer(materializer)
 	// Public Apps are exempt from the 0-permission login gate: their
 	// public_entities floor authorizes the surface (plan app-scoped-login.md
 	// D6 — e.g. the registry portal, which is `access: public` and accepts
@@ -762,6 +792,17 @@ func New(cfg Config) (*App, error) {
 		authSvc.SetMaxSessionsPerUser(cfg.MaxSessionsPerUser)
 	}
 	api.SetAuthService(authSvc)
+
+	// Wire the per-role row scope resolver (kafe 10.67 / GAP-08). The entity's
+	// own `row_scope` filters by WHO (session/route attributes) and is per
+	// entity, so it cannot express "this ROLE sees only the paid orders"
+	// without blinding the cashier to their own drafts. The grant carries that
+	// restriction per (role, action) and is resolved here, server-side.
+	rb.SetGrantScopeLookup(authSvc.GrantRowScope)
+	// The SAME resolver feeds script reads (kafe 10.74): a script runs on behalf
+	// of its caller, so if the two layers resolved different boundaries, a guard
+	// script would match rows the HTTP layer hides from that same caller.
+	appGrantScope.fn = authSvc.GrantRowScope
 
 	// Wire the transactional mailer (password reset). Defaults target Mailpit
 	// in dev; leave SMTPHost empty to disable email flows.
@@ -842,16 +883,16 @@ func New(cfg Config) (*App, error) {
 
 	// Workflow approval store (todo 7.4): persists in-flight approval
 	// requests for intercepted state-machine transitions.
-	wfApprovalStore := db.NewWorkflowApprovalStore(database, driver)
-	rb.SetWorkflowRegistry(wfReg)
-	rb.SetWorkflowApprovalStore(wfApprovalStore)
+	approvalStore := db.NewApprovalRequestStore(database, driver)
+	rb.SetApprovalRegistry(wfReg)
+	rb.SetApprovalRequestStore(approvalStore)
 	// Audit writer (todo 7.4.6): records workflow approval decisions as
 	// signed statements in the audit trail.
 	rb.SetAuditWriter(func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
 		return db.WriteAuditLog(ctx, database, driver, workspaceID, entity, entityID, action, actor, changes, requestID)
 	})
 	// Escalation worker (todo 7.4.4): escalates stale workflow approvals.
-	escalationWorker := workflow.NewEscalationWorker(wfApprovalStore, wfReg, func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
+	escalationWorker := approval.NewEscalationWorker(approvalStore, wfReg, func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
 		return db.WriteAuditLog(ctx, database, driver, workspaceID, entity, entityID, action, actor, changes, requestID)
 	})
 
@@ -933,25 +974,31 @@ func New(cfg Config) (*App, error) {
 		return nil
 	}
 
+	idempotencyTTL := resolveIdempotencyTTL(cfgReg, cfg.IdempotencyTTL)
+	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(idempotencyTTL)
+	// Wire the idempotency store into the router so idempotent actions are
+	// enforced and the prepare endpoint (todo 2.7) is served. It is created
+	// BEFORE the delivery handler because the consequence path needs it too:
+	// `deliver[].idempotency_key` is enforced by the outbox worker, not only by
+	// the HTTP path (todo 7.7.5).
+	rb.SetIdempotencyStore(idempotencyStore)
+
 	deliveryHandler := &db.DeliveryEventHandler{
 		Hub:           hub,
 		EventLog:      eventLogStore,
 		Lookup:        eventChannelLookup,
 		PubSub:        sharedPubSub,
+		Jobs:          newJobDispatch(svcReg, disp),
+		Notifications: newNotificationDispatch(reg, svcReg, disp),
+		Webhooks:      newWebhookDispatch(cfgReg),
 		Subscriptions: composedDispatch,
-		Actions:       newTargetActionDispatch(reg, svcReg, disp),
+		Actions:       newTargetActionDispatch(reg, svcReg, disp, idempotencyStore),
 	}
 	outboxWorker := db.NewOutboxWorker(outboxStore, deliveryHandler)
 	// Actions reached through resource.call() (a subscription handler calling
 	// another module's action) publish their declared events through the outbox
 	// — the HTTP path's emission resolution has no counterpart on that path.
 	disp.SetEventEmitter((&eventWiring{store: outboxStore}).emit)
-
-	idempotencyTTL := resolveIdempotencyTTL(cfgReg, cfg.IdempotencyTTL)
-	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(idempotencyTTL)
-	// Wire the idempotency store into the router so idempotent actions are
-	// enforced and the prepare endpoint (todo 2.7) is served.
-	rb.SetIdempotencyStore(idempotencyStore)
 
 	app := &App{
 		cfg: cfg, database: database, driver: driver,
@@ -970,6 +1017,7 @@ func New(cfg Config) (*App, error) {
 		linkStore:        linkStore,
 		nativeHandlers:   make(map[string]action.NativeHandler),
 		authSvc:          authSvc,
+		grantScope:       appGrantScope,
 		subReg:           subReg,
 		subDispatch:      subDispatch,
 	}
@@ -1193,6 +1241,9 @@ func (a *App) ReloadSpec() error {
 	if err := period.RegisterCoreEntities(newReg); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload register period core entities: %v\n", err)
 	}
+	if err := notify.RegisterCoreEntities(newReg); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload register notify core entities: %v\n", err)
+	}
 	for _, loadErr := range newReg.LoadEntities() {
 		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload: %v\n", loadErr)
 	}
@@ -1291,7 +1342,7 @@ func (a *App) ReloadSpec() error {
 	// Subscription registry (todo 7.3.1): re-resolve on reload.
 	newSubReg := buildSubscriptionRegistry(specManifests.Manifests)
 	// Workflow registry (todo 7.4.1): re-resolve on reload.
-	newWfReg := buildWorkflowRegistry(specManifests.Manifests)
+	newWfReg := buildApprovalRegistry(specManifests.Manifests)
 	// Integrator registry (todo 7.7.1): re-resolve on reload.
 	newItReg := buildIntegratorRegistry(specManifests.Manifests)
 	// Datastore registry (todo 2.9.4): re-resolve on reload so new/changed
@@ -1301,7 +1352,7 @@ func (a *App) ReloadSpec() error {
 		return err
 	}
 
-	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg, a.jobTracker, newDsReg, a.pubsub)
+	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg, a.jobTracker, newDsReg, a.grantScope, a.pubsub)
 
 	// Re-register native Go handlers on the new dispatcher.
 	a.mu.RLock()
@@ -1318,8 +1369,8 @@ func (a *App) ReloadSpec() error {
 	newRB.SetWebhookKeyResolver(newCfgReg)
 	newRB.SetConfigRegistry(newCfgReg)
 	// Set the workflow registry + approval store BEFORE BuildRoutes (todo 7.4).
-	newRB.SetWorkflowRegistry(newWfReg)
-	newRB.SetWorkflowApprovalStore(db.NewWorkflowApprovalStore(a.database, a.driver))
+	newRB.SetApprovalRegistry(newWfReg)
+	newRB.SetApprovalRequestStore(db.NewApprovalRequestStore(a.database, a.driver))
 	// Audit writer (todo 7.4.6): records workflow approval decisions.
 	newRB.SetAuditWriter(func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
 		return db.WriteAuditLog(ctx, a.database, a.driver, workspaceID, entity, entityID, action, actor, changes, requestID)
@@ -1403,8 +1454,20 @@ func (a *App) ReloadSpec() error {
 		}
 		// Re-point reliable_event target-action dispatch at the freshly reloaded
 		// registries, so a changed `deliver: target` (and any action it names)
-		// takes effect without a restart.
-		a.deliveryHandler.Actions = newTargetActionDispatch(newReg, newSvcReg, newDisp)
+		// takes effect without a restart. The idempotency store is the SAME
+		// instance (a.idempotency), so keys claimed before the reload still
+		// suppress a retry of the same delivery after it.
+		a.deliveryHandler.Actions = newTargetActionDispatch(newReg, newSvcReg, newDisp, a.idempotency)
+		// Same for `queue` jobs: a changed `job:` (or the Service action it
+		// names) must take effect on the next delivery without a restart.
+		a.deliveryHandler.Jobs = newJobDispatch(newSvcReg, newDisp)
+		// And for `notification`: the in-app row writer follows the reloaded
+		// registry, and the optional handler follows the reloaded Services.
+		a.deliveryHandler.Notifications = newNotificationDispatch(newReg, newSvcReg, newDisp)
+		// And for `webhook`: `url_from: {config: ...}` must resolve against the
+		// RELOADED Config registry, or an edited endpoint would keep posting to
+		// the old address.
+		a.deliveryHandler.Webhooks = newWebhookDispatch(newCfgReg)
 		// Rebuild the streaming worker (todo 7.3.2) so new durable
 		// subscriptions take effect. The stream backend is reused — its
 		// consumer groups and pending entries persist across reloads.
@@ -1831,25 +1894,26 @@ func envInt(key string, def int) int {
 	return def
 }
 
-// buildWorkflowRegistry loads kind: Workflow manifests into a workflow.Registry
-// keyed by {module}.{name} and indexed by intercepted transition (todo 7.4.1).
-// Workflows attach role-based approval to state-machine transitions without
-// modifying the Entity.
-func buildWorkflowRegistry(manifests []manifest.RawManifest) *workflow.Registry {
-	reg := workflow.NewRegistry()
+// buildApprovalRegistry derives the approval gates declared on entities'
+// state-machine transitions into a approval.Registry (todo 7.4.1). An approval
+// gate HOLDS the transition it is declared on until every applicable step
+// reaches quorum; it is not a separate manifest, so it cannot drift from the
+// transition it gates.
+func buildApprovalRegistry(manifests []manifest.RawManifest) *approval.Registry {
+	reg := approval.NewRegistry()
 	for _, raw := range manifests {
-		if spec.Kind(raw.Kind) != spec.KindWorkflow {
+		if spec.Kind(raw.Kind) != spec.KindEntity {
 			continue
 		}
 		specMap, ok := raw.Spec.(map[string]any)
 		if !ok {
 			continue
 		}
-		wf, err := manifest.RawSpecToWorkflowSpec(specMap)
-		if err != nil {
+		es, err := manifest.RawSpecToEntitySpec(specMap)
+		if err != nil || es == nil || es.StateMachine == nil {
 			continue
 		}
-		reg.Add(raw.Metadata.Module, raw.Metadata.Name, wf)
+		reg.AddEntity(raw.Metadata.Module, raw.Metadata.Name, es)
 	}
 	return reg
 }
@@ -1877,7 +1941,34 @@ func buildIntegratorRegistry(manifests []manifest.RawManifest) *integrator.Regis
 	return reg
 }
 
-func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg Config, cfgReg *config.Registry, jobTracker *job.Tracker, dsReg *DatastoreRegistry, _ ...*memory.PubSub) *action.Dispatcher {
+// grantScopeLookup resolves the row scope a caller's role GRANTS attach to one
+// permission, and reports an error when a declared row restriction cannot be
+// applied. A type alias, not a bare func type, so the script executor's wiring
+// reads the way the HTTP layer's does.
+type grantScopeLookup = func(ctx context.Context, workspaceID, app string, roles []string, permission string) ([]spec.FilterSpec, error)
+
+// grantScopeHolder carries the grant-scope resolver into the dispatcher's script
+// wiring.
+//
+// WHY A HOLDER. The dispatcher is built BEFORE the auth service exists (the
+// auth service needs the entity registry, which the dispatcher also needs), so
+// the resolver cannot be passed as an argument. Passing a pointer and filling it
+// in once the service is constructed keeps the dependency explicit and nil-safe,
+// instead of reaching for package-level state that would leak between Apps in
+// the same process (every e2e test boots one).
+type grantScopeHolder struct {
+	fn grantScopeLookup
+}
+
+// get returns the wired resolver, or nil when none is wired.
+func (h *grantScopeHolder) get() grantScopeLookup {
+	if h == nil {
+		return nil
+	}
+	return h.fn
+}
+
+func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg Config, cfgReg *config.Registry, jobTracker *job.Tracker, dsReg *DatastoreRegistry, grantScope *grantScopeHolder, _ ...*memory.PubSub) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
@@ -1934,6 +2025,10 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 				CreatedBy:   "script",
 				Data:        data,
 				Permissions: auth.PermissionsFromContext(ctx),
+				// A subscription/worker script runs as the system; an action script
+				// runs as its caller. The dispatch layer decided which, and the
+				// decision travelled here in the context (never inferred).
+				SystemCaller: action.IsSystemCaller(ctx),
 			})
 			if err != nil {
 				return err
@@ -1945,12 +2040,13 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 			return err
 		}
 		if _, err := store.Update(ctx, db.UpdateParams{
-			WorkspaceID: workspaceID,
-			ID:          id,
-			Version:     version,
-			UpdatedBy:   "script",
-			Data:        data,
-			Permissions: auth.PermissionsFromContext(ctx),
+			WorkspaceID:  workspaceID,
+			ID:           id,
+			Version:      version,
+			UpdatedBy:    "script",
+			Data:         data,
+			Permissions:  auth.PermissionsFromContext(ctx),
+			SystemCaller: action.IsSystemCaller(ctx),
 		}); err != nil {
 			return err
 		}
@@ -1981,7 +2077,14 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 		if err != nil {
 			return nil, 0, "", fmt.Errorf("get store: %w", err)
 		}
-		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		// The caller's row boundary applies to a script READ too (kafe 10.74):
+		// resource.fetch() is the same read as GET by id, so a script must not
+		// see a row the same caller cannot fetch over HTTP.
+		preds, err := scriptRowPredicates(ctx, grantScope, reg, module, entityName)
+		if err != nil {
+			return nil, 0, "", err
+		}
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id, RowPredicates: preds})
 		if err != nil {
 			return nil, 0, "", err
 		}
@@ -2001,7 +2104,14 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 		if err != nil {
 			return nil, 0, "", fmt.Errorf("get store: %w", err)
 		}
-		rec, err := store.FindByFields(ctx, workspaceID, match)
+		// Same boundary as the id-addressed read: without this, a guard script
+		// could find the row the HTTP layer hides (10.74), so the two paths
+		// would disagree about who may see what.
+		preds, err := scriptRowPredicates(ctx, grantScope, reg, module, entityName)
+		if err != nil {
+			return nil, 0, "", err
+		}
+		rec, err := store.FindByFieldsScoped(ctx, workspaceID, match, preds)
 		if err != nil {
 			return nil, 0, "", err
 		}
@@ -2054,6 +2164,14 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 			WorkspaceID: workspaceID,
 			CreatedBy:   "script",
 			Data:        data,
+			// The script runs ON BEHALF OF a caller: pass their permissions so
+			// the store's guards judge what that caller may do — the same
+			// contract SetSaveHandler already honours. Without this line
+			// `resource.create()` was the one script write path with no
+			// identity, so a field-level guard would refuse a legitimate write
+			// for a caller who actually holds the permission.
+			Permissions:  auth.PermissionsFromContext(ctx),
+			SystemCaller: action.IsSystemCaller(ctx),
 		})
 		if err != nil {
 			return "", err
@@ -2207,6 +2325,176 @@ func runAfterWriteHooks(ctx context.Context, disp *action.Dispatcher, reg *entit
 		return
 	}
 	action.RunAfterPhase(ctx, disp, info.EntitySpec.Hooks, actionSpec, verb, scriptExecuteParams(module, entityName, verb, id, workspaceID, rec.Data))
+}
+
+// scriptRowPredicates resolves the row boundary that applies to a script READ of
+// one entity (kafe 10.74).
+//
+// A script runs on behalf of a caller, so the rows it may see are the caller's
+// rows — the same answer the HTTP layer gives for the same entity. Without this,
+// `resource.find()` and `resource.fetch()` were a hole under the boundary the
+// HTTP path had just been taught to enforce: a guard script could match the
+// draft order that `GET` refused to return, so the "same" caller saw two
+// different databases depending on which layer asked.
+//
+// FAIL CLOSED. Three things deny rather than degrade:
+//   - the caller's roles declare a row restriction that cannot be applied (the
+//     resolver returns an error) — serving the read unscoped is the leak itself;
+//   - the entity declares a `row_scope` whose session attribute cannot be
+//     resolved for this caller;
+//   - a predicate cannot be expressed by the query builder.
+//
+// A SystemCaller (subscription, worker, scheduled job) has no user row boundary:
+// it is the system talking to itself, and its reads must not be filtered by a
+// role it does not have. That is decided by the dispatch layer, never inferred
+// from an absent identity — an ANONYMOUS caller also has no identity, and
+// treating that as "system" would hand it every row.
+//
+// The permission key is `view` (read-one): the script addresses one row, which is
+// what `view` gates on the HTTP surface, so both paths ask the same question.
+func scriptRowPredicates(ctx context.Context, grantScope *grantScopeHolder, reg *entity.Registry, module, entityName string) ([]db.RowPredicate, error) {
+	if reg == nil || action.IsSystemCaller(ctx) {
+		return nil, nil
+	}
+	identity := api.IdentityFromContext(ctx)
+	if identity == nil || len(identity.Roles) == 0 {
+		return nil, nil
+	}
+	info, ok := reg.GetEntity(module, entityName)
+	if !ok || info.EntitySpec == nil {
+		return nil, nil
+	}
+	es := info.EntitySpec
+
+	var preds []db.RowPredicate
+
+	// 1. The entity's own `row_scope` — per-entity, resolved from the session.
+	for i := range es.RowScope {
+		sc := &es.RowScope[i]
+		switch sc.From {
+		case "session":
+			attr := sc.Attr
+			if attr == "" && es.Scope != nil {
+				attr = es.Scope.Field
+			}
+			value := identity.Attributes[attr]
+			if value == "" {
+				value = scriptAssignedAttr(reg, attr, identity.Username)
+			}
+			if value == "" {
+				return nil, fmt.Errorf("resource read of %s.%s: the entity's row_scope needs session attribute %q, which this caller does not have — refusing to read unscoped", module, entityName, attr)
+			}
+			preds = append(preds, db.RowPredicate{Field: sc.Field, Op: sc.Op, Value: value})
+		case "route":
+			// A script has no request query string; a route-sourced scope cannot
+			// be resolved here, and silently dropping it would widen the read.
+			return nil, fmt.Errorf("resource read of %s.%s: the entity's row_scope uses `from: route`, which a script cannot supply — refusing to read unscoped", module, entityName)
+		default:
+			if sc.Value == "" {
+				return nil, fmt.Errorf("resource read of %s.%s: row_scope entry on %q declares no value source — refusing to read unscoped", module, entityName, sc.Field)
+			}
+			value, err := scriptScopeLiteral(sc.Op, sc.Value)
+			if err != nil {
+				return nil, fmt.Errorf("resource read of %s.%s: %w", module, entityName, err)
+			}
+			preds = append(preds, db.RowPredicate{Field: sc.Field, Op: sc.Op, Value: value})
+		}
+	}
+
+	// 2. The caller's ROLE GRANT row scope for this entity's read permission.
+	plural := es.Plural
+	if plural == "" {
+		plural = entityName + "s"
+	}
+	perm := module + "." + plural + ".view"
+	lookup := grantScope.get()
+	if lookup == nil {
+		return preds, nil
+	}
+	scope, err := lookup(ctx, identity.WorkspaceID, identity.App, identity.Roles, perm)
+	if err != nil {
+		return nil, err
+	}
+	for i := range scope {
+		sc := &scope[i]
+		switch sc.From {
+		case "session":
+			attr := sc.Attr
+			if attr == "" && es.Scope != nil {
+				attr = es.Scope.Field
+			}
+			value := identity.Attributes[attr]
+			if value == "" {
+				value = scriptAssignedAttr(reg, attr, identity.Username)
+			}
+			if value == "" {
+				return nil, fmt.Errorf("resource read of %s.%s: the grant row scope needs session attribute %q, which this caller does not have — refusing to read unscoped", module, entityName, attr)
+			}
+			preds = append(preds, db.RowPredicate{Field: sc.Field, Op: sc.Op, Value: value})
+		case "route":
+			return nil, fmt.Errorf("resource read of %s.%s: the grant row scope uses `from: route`, which a script cannot supply — refusing to read unscoped", module, entityName)
+		default:
+			if sc.Value == "" {
+				return nil, fmt.Errorf("resource read of %s.%s: grant row scope entry on %q declares no value source — refusing to read unscoped", module, entityName, sc.Field)
+			}
+			value, err := scriptScopeLiteral(sc.Op, sc.Value)
+			if err != nil {
+				return nil, fmt.Errorf("resource read of %s.%s: %w", module, entityName, err)
+			}
+			preds = append(preds, db.RowPredicate{Field: sc.Field, Op: sc.Op, Value: value})
+		}
+	}
+
+	return preds, nil
+}
+
+// scriptAssignedAttr resolves a dimension value from the entities that declare an
+// `assignments` mapping (S5), the same fallback the HTTP layer uses for
+// `from: session` without an explicit token attribute.
+func scriptAssignedAttr(reg *entity.Registry, attr, principal string) string {
+	if attr == "" || principal == "" || reg == nil {
+		return ""
+	}
+	for _, src := range reg.AssignmentSources() {
+		if src.Dimension != attr && src.Field != attr {
+			continue
+		}
+		v, err := reg.FindAssignmentValue(context.Background(), src, "", principal)
+		if err == nil && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// scriptScopeLiteral mirrors the HTTP layer's literal handling: `in`/`nin` need a
+// list and `between` two bounds, written comma-separated in the manifest. Keeping
+// the two implementations in step matters — a script read that interpreted a
+// literal differently from the HTTP read would enforce a different boundary on
+// the same manifest.
+func scriptScopeLiteral(op, raw string) (any, error) {
+	switch op {
+	case "in", "nin":
+		parts := strings.Split(raw, ",")
+		out := make([]any, 0, len(parts))
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		if len(out) == 0 {
+			return nil, fmt.Errorf("literal %q yields an empty value list", raw)
+		}
+		return out, nil
+	case "between":
+		parts := strings.Split(raw, ",")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("literal %q must contain exactly two comma-separated bounds", raw)
+		}
+		return []any{strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])}, nil
+	default:
+		return raw, nil
+	}
 }
 
 func checkCrossModuleUses(fromModule, targetModule, targetEntity string, declared []string) error {
@@ -2372,8 +2660,8 @@ func (w *eventWiring) emit(ctx context.Context, workspaceID, resource string, ev
 
 // newTargetActionDispatch performs the `deliver: channel: reliable_event
 // target: {resource, action}` call — the publisher's declared consequence
-// (02-core-basic.md §12.2: "poll pending → idempotency check → sync call to
-// target action → delivered, or backoff retry → dead-letter").
+// (02-core-basic.md §7: "poll pending → **cek idempotency** → sync call ke target
+// action → delivered, atau backoff retry → dead-letter").
 //
 // A target's resource is written "module.entity" in the manifest, while the
 // action dispatcher addresses entities as (module, entity); both spellings are
@@ -2383,28 +2671,236 @@ func (w *eventWiring) emit(ctx context.Context, workspaceID, resource string, ev
 // The payload is passed as the action's params unchanged: the publisher
 // declared `payload.fields`, so what a consequence receives is exactly the
 // projection the publisher promised — nothing is inferred from the record.
-func newTargetActionDispatch(reg *entity.Registry, svcReg *service.Registry, disp *action.Dispatcher) db.ActionDispatch {
-	return func(ctx context.Context, workspaceID, resource, eventName string, payload map[string]any, target *spec.DeliveryTarget) error {
+//
+// IDEMPOTENCY (todo 7.7.5). The entry may declare `idempotency_key` (a
+// `{dotted.path}` template over the payload). When it does, the call is wrapped
+// by runTargetOnce: a delivery whose key is already COMPLETED is skipped, not
+// re-run. Without this the outbox retry was a double write — measured on kafe,
+// where re-queuing the same `journal-posted` event accumulated the balance
+// movement twice (143750 → 287500) while the target action was already
+// `idempotent: true` (7.7.3 enforces that flag, but the flag was never
+// consulted on this path).
+func newTargetActionDispatch(reg *entity.Registry, svcReg *service.Registry, disp *action.Dispatcher, idem *db.IdempotencyStore) db.ActionDispatch {
+	return func(ctx context.Context, workspaceID, resource, eventName string, payload map[string]any, ch spec.EventDeliveryDecl) error {
+		target := ch.Target
 		if target == nil || target.Resource == "" || target.Action == "" {
 			return fmt.Errorf("reliable_event target needs both `resource` and `action`")
 		}
 
 		module, entityName := splitResourceRef(target.Resource, resource)
 
-		// A target may be either a Service (stateless) or an Entity action —
-		// the same two shapes resource.call() resolves, resolved the same way.
-		if svcReg != nil {
-			if _, ok := svcReg.Get(module, entityName); ok {
-				_, err := invokeServiceAction(ctx, svcReg, disp, workspaceID, module, entityName, target.Action, payload)
-				return err
+		// run performs the actual consequence. It is the unit the idempotency
+		// guard wraps, so "already delivered" can skip it entirely.
+		run := func() error {
+			// A target may be either a Service (stateless) or an Entity action —
+			// the same two shapes resource.call() resolves, resolved the same way.
+			if svcReg != nil {
+				if _, ok := svcReg.Get(module, entityName); ok {
+					_, err := invokeServiceAction(ctx, svcReg, disp, workspaceID, module, entityName, target.Action, payload)
+					return err
+				}
 			}
+			// No resourceID: the consequence addresses the collection, since a
+			// payload carries an id but not necessarily the record the action
+			// should run against. An action needing one reads it from params.
+			_, err := invokeAction(ctx, reg, disp, workspaceID, module, entityName, target.Action, "", payload)
+			return err
 		}
-		// No resourceID: the consequence addresses the collection, since a
-		// payload carries an id but not necessarily the record the action
-		// should run against. An action needing one reads it from params.
-		_, err := invokeAction(ctx, reg, disp, workspaceID, module, entityName, target.Action, "", payload)
+
+		return runTargetOnce(ctx, idem, workspaceID, target, ch.IdempotencyKey, payload, run)
+	}
+}
+
+// runTargetOnce runs a consequence at most once per declared idempotency key.
+//
+// Semantics, and why each branch is what it is:
+//
+//   - no `idempotency_key` declared → run. The 7.7.3 validator already requires
+//     a cross-boundary target to be `idempotent: true`, so natural idempotency
+//     is the target's contract; this guard is for the entries that name a key.
+//   - key declared, no store wired → FAIL, not run. A declared key that can
+//     never be honoured is a promise the runtime cannot keep, and the cost of
+//     pretending is a silent double write — the exact failure this closes.
+//   - key already COMPLETED → skip (return nil). The delivery already ran; a
+//     retry is a replay, and for a consequence a replay means "do nothing" (it
+//     has no HTTP response to hand back).
+//   - key pending/failed (not expired) → run. `TryClaim` allows the retry on
+//     purpose: a failed attempt must be retryable, and this is at-least-once
+//     delivery.
+//
+// Scope is `deliver:{resource}.{action}`, namespaced so a delivery key can never
+// collide with an HTTP action's idempotency key in the shared table.
+func runTargetOnce(ctx context.Context, idem *db.IdempotencyStore, workspaceID string, target *spec.DeliveryTarget, keyTemplate string, payload map[string]any, run func() error) error {
+	if strings.TrimSpace(keyTemplate) == "" {
+		return run()
+	}
+	if idem == nil {
+		return fmt.Errorf("deliver declares `idempotency_key` %q but no idempotency store is wired — the key cannot be honoured, so running would silently duplicate the consequence (todo 7.7.5)", keyTemplate)
+	}
+	key, err := resolveDeliveryKey(keyTemplate, payload)
+	if err != nil {
 		return err
 	}
+	scope := "deliver:" + target.Resource + "." + target.Action
+
+	claimed, existing, err := idem.TryClaim(ctx, workspaceID, scope, key)
+	if err != nil {
+		return fmt.Errorf("deliver idempotency claim (%s, %s): %w", scope, key, err)
+	}
+	if !claimed {
+		// Completed: this delivery already happened. Skipping is the whole
+		// point — re-running would accumulate the consequence twice.
+		_ = existing
+		return nil
+	}
+
+	if err := run(); err != nil {
+		// Record the failure so the next retry may claim the key again
+		// (TryClaim treats a failed key as retryable unless it expired).
+		_ = idem.RecordFailed(ctx, workspaceID, scope, key, err.Error())
+		return err
+	}
+	if err := idem.RecordCompleted(ctx, workspaceID, scope, key, ""); err != nil {
+		// The consequence ran; failing to record it would let the next retry
+		// run it again, so surface the error rather than swallow it.
+		return fmt.Errorf("deliver idempotency record completed (%s, %s): %w", scope, key, err)
+	}
+	return nil
+}
+
+// resolveDeliveryKey interpolates a delivery entry's `idempotency_key` template
+// (`{dotted.path}` over the event payload).
+//
+// An unresolved token is an ERROR, not a literal: leaving `balance.{id}` as the
+// key would give every event that lacks `id` the SAME key, so the second
+// delivery would be silently skipped as "already delivered" — a lost
+// consequence, which is worse than the duplicate this guard prevents.
+func resolveDeliveryKey(template string, payload map[string]any) (string, error) {
+	out := template
+	for {
+		start := strings.Index(out, "{")
+		if start < 0 {
+			break
+		}
+		rel := strings.Index(out[start:], "}")
+		if rel < 0 {
+			break
+		}
+		end := start + rel
+		path := strings.TrimSpace(out[start+1 : end])
+		val, found := lookupPayloadPath(payload, path)
+		if !found || val == nil {
+			return "", fmt.Errorf("deliver `idempotency_key` %q: the payload has no %q — the key could not be resolved, and running unprotected would duplicate the consequence", template, path)
+		}
+		out = out[:start] + fmt.Sprintf("%v", val) + out[end+1:]
+	}
+	if strings.TrimSpace(out) == "" {
+		return "", fmt.Errorf("deliver `idempotency_key` %q resolved to an empty key", template)
+	}
+	return out, nil
+}
+
+// lookupPayloadPath resolves a dotted path ("id", "source.id") against the event
+// payload, walking nested maps.
+func lookupPayloadPath(payload map[string]any, path string) (any, bool) {
+	if path == "" {
+		return nil, false
+	}
+	var cur any = payload
+	for _, seg := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		cur, ok = m[seg]
+		if !ok {
+			return nil, false
+		}
+	}
+	return cur, true
+}
+
+// newJobDispatch runs a `queue` deliver entry's `job:` — a Service action named
+// `service.action` (publisher's module) or `module.service.action` (todo 7.7.6).
+//
+// The job's home is `kind: Service` rather than a dedicated job registry: a
+// background job is stateless computation, and a Service already carries the
+// `impl` resolution, `uses`/permission enforcement, and dispatcher the job
+// needs. Naming it that way reuses one mechanism instead of adding a second.
+//
+// The payload is passed as the action's params unchanged, exactly as the
+// `reliable_event` target path does — the publisher declared `payload.fields`,
+// so what the job receives is the projection the publisher promised.
+func newJobDispatch(svcReg *service.Registry, disp *action.Dispatcher) db.JobDispatch {
+	return func(ctx context.Context, workspaceID, resource, eventName string, payload map[string]any, job string) error {
+		ownModule, _, _ := strings.Cut(resource, "/")
+		module, serviceName, actionName, err := spec.ResolveJobRef(job, ownModule)
+		if err != nil {
+			return fmt.Errorf("event %s: %w", eventName, err)
+		}
+		if svcReg == nil {
+			return fmt.Errorf("event %s: job %q cannot run — no Service registry is wired", eventName, job)
+		}
+		_, err = invokeServiceAction(ctx, svcReg, disp, workspaceID, module, serviceName, actionName, payload)
+		return err
+	}
+}
+
+// newNotificationDispatch builds the `notification` channel's delivery: it
+// writes the in-app notification row and, when the entry names `handler:`,
+// hands the payload to that Service action (todo 7.7.6).
+//
+// Two sources, on purpose:
+//
+//   - The ROW is what `kind: NotificationCenter` lists, and the whole reason
+//     this channel was declared. It is written by the framework so an app needs
+//     no code for it.
+//   - The HANDLER is for channels outside in-app (email, WA, push) and uses the
+//     same Service-action vocabulary as `job:` — one reference form, not two.
+//
+// If the notification entity is not in the registry, the store is nil and the
+// in-app half FAILS loudly rather than silently delivering nothing; the caller
+// sees it in the outbox (retry → dead-letter).
+func newNotificationDispatch(reg *entity.Registry, svcReg *service.Registry, disp *action.Dispatcher) db.NotificationDispatch {
+	var store notify.Store
+	if reg != nil {
+		if es, err := reg.GetEntityStore(notify.CoreModule, notify.NotificationEntity); err == nil && es != nil {
+			store = &notify.EntityStoreWriter{Store: es}
+		}
+	}
+	runHandler := func(ctx context.Context, workspaceID, resource, _ string, payload map[string]any, ref string) error {
+		ownModule, _, _ := strings.Cut(resource, "/")
+		module, serviceName, actionName, err := spec.ResolveServiceActionRef(ref, ownModule)
+		if err != nil {
+			return err
+		}
+		if svcReg == nil {
+			return fmt.Errorf("no Service registry is wired")
+		}
+		_, err = invokeServiceAction(ctx, svcReg, disp, workspaceID, module, serviceName, actionName, payload)
+		return err
+	}
+	// A named-func-type conversion: `notify.Dispatch` and `db.NotificationDispatch`
+	// have the same signature, but both are DEFINED types, so Go will not assign
+	// one to the other implicitly. Converting here keeps the renderer free of a
+	// dependency on internal/notify (the renderer only needs the shape).
+	return db.NotificationDispatch(notify.NewDispatch(store, runHandler))
+}
+
+// newWebhookDispatch builds the `webhook` channel's sender (todo 7.7.6,
+// unsigned).
+//
+// `url_from: {config: <key>}` resolves through the Config registry, so the
+// endpoint can belong to a deployment rather than to the module. A literal `url:`
+// needs no lookup at all — which is why the unsigned version is deployable
+// without inventing a subscriber registry first.
+func newWebhookDispatch(cfgReg *config.Registry) db.WebhookDispatch {
+	var lookup webhookout.ConfigLookup
+	if cfgReg != nil {
+		lookup = func(key string) (string, bool) { return cfgReg.ResolveKeyAny(key) }
+	}
+	sender := webhookout.New(lookup)
+	return sender.Send
 }
 
 // splitResourceRef resolves a declared target resource ("module.entity") to

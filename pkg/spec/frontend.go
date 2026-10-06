@@ -507,8 +507,12 @@ type TableAction struct {
 //   - `filters`: a user-adjustable control rendered in the kind's UI. If
 //     `default` is set, the control is pre-seeded with that value (the user
 //     can still change or clear it).
-//   - `fixed_filters`: an immutable, server-side filter — always merged into
-//     the list request, never rendered as a control and not user-clearable.
+//   - `fixed_filters`: a filter the renderer always merges into the list
+//     request — never rendered as a control and not user-clearable *in the UI*.
+//     It is NOT an authorization boundary: the merge happens in the browser
+//     (renderers/react-shadcn/src/lib/filters.ts), so a client that calls the
+//     API directly simply omits it. For a filter the server enforces, use the
+//     entity's `row_scope` (EntitySpec.RowScope) instead.
 //
 // The resolved value is sent to the list API as `field[op]=value`, so `op`
 // defaults to "eq" and follows the backend filter operator set.
@@ -518,6 +522,12 @@ type TableAction struct {
 // `attr` and is resolved server-side only (a client cannot supply or widen it),
 // while `from: route` takes it from the query parameter named by `param` (e.g. an
 // unguessable guest token, where the token itself is the credential).
+//
+// When `from` is empty the value is the LITERAL in `value`, which is what makes
+// a server-enforced constant expressible — e.g. a role granted `list` on orders
+// but only for `{field: status, op: in, value: "paid,in_kitchen"}`. `default` is
+// NOT that literal: it only pre-seeds a user-adjustable control, and the user
+// (or any client) can change or clear it.
 type FilterSpec struct {
 	Field string `yaml:"field" json:"field"`
 	Label string `yaml:"label,omitempty" json:"label,omitempty"`
@@ -525,9 +535,11 @@ type FilterSpec struct {
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 	// @schema {description: "Filter operator sent to the list API", enum: ["eq", "neq", "gt", "gte", "lt", "lte", "between", "in", "nin", "like", "ilike", "null", "notnull"]}
 	Op string `yaml:"op,omitempty" json:"op,omitempty"` // default "eq"
-	// @schema {description: "Pre-set value for a user-adjustable filter. Supports \"today\" / \"today()\", resolved by the renderer as the server's current date."}
+	// @schema {description: "Pre-set value for a user-adjustable filter. Supports \"today\" / \"today()\", resolved by the renderer as the server's current date. NOT a server-enforced constant — use `value` for that."}
 	Default string `yaml:"default,omitempty" json:"default,omitempty"`
-	// @schema {description: "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = static `default`.", enum: ["session", "route"]}
+	// @schema {description: "Literal value used when `from` is empty. For `op: in`/`nin`/`between` this may be a comma-separated list, e.g. \"paid,in_kitchen\".", example: "paid,in_kitchen,ready"}
+	Value string `yaml:"value,omitempty" json:"value,omitempty"`
+	// @schema {description: "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = the literal `value`.", enum: ["session", "route"]}
 	From string `yaml:"from,omitempty" json:"from,omitempty"`
 	// @schema {description: "Identity attribute for `from: session`: principal_id | username | workspace | an application attribute.", example: "branch_id"}
 	Attr string `yaml:"attr,omitempty" json:"attr,omitempty"`

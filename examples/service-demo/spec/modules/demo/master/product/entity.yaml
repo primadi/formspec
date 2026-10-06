@@ -27,7 +27,20 @@ spec:
       - { name: active, label: "Aktif" }
       - { name: discontinued, label: "Dihentikan" }
     transitions:
-      - { from: active, to: discontinued, via: discontinue }
+      # Approval gate inline (dulu `kind: Workflow` terpisah). Duty
+      # `manager-review` di-qualify jadi
+      # `workflow.demo.product.discontinue.manager-review`; grant di
+      # `modules/formspec.core/seeds/roles.yaml`.
+      - from: active
+        to: discontinued
+        via: discontinue
+        approval:
+          steps:
+            - name: manager-review
+              permission: manager-review
+              approvers: 1
+              escalation: { after: 10s, reassign: head-review }
+          on_reject: { to: active }
   events:
     - name: on_create
       type: async
@@ -36,7 +49,6 @@ spec:
         durable: true
       deliver:
         - channel: audit_log
-        - channel: pubsub
           target: { scope: demo.products }
     - name: on_cancel
       type: async

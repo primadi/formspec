@@ -90,7 +90,8 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"SubDeliveryDecl",
 		"UsesConfigDecl", "UsesDbDecl",
 		"WebhookAuth", "WebhookSigConfig", "WebhookKeyRef", "WebhookTokenConfig",
-		"WorkflowEscalation", "WorkflowReject", "WorkflowStep", "WorkflowTrigger", "WorkflowTransitionRef", "StepEscalation",
+		"ApprovalSpec", "ApprovalReject", "ApprovalStep", "StepEscalation",
+		"NotificationDecl", "WebhookDeliveryDecl", "WebhookURLRef", // delivery channels (todo 7.7.6)
 		"CallbackDecl",  // async job callback webhook (todo 7.13)
 		"SnapshotField", // financial denormalization snapshot (todo 7.10)
 	}

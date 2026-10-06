@@ -460,17 +460,32 @@ const (
 var reportParamTypes = []ReportParamType{ParamText, ParamDate, ParamDateTime, ParamSelect, ParamRelation}
 
 // EventChannel is the closed set of event delivery channels (S10).
-// @schema {title: "Event Channel", description: "Delivery channel for an event. Closed set — every name is implemented by the delivery pipeline."}
+//
+// `pubsub` is listed because the delivery pipeline IMPLEMENTS it
+// (`renderers/jsonb-persist/event_handler.go`, case "pubsub": non-durable
+// at-most-once, channel name from `target.scope`). Leaving it out made the
+// schema reject a manifest the engine could serve — the reverse of the failure
+// this enum exists to prevent. `queue`/`webhook`/`notification` remain declared
+// by the spec but unimplemented (todo 7.7.6 ⏸️).
+// @schema {title: "Event Channel", description: "Delivery channel for an event. `audit_log`/`websocket`/`pubsub`/`reliable_event` are implemented by the delivery pipeline; `queue` is declared by the spec but not yet delivered (todo 7.7.6)."}
 type EventChannel string
 
 const (
 	ChannelAuditLog      EventChannel = "audit_log"
 	ChannelWebsocket     EventChannel = "websocket"
 	ChannelQueue         EventChannel = "queue"
+	ChannelPubSub        EventChannel = "pubsub"
 	ChannelReliableEvent EventChannel = "reliable_event"
+	// ChannelNotification writes an in-app notification (addressed by
+	// `notification.recipient`), and optionally hands the payload to a Service
+	// action for channels outside in-app (todo 7.7.6).
+	ChannelNotification EventChannel = "notification"
+	// ChannelWebhook posts the event to an HTTP endpoint declared in the
+	// manifest — UNSIGNED for now (no HMAC, no subscriber registry); todo 7.7.6.
+	ChannelWebhook EventChannel = "webhook"
 )
 
-var eventChannels = []EventChannel{ChannelAuditLog, ChannelWebsocket, ChannelQueue, ChannelReliableEvent}
+var eventChannels = []EventChannel{ChannelAuditLog, ChannelWebsocket, ChannelQueue, ChannelPubSub, ChannelReliableEvent, ChannelNotification, ChannelWebhook}
 
 // PrintFormat is the closed set of print output formats (S10).
 // @schema {title: "Print Format", description: "Output format for a Print document. Closed set — pdf/thermal are served server-side, html client-side; dotmatrix is not implemented and is rejected."}
@@ -485,17 +500,24 @@ const (
 
 var printFormats = []PrintFormat{PrintPDF, PrintThermal, PrintDotMatrix, PrintHTML}
 
-// WorkflowStepMode is the closed set of approval quorum modes (S10).
-// @schema {title: "Workflow Step Mode", description: "How a step's quorum is collected. Closed set."}
-type WorkflowStepMode string
+// ApprovalStepMode is the closed set of approval quorum modes (S10).
+//
+// `all` is accepted by the SCHEMA and refused by `formspec validate`: its quorum
+// ("every eligible approver") is not derivable from a manifest, since a role list
+// is not a list of people and a duty's holders are not enumerable. The value is
+// kept here so an author who writes it gets the explanation rather than a bare
+// enum error — the same split the schema/validate layers already use for
+// cross-manifest rules.
+// @schema {title: "Workflow Step Mode", description: "How a step's quorum is collected. Closed set. `all` is refused at validate — use `any` with `approvers: N`, or `sequential`."}
+type ApprovalStepMode string
 
 const (
-	StepModeAll        WorkflowStepMode = "all"
-	StepModeAny        WorkflowStepMode = "any"
-	StepModeSequential WorkflowStepMode = "sequential"
+	StepModeAll        ApprovalStepMode = "all"
+	StepModeAny        ApprovalStepMode = "any"
+	StepModeSequential ApprovalStepMode = "sequential"
 )
 
-var workflowStepModes = []WorkflowStepMode{StepModeAll, StepModeAny, StepModeSequential}
+var approvalStepModes = []ApprovalStepMode{StepModeAll, StepModeAny, StepModeSequential}
 
 // IsReportParamType reports whether v is a declared report parameter type.
 func IsReportParamType(v string) bool {
@@ -527,9 +549,9 @@ func IsPrintFormat(v string) bool {
 	return false
 }
 
-// IsWorkflowStepMode reports whether v is a declared workflow step mode.
-func IsWorkflowStepMode(v string) bool {
-	for _, m := range workflowStepModes {
+// IsApprovalStepMode reports whether v is a declared approval step mode.
+func IsApprovalStepMode(v string) bool {
+	for _, m := range approvalStepModes {
 		if string(m) == v {
 			return true
 		}
@@ -546,8 +568,8 @@ func EventChannelValues() []string { return stringifyAll(eventChannels) }
 // PrintFormatValues returns the print format names (for error messages).
 func PrintFormatValues() []string { return stringifyAll(printFormats) }
 
-// WorkflowStepModeValues returns the step mode names (for error messages).
-func WorkflowStepModeValues() []string { return stringifyAll(workflowStepModes) }
+// ApprovalStepModeValues returns the step mode names (for error messages).
+func ApprovalStepModeValues() []string { return stringifyAll(approvalStepModes) }
 
 // stringifyAll renders a slice of string-kinded values as []string.
 func stringifyAll[T ~string](vals []T) []string {

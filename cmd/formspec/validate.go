@@ -91,7 +91,7 @@ func runValidate(args []string) {
 	// state machine in the same view. Without it, a mistyped transition name —
 	// or worse, a state pair that covers only ONE origin state of a
 	// multi-origin transition — validates green while enforcing nothing.
-	workflowRejects := validateWorkflows(res.Manifests)
+	workflowRejects := validateApprovals(res.Manifests)
 
 	// ── Layer 1.5: cross-manifest scope-source validation (S5, kafe 1.8) ──
 	// `row_scope: {from: session}` without an explicit `attr` resolves to the
@@ -99,6 +99,23 @@ func runValidate(args []string) {
 	// that value, every read fails closed 403 forever — with the manifest
 	// looking correct. This layer is the only one that can tell the two apart.
 	scopeRejects := validateScopeSources(res.Manifests)
+	// The same rule for a ROLE GRANT's row scope. Separate from the entity walk
+	// because grants live in seeds and name the attribute against the entity
+	// they resolve to; measured before this existed: removing the only
+	// `assignments` mapping left the KDS grants with no possible source and the
+	// entity-level check said nothing about them.
+	for src, msg := range validateGrantScopeSources(res.Manifests) {
+		if _, exists := scopeRejects[src]; !exists {
+			scopeRejects[src] = msg
+		}
+	}
+
+	// ── Layer 1.5: role-grant shape validation in seed manifests. ──
+	// `grants` is free JSON on the role entity, so a typo in a page/action or a
+	// misnamed `row_scope` key silently produces a role that looks configured but
+	// enforces nothing. This check catches the malformed shape before it reaches
+	// the app at boot.
+	grantRejects := validateSeedRoleGrants(res.Manifests)
 
 	// ── Layer 1.5: cross-manifest event deliver-target validation ──
 	// A `deliver: channel: reliable_event` names an action the outbox worker
@@ -112,6 +129,11 @@ func runValidate(args []string) {
 			integratorRejects[src] = msg
 		}
 	}
+
+	// ── Layer 1.5: cross-manifest Subscription event validation ──
+	// A Subscription names the events it reacts to; an unresolvable name means
+	// it NEVER fires, with the manifest looking configured and validate green.
+	subscriptionRejects := validateSubscriptionEvents(res.Manifests)
 
 	// ── Layer 1.5: cross-manifest relation validation (gaps #11/#12, kafe 3.7) ──
 	// A relation whose target is unregistered (or in another persist category)
@@ -130,6 +152,16 @@ func runValidate(args []string) {
 	// undeclared usage → error, declared-but-unused → warning,
 	// ctx.environment branching → warning. --fix removes unused entries.
 	honestyIssues := scanHonesty(res.Manifests, *specPath)
+	// Delivery-channel honesty (todo 7.7.6): a channel that is declared but not
+	// delivered must not read as "configured and working" just because the schema
+	// accepts it. Warnings ride the same advisory channel as the script scan.
+	honestyIssues = append(honestyIssues, scanDeliveryChannels(res.Manifests)...)
+	// Webhook entries with no (or an unusable) endpoint (todo 7.7.6). The runtime
+	// already fails them loudly, so this is advisory on top of that.
+	honestyIssues = append(honestyIssues, scanWebhookDeliveries(res.Manifests)...)
+	// Approval steps resting on `roles` alone (todo 5.13.12): they work, but they
+	// hardcode role names where a grantable duty would do. Advisory.
+	honestyIssues = append(honestyIssues, scanApprovalRoleOnlySteps(res.Manifests)...)
 	if *fix {
 		if removed := applyHonestyFix(res.Manifests, honestyIssues); removed > 0 {
 			fmt.Printf("[FIXED] removed %d declared-but-unused uses entr(ies)\n", removed)
@@ -221,11 +253,17 @@ func runValidate(args []string) {
 		if errMsg, ok := scopeRejects[m.Source]; ok {
 			msgs = append(msgs, "scope: "+errMsg)
 		}
+		if errMsg, ok := grantRejects[m.Source]; ok {
+			msgs = append(msgs, "grant: "+errMsg)
+		}
 		if errMsg, ok := relationRejects[m.Source]; ok {
 			msgs = append(msgs, "relation: "+errMsg)
 		}
 		if errMsg, ok := danglingRejects[m.Source]; ok {
 			msgs = append(msgs, "reference: "+errMsg)
+		}
+		if errMsg, ok := subscriptionRejects[m.Source]; ok {
+			msgs = append(msgs, "subscription: "+errMsg)
 		}
 		for _, iss := range honestyIssues {
 			if iss.Source == m.Source && iss.Severity == "error" {
@@ -271,7 +309,7 @@ func runValidate(args []string) {
 		}
 	}
 	if warns > 0 {
-		fmt.Printf("\n%d honesty warning(s) — run with --fix to remove declared-but-unused entries\n", warns)
+		fmt.Printf("\n%d warning(s) — advisory: without `--fix` these change nothing about the manifest's validity\n", warns)
 	}
 
 	if fails > 0 {

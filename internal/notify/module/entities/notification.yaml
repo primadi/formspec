@@ -1,0 +1,80 @@
+# Notification (todo 7.7.6) — notifikasi in-app sebagai Entity di
+# formspec.core, bukan tabel framework tersembunyi.
+#
+# Kenapa Entity: dengan begitu ia otomatis mendapat doc_status, permission
+# model, audit trail, DDL/migrasi otomatis, DAN `row_scope` — sehingga "hanya
+# pemiliknya yang melihat" ditegakkan server-side, bukan disaring di UI.
+#
+# `kind: NotificationCenter` zero-config mencari entity ini
+# (`formspec.core.notification` / `formspec.core.notify`) dan menampilkan
+# baris-barisnya. Channel delivery `notification` yang mengisinya.
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: notification
+  module: formspec.core
+  description: "Notifikasi in-app per penerima — diisi channel delivery `notification`, ditampilkan kind: NotificationCenter."
+  annotations:
+    formspec.dev/ui-exposed: "true"
+spec:
+  version: v1
+  plural: notifications
+  characteristic: master
+  display_field: title
+  lifecycle: plain_crud
+  # Penerima hanya melihat notifikasinya sendiri. `attr: user_id` dipetakan
+  # `sessionAttr` ke Identity.UserID (internal/api/scope.go) — tidak perlu
+  # atribut token tambahan. Pemanggil tanpa identitas gagal FAIL-CLOSED, jadi
+  # daftar ini tidak pernah menjadi "lihat semua".
+  #
+  # Field-nya ada di entity ini, jadi `from: session` tidak bergantung pada
+  # deklarasi `scope` (S5) yang biasanya dipakai untuk dimensi bisnis.
+  row_scope:
+    - { field: recipient_id, op: eq, from: session, attr: user_id }
+  fields:
+    - name: recipient_id
+      type: string
+      required: true
+      index: true
+      title: "Penerima"
+      description: "User id penerima (formspec.core.user.id) — ditegakkan row_scope"
+    - name: title
+      type: string
+      required: true
+      title: "Judul"
+    - name: body
+      type: text
+      title: "Isi"
+    - name: read
+      type: boolean
+      default: false
+      index: true
+      title: "Sudah Dibaca"
+    - name: read_at
+      type: datetime
+      title: "Dibaca Pada"
+    # Asal-usulnya, supaya notifikasi bisa ditelusuri ke peristiwa yang
+    # memicunya tanpa menebak dari judulnya.
+    - name: source_event
+      type: string
+      index: true
+      title: "Event Sumber"
+      description: "Nama event yang memicunya, mis. billing.order.paid"
+    - name: source_resource
+      type: string
+      title: "Resource Sumber"
+      description: "module/entity pemancar"
+    - name: source_id
+      type: string
+      title: "Record Sumber"
+      description: "Id record yang memicu, bila payload membawanya"
+    - name: level
+      type: enum
+      enum_values: [info, warning, critical]
+      default: info
+      title: "Tingkat"
+  actions:
+    # `read` ditandai lewat PATCH biasa (renderer memanggil
+    # `apiPatch(..., {read: true})`), jadi tidak perlu action kustom.
+    - name: delete
+      disabled: true # jejak notifikasi tidak dihapus; `read` yang menandainya selesai

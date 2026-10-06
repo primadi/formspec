@@ -164,6 +164,26 @@ func rateLimitKey(scope string, r *http.Request) string {
 // an entity action. Returns true when the request is allowed; when false,
 // it has already written a 429 response.
 func (f *HandlerFactory) checkRateLimit(w http.ResponseWriter, r *http.Request, es *spec.EntitySpec, actionName string) bool {
+	return f.checkRateLimitAction(w, r, es, nil, actionName)
+}
+
+// checkRateLimitAction is checkRateLimit for a caller that ALREADY holds the
+// action's spec, resolved through the entity registry's union (`GetActionSpec`:
+// declared `actions:` ∪ transition `via`).
+//
+// Why the override exists: `resolveAction` reads `es.Actions` only. A
+// `rate_limit` declared on a transition `via` therefore never reached this
+// check on the custom-action route, even though the handler was holding the
+// very spec that carries it — the contract was declared and silently not
+// enforced (kafe 10.60a). Passing the resolved action in closes that without
+// touching `resolveAction`, which is shared with the create/update paths and
+// deliberately still reads `actions:` alone (plan
+// docs_internal/plan/via-sebagai-action-penuh.md §Further Considerations #1).
+//
+// Behaviour is unchanged for every pre-existing caller: when the override is
+// nil — or carries no `rate_limit` of its own — resolution falls back to
+// `resolveAction` and then to the resource default, exactly as before.
+func (f *HandlerFactory) checkRateLimitAction(w http.ResponseWriter, r *http.Request, es *spec.EntitySpec, action *spec.Action, actionName string) bool {
 	if f.rateLimiter == nil {
 		return true
 	}
@@ -173,8 +193,13 @@ func (f *HandlerFactory) checkRateLimit(w http.ResponseWriter, r *http.Request, 
 
 	// Per-action override wins over the resource-level default.
 	rs := es.RateLimit
-	if a := resolveAction(es, actionName); a != nil && a.RateLimit != nil {
-		rs = a.RateLimit
+	switch {
+	case action != nil && action.RateLimit != nil:
+		rs = action.RateLimit
+	default:
+		if a := resolveAction(es, actionName); a != nil && a.RateLimit != nil {
+			rs = a.RateLimit
+		}
 	}
 	if rs == nil {
 		return true

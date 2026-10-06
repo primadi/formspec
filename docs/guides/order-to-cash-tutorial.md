@@ -219,8 +219,10 @@ spec:
         - channel: audit_log
         - channel: websocket
           target: { scope: tenant } # FR6 — dashboard ticker
-        - { channel: queue, job: generate-receipt } # FR10 + FR7
-        - { channel: queue, job: send-receipt-email } # FR5 — receipt = billing promise
+        # `job:` names a Service ACTION (`service.action`, publisher's module).
+        # The outbox worker runs it; see `receipt-jobs` below.
+        - { channel: queue, job: receipt-jobs.generate-receipt } # FR10 + FR7
+        - { channel: queue, job: receipt-jobs.send-receipt-email } # FR5 — receipt = billing promise
         - channel: reliable_event # FR4 — journal, no loss
           target: { resource: gl.journal-entry, action: create } # defined in Step 6
           retry: { max: 10, backoff: exponential, initial_delay_ms: 1000 }
@@ -366,10 +368,21 @@ metadata:
   name: wa-on-order-paid
   module: notifications
 spec:
-  on: { resource: billing.order, event: paid }
-  deliver:
-    - { channel: queue, job: send-wa-notification }
+  events:
+    - billing.order.paid # fully-qualified "{module}.{entity}.{event}"
+  handler:
+    type: native
+    ref: "Notifications.SendWaOnOrderPaid"
 ```
+
+A Subscription reacts with a **handler** (`events:` + `handler:`) — it is not a
+`deliver:` list. If the reaction needs background work (WA delivery, PDF, email),
+the handler enqueues it, or the _publisher_ declares a `deliver: {channel: queue,
+job: ...}` because that is a promise the publisher owns.
+
+> `on:`/`deliver:` on a Subscription is not a shape this spec has: the schema
+> rejects both keys, so an example written that way fails validation rather than
+> doing nothing quietly.
 
 The dividing line (D35): journal stays in `order`'s `deliver` because it's a billing promise (FR4). WA is `notifications` module's concern — Subscription. `formspec describe entity billing.order` shows the merged fan-out (publisher deliver + all Subscriptions).
 

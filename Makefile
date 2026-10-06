@@ -408,3 +408,7 @@ seed-kafe:
 .PHONY: seed-kafe
 
 .PHONY: docs-serve
+
+# run examples/kafe
+dev-run-kafe:
+	cd /workspaces/formspec/examples/kafe && go run /workspaces/formspec/cmd/formspec dev --dev-ui

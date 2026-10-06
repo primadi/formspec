@@ -1,0 +1,7 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: formspec.core
+  description: "Framework-owned notification module — formspec.core namespace (notification entity, todo 7.7.6). Bundled + embedded."
+spec:
+  version: 1.0.0

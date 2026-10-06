@@ -1,7 +1,7 @@
 // impl/notifications/send_wa_notification.go
 //
-// Job handler: dipicu oleh kind: Subscription → on: billing.order.paid
-// deliver: [{ channel: queue, job: send-wa-notification }]
+// Handler Subscription: dipicu oleh `wa-on-order-paid`
+// (`events: [billing.order.paid]` → `handler: Notifications.SendWANotificationHandler`).
 
 package notifications
 

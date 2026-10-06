@@ -4,73 +4,156 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
-	"github.com/primadi/formspec/internal/app"
+	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
-// The anonymous allowlist (S3). Before it, `access: public` granted anonymous
-// callers list/find/create on EVERY entity of a mounted module — so a cafe's
-// public QR App also exposed member phone numbers, employees, shifts and cash
-// movements (#6). These tests pin the narrower semantics:
+// The anonymous allowlist used to be declared in the manifest
+// (`App.spec.public_entities`). It is now DERIVED from the App's surface (plan
+// docs_internal/plan/implicit-public-grants.md), so these tests drive the real
+// kafe tree through the router builder and assert what an anonymous caller may
+// reach.
 //
-//   - declared allowlist → exactly those entity/action pairs, nothing else in
-//     the same module;
-//   - `public_entities: []` → nothing anonymous;
-//   - absent → legacy module-wide list/find/create, but never update/delete.
+// Why the kafe tree rather than a synthetic fixture: derivation walks Pages,
+// Forms, Table blocks and child-field pickers, so a hand-built fixture would
+// have to reproduce all of that — and could pass while the real manifests expose
+// something else. The example is the contract.
 
-func publicRouter(t *testing.T, specApps ...*spec.AppSpec) *RouterBuilder {
+// kafePublicRouter builds a RouterBuilder over examples/kafe/spec with the
+// resolved Apps wired, so `publicGrants`/`publicScope` derive from the real
+// surface.
+func kafePublicRouter(t *testing.T) *RouterBuilder {
 	t.Helper()
-	apps := map[string]*app.ResolvedApp{}
-	for i, s := range specApps {
-		name := s.Title
-		if name == "" {
-			name = "app"
-		}
-		modules := map[string]bool{}
-		for _, m := range s.Modules {
-			modules[m] = true
-		}
-		apps[itoa(i)] = &app.ResolvedApp{Name: name, Spec: s, Modules: modules}
+	const specPath = "../../examples/kafe/spec"
+
+	d, err := db.OpenSQLite(filepath.Join(t.TempDir(), "kafe_public.db"), nil)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
 	}
-	b := setupMetaTestRouter(t)
-	b.SetApps(apps)
+	t.Cleanup(func() { _ = d.Close() })
+
+	reg := entity.NewRegistry(d, db.DriverSQLite, specPath)
+	if err := reg.LoadEntities(); err != nil {
+		t.Fatalf("load kafe entities: %v", err)
+	}
+
+	uiReg := ui.NewRegistry()
+	if errs := uiReg.LoadDir(specPath); len(errs) > 0 {
+		t.Fatalf("load kafe UI manifests: %v", errs)
+	}
+
+	loaded, err := manifest.NewLoader(specPath).LoadAll()
+	if err != nil {
+		t.Fatalf("load kafe spec tree: %v", err)
+	}
+	resolved, err := formspec_app.Resolve(loaded.Manifests, uiReg)
+	if err != nil {
+		t.Fatalf("resolve kafe apps: %v", err)
+	}
+
+	b := NewRouterBuilder(reg)
+	b.SetUIRegistry(uiReg)
+	b.SetApps(resolved)
 	return b
 }
 
-func itoa(i int) string { return string(rune('a' + i)) }
+// TestPublicGrants_KafeQR_DerivedFromSurface pins the entity/action granularity
+// an anonymous caller of the customer App gets.
+func TestPublicGrants_KafeQR_DerivedFromSurface(t *testing.T) {
+	b := kafePublicRouter(t)
 
-// TestPublicGrantScope_TokenScopedAnonList pins the #45 mechanism: granting
-// `list` on a public surface without a scope hands every row to an anonymous
-// caller, so the grant declares the token the caller must present. The scope is
-// per-surface — the same entity read by a cashier is not filtered by it.
-func TestPublicGrantScope_TokenScopedAnonList(t *testing.T) {
-	allow := []spec.PublicEntityDecl{
-		{
-			Entity:  "cafe-order/order",
-			Actions: []string{"create", "list"},
-			Scope:   []spec.FilterSpec{{Field: "guest_token", Op: "eq", From: "route", Param: "token"}},
-		},
-		{Entity: "cafe-master/menu-item", Actions: []string{"list"}},
+	// Granted: what the QR surface actually fetches.
+	for _, c := range []struct {
+		module, entity, action string
+	}{
+		{"cafe-master", "menu-item", "list"},
+		{"cafe-master", "menu-item-price", "list"},
+		{"cafe-master", "dining-table", "find"},
+		{"cafe-order", "table-session", "create"},
+		{"cafe-order", "table-session", "find"},
+		{"cafe-order", "order", "create"},
+		{"cafe-order", "order", "list"},
+	} {
+		if !b.isPublicAction(c.module, c.entity, c.action) {
+			t.Errorf("%s/%s %s should be anonymous (the QR surface fetches it)", c.module, c.entity, c.action)
+		}
 	}
-	b := publicRouter(t, &spec.AppSpec{
-		Title:          "qr",
-		AppRenderer:    "no-nav",
-		Access:         spec.AppAccessPublic,
-		Modules:        []string{"cafe-master", "cafe-order"},
-		PublicEntities: &allow,
-	})
+
+	// Action granularity. `find` on order is refused because the grant carries a
+	// row scope, and find resolves by id — a scope cannot guard it.
+	if b.isPublicAction("cafe-order", "order", "find") {
+		t.Error("order find must NOT be anonymous — the grant is row-scoped and find resolves by id")
+	}
+	if b.isPublicAction("cafe-master", "dining-table", "list") {
+		t.Error("dining-table list must NOT be anonymous — the QR only finds one table by token")
+	}
+	if b.isPublicAction("cafe-master", "menu-item", "find") {
+		t.Error("menu-item find must NOT be anonymous — the picker only lists")
+	}
+	if b.isPublicAction("cafe-master", "menu-item", "delete") {
+		t.Error("delete must never be anonymous")
+	}
+
+	// Entity granularity: the staff entities that share a module with the
+	// surface. These are what the pre-allowlist module-wide grant leaked.
+	for _, ent := range []string{"member", "employee", "branch", "promo"} {
+		if b.isPublicAction("cafe-master", ent, "list") {
+			t.Errorf("cafe-master/%s list must NOT be anonymous (shares a module with the granted entities)", ent)
+		}
+	}
+	for _, ent := range []string{"shift", "cash-movement", "payment"} {
+		if b.isPublicAction("cafe-order", ent, "list") {
+			t.Errorf("cafe-order/%s list must NOT be anonymous", ent)
+		}
+	}
+}
+
+// TestPublicGrantScope_KafeQR_GuestToken pins the #45 mechanism: granting `list`
+// on a public surface without a scope would hand every row to an anonymous
+// caller, so the derivation reads the table block's route parameter and turns it
+// into a server-enforced row filter.
+func TestPublicGrantScope_KafeQR_GuestToken(t *testing.T) {
+	b := kafePublicRouter(t)
 
 	scope := b.publicScope("cafe-order", "order")
-	if len(scope) != 1 || scope[0].Field != "guest_token" || scope[0].Param != "token" {
-		t.Fatalf("publicScope(order) = %#v, want the declared guest_token scope", scope)
+	if len(scope) != 1 {
+		t.Fatalf("publicScope(order) = %#v, want a single guest_token scope", scope)
 	}
-	// An entity in the same App without a scope must not inherit one.
+	if scope[0].Field != "guest_token" || scope[0].From != "route" || scope[0].Op != "eq" {
+		t.Fatalf("order scope = %#v, want {field: guest_token, op: eq, from: route}", scope[0])
+	}
+
+	// An entity the surface reads without a route parameter must not inherit a
+	// scope — the scope is per-grant, not per-App.
 	if got := b.publicScope("cafe-master", "menu-item"); len(got) != 0 {
-		t.Fatalf("publicScope(menu-item) = %#v, want none", got)
+		t.Fatalf("publicScope(menu-item) = %#v, want none (the picker lists the whole catalog)", got)
+	}
+}
+
+// TestPublicGrant_PrivateAppGrantsNothing keeps the secure-by-default rule: a
+// private App exposes nothing anonymously, whatever its views look like.
+func TestPublicGrant_PrivateAppGrantsNothing(t *testing.T) {
+	b := kafePublicRouter(t)
+	if !b.isPublicAction("cafe-master", "menu-item", "list") {
+		t.Fatal("precondition: kafe-qr is public and grants menu-item list")
+	}
+	// kafe-pos mounts the same modules but is private; its App contributes no
+	// grant. (The union across public Apps is what the map holds, so assert on
+	// the per-App derivation instead.)
+	pos := b.apps["kafe-pos"]
+	if pos == nil || pos.Spec.Access != spec.AppAccessPrivate {
+		t.Fatal("kafe-pos must be a private App")
+	}
+	for _, a := range b.derivedPublicGrants()["kafe-pos"] {
+		t.Errorf("private App kafe-pos must derive no grants, got %s", a.Entity)
 	}
 }
 
@@ -102,6 +185,26 @@ func TestApplyPublicScope_TokenBecomesFilter(t *testing.T) {
 	}
 }
 
+// The scope overrides a client-supplied filter on the same field: the client
+// cannot widen the read by sending its own value.
+func TestApplyPublicScope_OverridesClientFilter(t *testing.T) {
+	f := &HandlerFactory{}
+	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order?token=abc123", nil)
+	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
+		{Field: "guest_token", Op: "eq", From: "route", Param: "token"},
+	}))
+
+	got, err := f.applyPublicScope(req, map[string]db.FilterOp{
+		"guest_token": {Op: "eq", Value: "someone-else"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got["guest_token"].Value != "abc123" {
+		t.Fatalf("client filter must not override the scope: got %v", got["guest_token"].Value)
+	}
+}
+
 // A route without a public grant must be untouched — the scope is surface-scoped,
 // not entity-scoped.
 func TestApplyPublicScope_NoGrantLeavesFiltersUntouched(t *testing.T) {
@@ -117,265 +220,37 @@ func TestApplyPublicScope_NoGrantLeavesFiltersUntouched(t *testing.T) {
 	}
 }
 
-// The grant governs ANONYMOUS access. An authenticated caller is governed by its
-// permissions plus the entity's own row_scope — applying the grant's token scope
-// to it would filter the cashier's POS list by a token it never carries.
-func TestApplyPublicScope_SkipsAuthenticatedCallers(t *testing.T) {
-	f := &HandlerFactory{}
-	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
-	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
-		{Field: "guest_token", Op: "eq", From: "route"},
-	}))
-	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{
-		UserID: "emp-1", WorkspaceID: "kafe",
-	}))
+// TestPublicGrant_FloorNotBypass pins that the grant is a FLOOR, not an
+// anonymous-only lane: /_ui/entity is shared with the POS surface, so a
+// signed-in caller holding the permission must pass the real permission check
+// (its row_scope is what applies, not the guest token).
+func TestPublicGrant_FloorNotBypass(t *testing.T) {
+	_ = kafePublicRouter(t)
 
-	got, err := f.applyPublicScope(req, nil)
-	if err != nil {
-		t.Fatalf("authenticated caller must not fail closed on a public grant: %v", err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("authenticated caller was filtered by the anonymous grant: %#v", got)
-	}
-}
+	handler := RequirePermission("cafe-order.orders.list")(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
 
-// A caller authorized BY the grant (signed in, but holding no permission of its
-// own for this route) IS scoped by it. That is the whole point of the fallback:
-// the fallback hands out exactly what a guest gets, never more — the guest's row
-// scope travels with it.
-func TestApplyPublicScope_GrantAuthorisedCallerIsScoped(t *testing.T) {
-	f := &HandlerFactory{}
-	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order?guest_token=abc123", nil)
-	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
-		{Field: "guest_token", Op: "eq", From: "route"},
-	}))
-	req = req.WithContext(withPublicGrantAuth(req.Context()))
-	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{
-		UserID: "u1", WorkspaceID: "kafe",
-	}))
-
-	got, err := f.applyPublicScope(req, nil)
-	if err != nil {
-		t.Fatalf("grant-authorised caller: %v", err)
-	}
-	if got["guest_token"].Value != "abc123" {
-		t.Fatalf("grant-authorised caller must be scoped by the grant: %#v", got)
-	}
-
-	// …and still fails closed without the token, exactly like a guest.
-	req = httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
-	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
-		{Field: "guest_token", Op: "eq", From: "route"},
-	}))
-	req = req.WithContext(withPublicGrantAuth(req.Context()))
-	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1"}))
-	if _, err := f.applyPublicScope(req, nil); err == nil {
-		t.Fatal("grant-authorised caller must fail closed without the token")
-	}
-}
-
-// A public grant on an entity that also declares `row_scope from: session` must
-// not fail closed for a caller running on the grant: the grant already decided
-// which rows are in scope, and a session attribute may not exist for them.
-func TestApplyRowScope_GrantAuthorisedCallerSkipsSessionScope(t *testing.T) {
-	f := &HandlerFactory{}
-	// `attr` is explicit and unresolvable here: without the grant exemption the
-	// caller fails closed, which is what makes this test able to tell the two
-	// branches apart.
-	es := &spec.EntitySpec{
-		RowScope: []spec.FilterSpec{{Field: "branch_id", Op: "eq", From: "session", Attr: "branch_id"}},
+	identity := &auth.Identity{
+		UserID: "cashier-1", WorkspaceID: "kafe",
+		Permissions: []string{"cafe-order.orders.list"},
 	}
 	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
-	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
-		{Field: "guest_token", Op: "eq", From: "route"},
-	}))
-	req = req.WithContext(withPublicGrantAuth(req.Context()))
-	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1", Username: "kasir"}))
-
-	if _, err := f.applyRowScope(req, es, "cafe-order", "order", nil); err != nil {
-		t.Fatalf("grant-authorised caller must not fail closed on row_scope: %v", err)
-	}
-
-	// A caller holding its own permission is still scoped by the session
-	// attribute — the exemption is tied to the grant, not to being signed in.
-	req = httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
-	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
-		{Field: "guest_token", Op: "eq", From: "route"},
-	}))
-	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1", Username: "kasir"}))
-	if _, err := f.applyRowScope(req, es, "cafe-order", "order", nil); err == nil {
-		t.Fatal("a permissioned caller must still fail closed without the session attribute")
-	}
-}
-
-// A public grant must not become a permission bypass for signed-in callers that
-// merely hit the same URL (#45) — but it must not make them WORSE OFF than a
-// guest either. The grant is a floor: a signed-in caller without the permission
-// falls back to it.
-func TestRequirePermissionOrAnonymous(t *testing.T) {
-	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Grant-Auth", map[bool]string{true: "1", false: "0"}[isPublicGrantAuth(r.Context())])
-		w.WriteHeader(http.StatusOK)
-	})
-	guarded := RequirePermissionOrAnonymous("cafe-order.orders.list")(ok)
-
-	// Anonymous → allowed (the grant is the authorization), not marked.
+	req = req.WithContext(WithIdentity(req.Context(), identity))
 	rec := httptest.NewRecorder()
-	guarded.ServeHTTP(rec, httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil))
+	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("anonymous = %d, want 200", rec.Code)
-	}
-	if rec.Header().Get("X-Grant-Auth") != "0" {
-		t.Error("anonymous caller must not be marked as grant-authorized")
+		t.Fatalf("a holder of the permission must pass: got %d", rec.Code)
 	}
 
-	// Authenticated WITHOUT the permission → allowed via the grant, and marked
-	// so the row-scope layers apply the grant's scope instead of failing closed.
-	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
-	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1", Permissions: []string{"other.thing.list"}}))
-	rec = httptest.NewRecorder()
-	guarded.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("signed-in caller without the permission = %d, want 200 (the grant is the floor)", rec.Code)
-	}
-	if rec.Header().Get("X-Grant-Auth") != "1" {
-		t.Error("a caller falling back to the grant must be marked as grant-authorized")
-	}
-
-	// Authenticated with the permission → allowed, and NOT marked (it is
-	// governed by its own permission and the entity's row scope).
+	// Without the permission the identity is not anonymous, so the grant does
+	// not apply and the request is refused.
 	req = httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
-	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1", Permissions: []string{"cafe-order.orders.list"}}))
+	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{
+		UserID: "staff-1", WorkspaceID: "kafe", Permissions: []string{},
+	}))
 	rec = httptest.NewRecorder()
-	guarded.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("authenticated caller with the permission = %d, want 200", rec.Code)
-	}
-	if rec.Header().Get("X-Grant-Auth") != "0" {
-		t.Error("a caller holding the permission must not be marked as grant-authorized")
-	}
-}
-
-// A signed-in caller on a NON-public route still gets the plain permission
-// check: the fallback belongs to the grant, not to being signed in.
-func TestRequirePermission_SignedInWithoutPermStillDenied(t *testing.T) {
-	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
-	id := &auth.Identity{UserID: "u1", Permissions: []string{"other.thing.list"}}
-
-	// Entity visibility (list/view) on the UI surface → 404, per spec §4: a
-	// caller who may not see the entity must not learn it exists.
-	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
-	req = req.WithContext(WithIdentity(req.Context(), id))
-	rec := httptest.NewRecorder()
-	RequirePermission("cafe-order.orders.list")(ok).ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("UI-surface list without permission = %d, want 404", rec.Code)
-	}
-
-	// Any other action (here: update) → 403, the ordinary denial.
-	req = httptest.NewRequest("PATCH", "/kafe/_ui/entity/cafe-order/order/1", nil)
-	req = req.WithContext(WithIdentity(req.Context(), id))
-	rec = httptest.NewRecorder()
-	RequirePermission("cafe-order.orders.update")(ok).ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("UI-surface update without permission = %d, want 403", rec.Code)
-	}
-}
-
-func TestPublicAccess_AllowlistScopesPerEntityAndAction(t *testing.T) {
-	allow := []spec.PublicEntityDecl{
-		{Entity: "cafe-master/menu-item", Actions: []string{"list", "find"}},
-		{Entity: "cafe-master.menu-item-price", Actions: []string{"list"}}, // dotted form
-		{Entity: "cafe-order/order", Actions: []string{"create"}},
-	}
-	b := publicRouter(t, &spec.AppSpec{
-		Title:          "qr",
-		AppRenderer:    "no-nav",
-		Access:         spec.AppAccessPublic,
-		Modules:        []string{"cafe-master", "cafe-order"},
-		PublicEntities: &allow,
-	})
-
-	// Granted.
-	if !b.isPublicAction("cafe-master", "menu-item", "list") {
-		t.Error("menu-item list should be anonymous")
-	}
-	if !b.isPublicAction("cafe-master", "menu-item", "find") {
-		t.Error("menu-item find should be anonymous")
-	}
-	if !b.isPublicAction("cafe-order", "order", "create") {
-		t.Error("order create should be anonymous")
-	}
-
-	// Action granularity: same entity, action not granted.
-	if b.isPublicAction("cafe-master", "menu-item", "create") {
-		t.Error("menu-item create must NOT be anonymous (not granted)")
-	}
-	if b.isPublicAction("cafe-order", "order", "list") {
-		t.Error("order list must NOT be anonymous (only create was granted)")
-	}
-	if b.isPublicAction("cafe-master", "menu-item", "delete") {
-		t.Error("menu-item delete must NOT be anonymous")
-	}
-
-	// Entity granularity: same module, entity not listed — the actual #6 fix.
-	for _, ent := range []string{"member", "employee", "branch", "promo"} {
-		if b.isPublicAction("cafe-master", ent, "list") {
-			t.Errorf("cafe-master/%s list must NOT be anonymous (shares a module with a granted entity)", ent)
-		}
-	}
-	for _, ent := range []string{"shift", "cash-movement", "payment"} {
-		if b.isPublicAction("cafe-order", ent, "list") {
-			t.Errorf("cafe-order/%s list must NOT be anonymous", ent)
-		}
-	}
-}
-
-func TestPublicAccess_ExplicitlyEmptyGrantsNothing(t *testing.T) {
-	empty := []spec.PublicEntityDecl{}
-	b := publicRouter(t, &spec.AppSpec{
-		Title:          "closed",
-		Access:         spec.AppAccessPublic,
-		Modules:        []string{"cafe-master"},
-		PublicEntities: &empty,
-	})
-	if b.isPublicEntity("cafe-master", "menu-item") {
-		t.Error("`public_entities: []` must grant nothing (not fall back to module-wide)")
-	}
-	if b.isPublicAction("cafe-master", "menu-item", "list") {
-		t.Error("`public_entities: []` must grant no actions")
-	}
-}
-
-func TestPublicAccess_AbsentKeepsLegacyModuleWide(t *testing.T) {
-	b := publicRouter(t, &spec.AppSpec{
-		Title:   "legacy",
-		Access:  spec.AppAccessPublic,
-		Modules: []string{"sales"},
-	})
-	// Legacy default: list/find/create for every entity of the mounted module.
-	for _, act := range []string{"list", "find", "create"} {
-		if !b.isPublicAction("sales", "product", act) {
-			t.Errorf("legacy public App should allow %s anonymously", act)
-		}
-	}
-	// Admin ops were never granted by the legacy path either.
-	for _, act := range []string{"update", "delete"} {
-		if b.isPublicAction("sales", "product", act) {
-			t.Errorf("legacy public App must not allow %s anonymously", act)
-		}
-	}
-}
-
-func TestPublicAccess_PrivateAppGrantsNothing(t *testing.T) {
-	allow := []spec.PublicEntityDecl{{Entity: "sales/product", Actions: []string{"list"}}}
-	b := publicRouter(t, &spec.AppSpec{
-		Title:          "backoffice",
-		Access:         spec.AppAccessPrivate,
-		Modules:        []string{"sales"},
-		PublicEntities: &allow, // ignored: only public Apps grant
-	})
-	if b.isPublicEntity("sales", "product") {
-		t.Error("a private App must not expose anything anonymously")
+	handler.ServeHTTP(rec, req)
+	if rec.Code == http.StatusOK {
+		t.Fatal("an authenticated caller without the permission must not pass on the entity route")
 	}
 }

@@ -59,6 +59,6 @@ spec:
     # Setelah pesanan dibuat, tamu dibawa ke halaman STATUS pesanannya sendiri,
     # bukan ke daftar pesanan kafe. Daftar itu permukaan staf: tamu anonim tidak
     # punya (dan tidak boleh punya) izin membacanya, sedangkan tokennya sendiri
-    # adalah kunci barisnya (`public_entities[].scope`). Nilainya relative
+    # adalah kunci barisnya (scope grant turunan). Nilainya relative
     # terhadap permukaan, sama seperti `route` sebuah Page.
     redirect: "/status/{session.guest_token}"

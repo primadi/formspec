@@ -118,8 +118,11 @@ spec:
         - channel: audit_log
         - channel: websocket
           target: { scope: workspace }
-        - { channel: queue, job: generate-receipt }
-        - { channel: queue, job: send-receipt-email }
+        # `job:` menyebut Service ACTION (`service.action`, module publisher).
+        # Worker outbox yang menjalankannya; Service `receipt-jobs` di
+        # `modules/billing/services/receipt-jobs.yaml` yang memilikinya.
+        - { channel: queue, job: receipt-jobs.generate-receipt }
+        - { channel: queue, job: receipt-jobs.send-receipt-email }
         - channel: reliable_event
           target: { resource: gl.journal-entry, action: create }
           retry: { max: 10, backoff: exponential, initial_delay_ms: 1000 }

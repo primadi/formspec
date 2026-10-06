@@ -32,10 +32,23 @@ func setupMaterializer(t *testing.T) (*Materializer, *entity.Registry) {
 	for _, e := range []struct {
 		name    string
 		plural  string
+		fields  []spec.Field
 		actions []spec.Action
 	}{
-		{"order", "orders", []spec.Action{{Name: "approve"}}},
-		{"customer", "customers", nil},
+		{
+			name: "order", plural: "orders",
+			// `status` and `branch_id` are declared because the grant row-scope
+			// tests restrict on them, and a row scope names a COLUMN of the row
+			// it limits: a restriction on an undeclared field is exactly the
+			// silent-no-op shape the materializer now refuses.
+			fields: []spec.Field{
+				{Name: "name", Type: spec.FieldString},
+				{Name: "status", Type: spec.FieldString},
+				{Name: "branch_id", Type: spec.FieldString},
+			},
+			actions: []spec.Action{{Name: "approve"}},
+		},
+		{name: "customer", plural: "customers", fields: []spec.Field{{Name: "name", Type: spec.FieldString}}},
 	} {
 		raw := manifest.RawManifest{
 			Kind: "Entity",
@@ -50,7 +63,7 @@ func setupMaterializer(t *testing.T) (*Materializer, *entity.Registry) {
 			Version:        "v1",
 			Plural:         e.plural,
 			Characteristic: spec.CharMaster,
-			Fields:         []spec.Field{{Name: "name", Type: spec.FieldString}},
+			Fields:         e.fields,
 			Actions:        e.actions,
 		}); err != nil {
 			t.Fatalf("RegisterArtifactManifest %s: %v", e.name, err)

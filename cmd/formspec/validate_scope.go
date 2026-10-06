@@ -34,6 +34,56 @@ var builtinSessionAttrs = map[string]bool{
 	"workspace_id": true,
 }
 
+// sessionAttrSources is the set of attribute names some declaration in the tree
+// can actually produce at request time.
+//
+// It exists because "a session attribute" is not self-evident: the value has to
+// come from SOMEWHERE, and if nothing in the tree can supply it, then every read
+// bounded by it fails closed 403 forever with a manifest that looks correct. Two
+// declarations can supply one, and both spellings count because the engine
+// resolves them interchangeably: an entity's `assignments` names a DIMENSION
+// (`branch`) and the FIELD carrying its value (`branch_id`).
+type sessionAttrSources struct {
+	// names holds every dimension and field named by an `assignments` entry.
+	names map[string]bool
+}
+
+// canSupply reports whether attr is a builtin identity attribute, or a name
+// declared by an `assignments` mapping.
+func (s sessionAttrSources) canSupply(attr string) bool {
+	if attr == "" {
+		return false
+	}
+	return builtinSessionAttrs[attr] || s.names[attr]
+}
+
+// collectSessionAttrSources scans the tree for every declared attribute source.
+func collectSessionAttrSources(manifests []manifest.RawManifest) sessionAttrSources {
+	src := sessionAttrSources{names: map[string]bool{}}
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindEntity || m.Spec == nil {
+			continue
+		}
+		specMap, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		es, err := manifest.RawSpecToEntitySpec(specMap)
+		if err != nil || es == nil {
+			continue // per-manifest validation reports the parse error
+		}
+		for _, a := range es.Assignments {
+			if a.Dimension != "" {
+				src.names[a.Dimension] = true
+			}
+			if a.Field != "" {
+				src.names[a.Field] = true
+			}
+		}
+	}
+	return src
+}
+
 // validateScopeSources checks that every implicitly-resolved `from: session`
 // row-scope attribute has a declared source. Returns manifest source → message.
 func validateScopeSources(manifests []manifest.RawManifest) map[string]string {

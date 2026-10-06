@@ -54,7 +54,6 @@ var kindGroups = map[string]GroupInfo{
 	"Service":        {Group: "data", Plane: "resource"},
 	"Config":         {Group: "data", Plane: "resource"},
 	"Subscription":   {Group: "data", Plane: "resource"},
-	"Workflow":       {Group: "data", Plane: "resource"},
 	"Api":            {Group: "data", Plane: "resource"},
 	"Webhook":        {Group: "data", Plane: "resource"},
 	"Mockup":         {Group: "data", Plane: "resource"},
@@ -358,7 +357,6 @@ var structDocLinks = map[string]string{
 	"WorkspaceSpec":          "../../spec/frontend/05-app-kinds.md",
 
 	// Backend — extended data kinds (docs/spec/backend/02-core-extended.md)
-	"WorkflowSpec":     "../../spec/backend/02-core-extended.md",
 	"ApiSpec":          "../../spec/backend/02-core-extended.md",
 	"WebhookSpec":      "../../spec/backend/02-core-extended.md",
 	"SubscriptionSpec": "../../spec/backend/02-core-extended.md",

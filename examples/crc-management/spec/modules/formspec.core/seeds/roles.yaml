@@ -1,0 +1,91 @@
+# Seed role CRC — approver yang benar-benar ada.
+#
+# Sebelum ini `crc-field` punya TIGA workflow approval (`cap-approval`,
+# `foreman-review`, `customer-approval`) tetapi **tidak ada satu pun role** di
+# tree ini. Artinya ketiga approval itu tidak bisa disetujui siapa pun: nama role
+# di `steps[].roles` dicocokkan literal oleh `workflow.hasAnyRole`, jadi role yang
+# tidak ada = 403 selamanya, dengan manifest yang terlihat benar.
+#
+# `formspec validate` kini menolaknya (changelog `2026-10-04-005`), dan seed ini
+# yang menjawabnya.
+#
+# ─── DUTY, BUKAN NAMA ROLE ───
+# Siapa boleh menyetujui dinyatakan sebagai PERMISSION (`steps[].permission`), dan
+# grant di bawah yang memberikannya:
+#
+#   { page: "workflow:checklist-document.cap_approve", actions: [{ name: cap-sign-off }] }
+#
+# mematerialisasi
+# `workflow.crc-field.checklist-document.cap_approve.cap-sign-off`. Bentuk page
+# `{kind}:{name}` sama dengan `report:`/`print:`/`kanban:` — bukan kosakata baru.
+#
+# Efeknya bisa diperiksa: mencabut grant itu dari sebuah role mencabut hak
+# menyetujui pemegangnya TANPA menyentuh deklarasi approval.
+apiVersion: formspec.dev/v1
+kind: Seed
+metadata:
+  name: crc-roles
+  module: formspec.core
+  description: "Role CRC: approver CAP, foreman, kustomer, dan supervisor keduanya"
+spec:
+  entities:
+    # ── Role ──
+    # `app: crc` membuat grant hanya berlaku bila sesi login pada App itu
+    # (role app-scoped).
+    - entity: role
+      records:
+        # FOREMAN — menerima tugas review, memberi performance score, dan
+        # memutuskan tahapan berjalan atau tidak (Stop & Go).
+        - name: crc.foreman
+          app: crc
+          description: "Foreman — review & keputusan tahapan lapangan"
+          grants:
+            # Read supaya foreman bisa melihat dokumen yang ia putuskan.
+            - { page: "checklist-document-page", actions: [{ name: list }, { name: view }] }
+            # DUTY: menandatangani review foreman.
+            - { page: "workflow:checklist-document.foreman_approve", actions: [{ name: foreman-sign-off }] }
+            # DUTY TAKEOVER: bila approver kustomer eksternal menggantung 72 jam,
+            # `escalation.reassign: foreman-sign-off` pada gate `customer_approve`
+            # memindahkan hak persetujuan ke foreman — duty-nya di gate ITU.
+            - { page: "workflow:checklist-document.customer_approve", actions: [{ name: foreman-sign-off }] }
+
+        # SUPERVISOR FOREMAN — penerima takeover bila review foreman menggantung:
+        # duty `escalation.reassign: foreman-supervisor-sign-off` pada step
+        # `foreman_sign_off`. Ia MENGGANTIKAN penandatangan, bukan menambahnya.
+        - name: crc.foreman-supervisor
+          app: crc
+          description: "Supervisor foreman — penerima eskalasi review"
+          grants:
+            - { page: "checklist-document-page", actions: [{ name: list }, { name: view }] }
+            - { page: "workflow:checklist-document.foreman_approve", actions: [{ name: foreman-supervisor-sign-off }] }
+
+        # CAP APPROVER — persetujuan akhir dari Centralized Approval Platform.
+        - name: crc.cap-approver
+          app: crc
+          description: "Approver CAP — persetujuan akhir dokumen"
+          grants:
+            - { page: "checklist-document-page", actions: [{ name: list }, { name: view }] }
+            # DUTY: menandatangani persetujuan akhir CAP.
+            - { page: "workflow:checklist-document.cap_approve", actions: [{ name: cap-sign-off }] }
+
+        # SUPERVISOR CAP — penerima takeover bila persetujuan CAP menggantung.
+        - name: crc.cap-approver-supervisor
+          app: crc
+          description: "Supervisor approver CAP — penerima eskalasi"
+          grants:
+            - { page: "checklist-document-page", actions: [{ name: list }, { name: view }] }
+            - { page: "workflow:checklist-document.cap_approve", actions: [{ name: cap-supervisor-sign-off }] }
+
+        # KUSTOMER — approver EKSTERNAL, lewat link URL/QR. Ia tidak memakai App,
+        # jadi grant-nya sengaja minimal: hanya duty-nya.
+        #
+        # `app: ""` = role berlaku lintas App (workspace-global), pilihan yang
+        # tepat untuk approver yang tidak punya sesi App. Pernyataan ini tentang
+        # DEKLARASINYA: apakah alur link eksternal benar-benar bekerja ujung ke
+        # ujung belum diverifikasi di sini.
+        - name: crc.customer
+          app: ""
+          description: "Kustomer — approval eksternal lewat link"
+          grants:
+            # DUTY: menandatangani approval kustomer.
+            - { page: "workflow:checklist-document.customer_approve", actions: [{ name: customer-sign-off }] }

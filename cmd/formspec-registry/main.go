@@ -253,6 +253,9 @@ func vendorApprove(app *formspec.App) formspec.NativeHandler {
 			Version:     rec.Version,
 			UpdatedBy:   params.UserID,
 			Data:        data,
+			// Registry activation writes an engine-owned status field as part
+			// of approving a vendor — a framework transition, not a caller edit.
+			SystemCaller: true,
 		}); err != nil {
 			return nil, fmt.Errorf("activate vendor: %w", err)
 		}

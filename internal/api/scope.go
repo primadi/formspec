@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,35 +77,72 @@ func ReadAllPermission(module, entity string, es *spec.EntitySpec) string {
 //
 // Returns the merged filter map (never nil when a scope is declared).
 func (f *HandlerFactory) applyRowScope(r *http.Request, es *spec.EntitySpec, module, entity string, filters map[string]db.FilterOp) (map[string]db.FilterOp, error) {
-	if es == nil || len(es.RowScope) == 0 {
-		return filters, nil
+	preds, err := f.entityRowScopePredicates(r, es, module, entity)
+	if err != nil {
+		return nil, err
 	}
-	// Explicit exemption: a caller holding `{module}.{plural}.read_all` reads
-	// across rows by design (owner, cross-branch auditor). Checked before the
-	// scope is resolved, because for such a caller an unresolvable attribute is
-	// the normal case, not an error.
-	if identity := IdentityFromContext(r.Context()); identity != nil &&
-		identity.HasPermission(ReadAllPermission(module, entity, es)) {
-		return filters, nil
-	}
-	// The public surface's own scope takes over for callers the grant
-	// authorized: anonymous ones, and signed-in ones with no permission of
-	// their own for this route (see RequirePermissionOrAnonymous). A
-	// session-sourced scope could never resolve for either — resolving it here
-	// would deny every read on a public surface instead of filtering it. A
-	// caller that DOES hold the permission falls through and is scoped by its
-	// session/route attributes as usual.
-	if len(publicScopeFromContext(r.Context())) > 0 &&
-		(IdentityFromContext(r.Context()) == nil || isPublicGrantAuth(r.Context())) {
+	if len(preds) == 0 {
 		return filters, nil
 	}
 	if filters == nil {
-		filters = make(map[string]db.FilterOp, len(es.RowScope))
+		filters = make(map[string]db.FilterOp, len(preds))
 	}
-	identity := IdentityFromContext(r.Context())
+	// Assigning into the map keeps the long-standing override semantics: a scope
+	// on a field the client also filtered replaces the client's value, so the
+	// client cannot widen the view by editing the query string. A second
+	// predicate on the SAME field would overwrite the first here, which is why
+	// grant row scopes do not go through this map — they are ANDed in SQL
+	// (RowPredicates), where two restrictions can only narrow the result.
+	for _, p := range preds {
+		filters[p.Field] = p.FilterOpFrom()
+	}
+	return filters, nil
+}
 
-	for i := range es.RowScope {
-		sc := &es.RowScope[i]
+// entityRowScopePredicates resolves an entity's declared `row_scope` into row
+// predicates, applying the two exemptions that make row scoping usable rather
+// than merely strict.
+//
+//   - A caller holding `{module}.{plural}.read_all` reads across rows by design
+//     (owner, cross-branch auditor). For them an unresolvable attribute is the
+//     normal case, not an error.
+//   - A caller authorized by a public grant that declares its own `scope` is
+//     skipped: that grant already constrains the rows (applyPublicScope does
+//     it), and a session-sourced scope could never resolve for such a caller —
+//     resolving it here would deny every read on a public surface instead of
+//     filtering it.
+//
+// This is the shared core behind BOTH the list path (via applyRowScope, which
+// merges into the filter map) and the id-addressed paths (get/update/delete,
+// which pass the predicates into the store). Splitting them earlier is the
+// mistake this repo keeps re-learning: two copies of the same resolution drift,
+// and the copy that drifts is the one that stops enforcing (10.46).
+func (f *HandlerFactory) entityRowScopePredicates(r *http.Request, es *spec.EntitySpec, module, entity string) ([]db.RowPredicate, error) {
+	if es == nil || len(es.RowScope) == 0 {
+		return nil, nil
+	}
+	if identity := IdentityFromContext(r.Context()); identity != nil &&
+		identity.HasPermission(ReadAllPermission(module, entity, es)) {
+		return nil, nil
+	}
+	if len(publicScopeFromContext(r.Context())) > 0 &&
+		(IdentityFromContext(r.Context()) == nil || isPublicGrantAuth(r.Context())) {
+		return nil, nil
+	}
+	return f.filterSpecsToPredicates(r, es, es.RowScope, "row scope")
+}
+
+// filterSpecsToPredicates resolves a list of FilterSpec into row predicates.
+//
+// `origin` names the declaration for the error message ("row scope" for an
+// entity, "grant row scope" for a role grant) so an operator can tell WHICH
+// declaration refused the request.
+func (f *HandlerFactory) filterSpecsToPredicates(r *http.Request, es *spec.EntitySpec, specs []spec.FilterSpec, origin string) ([]db.RowPredicate, error) {
+	identity := IdentityFromContext(r.Context())
+	var out []db.RowPredicate
+
+	for i := range specs {
+		sc := &specs[i]
 		if sc.Field == "" {
 			continue
 		}
@@ -114,13 +152,30 @@ func (f *HandlerFactory) applyRowScope(r *http.Request, es *spec.EntitySpec, mod
 		}
 
 		switch sc.From {
+		case "":
+			// Literal value: the manifest itself states the predicate, so the
+			// filter is a server-side constant no client can widen or drop
+			// (kafe 10.67 / GAP-08). An empty literal is refused rather than
+			// skipped — a scope entry that silently filters nothing looks like
+			// protection while providing none.
+			if sc.Value == "" {
+				return nil, fmt.Errorf(
+					"%s on %s: entry declares neither a value source (from: session|route) nor a literal value — refusing to read unscoped",
+					origin, sc.Field)
+			}
+			value, err := scopeLiteralValue(op, sc.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%s on %s: %w", origin, sc.Field, err)
+			}
+			out = append(out, db.RowPredicate{Field: sc.Field, Op: op, Value: value})
+
 		case "session":
 			// Attribute name: explicit `attr`, else the entity's declared scope
 			// field (S5) — so `row_scope: [{field: branch_id, op: eq, from:
 			// session}]` on an entity that declares `scope: {dimension: branch,
 			// field: branch_id}` needs no third name for the same value.
 			attr := sc.Attr
-			if attr == "" && es.Scope != nil {
+			if attr == "" && es != nil && es.Scope != nil {
 				attr = es.Scope.Field
 			}
 			value := sessionAttr(identity, attr)
@@ -129,10 +184,10 @@ func (f *HandlerFactory) applyRowScope(r *http.Request, es *spec.EntitySpec, mod
 			}
 			if value == "" {
 				return nil, fmt.Errorf(
-					"row scope on %s: caller has no %q session attribute — refusing to list unscoped (issue it in the token's `attrs` claim, or declare `assignments` on the entity that maps the principal to this dimension)",
-					sc.Field, scopeAttrLabel(attr))
+					"%s on %s: caller has no %q session attribute — refusing to proceed unscoped (issue it in the token's `attrs` claim, or declare `assignments` on the entity that maps the principal to this dimension)",
+					origin, sc.Field, scopeAttrLabel(attr))
 			}
-			filters[sc.Field] = db.FilterOp{Op: op, Value: value}
+			out = append(out, db.RowPredicate{Field: sc.Field, Op: op, Value: value})
 
 		case "route":
 			param := sc.Param
@@ -142,13 +197,110 @@ func (f *HandlerFactory) applyRowScope(r *http.Request, es *spec.EntitySpec, mod
 			value := r.URL.Query().Get(param)
 			if value == "" {
 				return nil, fmt.Errorf(
-					"row scope on %s: missing %q request parameter",
-					sc.Field, param)
+					"%s on %s: missing %q request parameter",
+					origin, sc.Field, param)
 			}
-			filters[sc.Field] = db.FilterOp{Op: op, Value: value}
+			out = append(out, db.RowPredicate{Field: sc.Field, Op: op, Value: value})
 		}
 	}
-	return filters, nil
+	return out, nil
+}
+
+// grantRowPredicates resolves the row scope a ROLE GRANT attaches to one action
+// into row predicates (kafe 10.67, GAP-08).
+//
+// This is the half that did not exist: `row_scope` on the entity filters by WHO
+// (session/route attributes) and is per-ENTITY, so it cannot say "this role sees
+// only paid orders" without blinding the cashier to their own drafts. A grant is
+// per (role, action), which is the granularity the rule needs.
+//
+// `action` is the CRUD action name; the permission it maps to is the same
+// `{module}.{plural}.{action}` the materializer produces (and §8.6 makes
+// normative), so a grant and its enforcement can never disagree on the name.
+func (f *HandlerFactory) grantRowPredicates(r *http.Request, es *spec.EntitySpec, module, entity, action string) ([]db.RowPredicate, error) {
+	identity := IdentityFromContext(r.Context())
+	if identity == nil || len(identity.Roles) == 0 {
+		return nil, nil
+	}
+	if f.grantScopeLookup == nil {
+		return nil, nil
+	}
+	perm := entityActionPermission(module, entity, es, action)
+	scope, err := f.grantScopeLookup(r.Context(), identity.WorkspaceID, identity.App, identity.Roles, perm)
+	if err != nil {
+		// A declared row restriction that cannot be applied is a denial, never a
+		// silently unscoped read (see auth.PermissionResolver.GrantScope).
+		return nil, err
+	}
+	if len(scope) == 0 {
+		return nil, nil
+	}
+	return f.filterSpecsToPredicates(r, es, scope, "grant row scope")
+}
+
+// rowPredicatesFor is the single entry point for "which rows may this request
+// touch?" — entity `row_scope` AND the caller's grant row scope, combined.
+//
+// Both are kept as predicates rather than being merged into the filter map so
+// that two restrictions on the SAME field are ANDed in SQL instead of one
+// silently replacing the other. That is the difference between "narrower than
+// declared" (safe, visible) and "wider than declared" (a leak).
+func (f *HandlerFactory) rowPredicatesFor(r *http.Request, es *spec.EntitySpec, module, entity, action string) ([]db.RowPredicate, error) {
+	entityPreds, err := f.entityRowScopePredicates(r, es, module, entity)
+	if err != nil {
+		return nil, err
+	}
+	grantPreds, err := f.grantRowPredicates(r, es, module, entity, action)
+	if err != nil {
+		return nil, err
+	}
+	return append(entityPreds, grantPreds...), nil
+}
+
+// entityActionPermission builds the canonical `{module}.{plural}.{action}`
+// permission (01-core-basic.md §8.6). Every layer that needs to name a
+// permission goes through here or through spec.QualifyPermission, so the name
+// used to enforce is the name the materializer produced.
+func entityActionPermission(module, entity string, es *spec.EntitySpec, action string) string {
+	plural := entity + "s"
+	if es != nil && es.Plural != "" {
+		plural = es.Plural
+	}
+	return module + "." + plural + "." + action
+}
+
+// scopeLiteralValue converts a manifest-declared literal into the value the
+// storage layer expects.
+//
+// A literal is written as a single string in YAML, but the operator decides the
+// shape: `in`/`nin` need a LIST and `between` needs exactly two bounds. Both are
+// written comma-separated (`value: "paid,in_kitchen"`) because a row scope is
+// declared in one line and a list of one is still a common case. Other operators
+// take the string as-is — the storage layer coerces per field type (numbers,
+// booleans, dates), so `value: "true"` works on a boolean column.
+func scopeLiteralValue(op, raw string) (any, error) {
+	switch op {
+	case "in", "nin":
+		parts := strings.Split(raw, ",")
+		out := make([]any, 0, len(parts))
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		if len(out) == 0 {
+			return nil, fmt.Errorf("literal %q yields an empty value list", raw)
+		}
+		return out, nil
+	case "between":
+		parts := strings.Split(raw, ",")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("literal %q must contain exactly two comma-separated bounds", raw)
+		}
+		return []any{strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])}, nil
+	default:
+		return raw, nil
+	}
 }
 
 // scopeAttrTTL bounds how long an assignment-resolved attribute is reused. Short

@@ -277,7 +277,7 @@ Atribut wajib ditandai **\[wajib\]**.
 | `events`          | array  | —      | reserved events        | Event custom di luar `before_*`/`on_*` reserved. (§7).                                                                            |
 | `indexes`         | array  | —      | `[]`                   | Indeks tambahan: `[{ fields: [...], unique: true/false }]`.                                                                       |
 | `scope`           | object | —      | —                      | `{ dimension, field, required }` — Entity ini dipartisi per dimensi (§1.7).                                                       |
-| `row_scope`       | array  | —      | `[]`                   | Filter yang **ditegakkan server** pada setiap baca: `[{ field, op, from: session\|route, attr\|param }]` (§1.7).                  |
+| `row_scope`       | array  | —      | `[]`                   | Filter yang **ditegakkan server** pada setiap baca: `[{ field, op, value` \| `from: session\|route, attr\|param }]` (§1.7).       |
 | `assignments`     | array  | —      | `[]`                   | `[{ dimension, field, principal_field }]` — Entity ini memetakan principal ke nilai dimensi (§1.7).                               |
 
 ### 1.6 `doc_status` vs `state_machine` — Dua Lapis State
@@ -294,6 +294,17 @@ Keduanya berjalan **bersamaan**: Entity bisa punya `doc_status: submitted`
 Transition custom `via: complete` bisa di-guard dengan `conditions` yang
 memeriksa `doc_status` — misalnya, hanya izinkan transisi bisnis kalau
 dokumen sudah `submitted`.
+
+**Record lahir di `initial` (normatif).** `create` hanya boleh menghasilkan
+record pada state `state_machine.initial`; mengirim state lain di payload
+`create` **ditolak** `VALIDATION_ERROR` (422). Alasannya bukan kerapian
+semata: state yang dicapai lewat transisi membawa **gerbang permission** dan
+**`emit:`** milik transisi itu, dan keduanya hanya berjalan pada jalur
+perubahan state (`update`). Record yang lahir di tengah siklus karena itu
+melewati keduanya **tanpa gejala apa pun** — ia tampak sah, tetapi integrasi
+yang seharusnya dipicu transisi (jurnal, proyeksi, notifikasi) tidak pernah
+berjalan. Penulis **sistem** (seed, restore, migrasi) dikecualikan: ia
+mereproduksi baris tersimpan apa adanya, bukan membuat record baru.
 
 #### `via` adalah Action
 
@@ -435,8 +446,9 @@ dua rumah.
   Grant untuk action yang tidak ada dibuang tanpa suara — grant editor
   menampilkan footprint nyata per entity, jadi pilih nama dari sana.
 
-Untuk Workflow (approval multi-level yang meng-intercept transition
-state_machine), lihat [`02-core-extended.md`](02-core-extended.md) §2.
+Untuk approval multi-level (gate pada transisi `state_machine`), lihat
+[`02-core-extended.md`](02-core-extended.md) §2 — field `approval` pada transisi,
+bukan kind terpisah.
 
 ### 1.7 `scope` / `row_scope` / `assignments` — Isolasi Baris (Normatif)
 
@@ -475,14 +487,27 @@ dipakai untuk menurunkan penyaringan otomatis di renderer/permukaan.
 pada Table/Kanban — yang di-merge di browser dan bisa dihilangkan klien mana
 pun — `row_scope` dibaca server dan **tidak bisa dilebarkan lewat query string**:
 
-| `from`    | Sumber nilai                                                                      | Kalau tak terselesaikan |
-| --------- | --------------------------------------------------------------------------------- | ----------------------- |
-| `session` | atribut identitas: `attr` eksplisit, atau field dari `scope`, atau `principal_id` | **403** (fail closed)   |
-| `route`   | parameter query yang dideklarasikan (`param`, default nama field)                 | **403** (fail closed)   |
+| Sumber nilai | Cara menulis                                                         | Kalau tak terselesaikan |
+| ------------ | -------------------------------------------------------------------- | ----------------------- |
+| literal      | `value: "paid,in_kitchen"` (`from` kosong)                           | ditolak validasi        |
+| `session`    | `from: session` — atribut identitas: `attr`, atau field dari `scope` | **403** (fail closed)   |
+| `route`      | `from: route` — parameter query (`param`, default nama field)        | **403** (fail closed)   |
 
-Nilai `from: session` **menimpa** filter klien pada field yang sama. Aturan
-mutlaknya: nilai yang tidak bisa diselesaikan **tidak boleh** berubah menjadi
-"tanpa filter" — permintaan gagal, bukan melebar.
+Nilai `from: session` **menimpa** filter klien pada field yang sama, dan predikat
+literal **selalu diterapkan** — klien tidak bisa menambah, mengganti, atau
+menghilangkannya. Aturan mutlaknya: nilai yang tidak bisa diselesaikan **tidak
+boleh** berubah menjadi "tanpa filter" — permintaan gagal, bukan melebar.
+
+**`value` (literal) vs `default`.** Keduanya string dan keduanya terlihat seperti
+"nilai tetap", tetapi hanya satu yang merupakan batas:
+
+- `default` hanya **pre-seed kontrol filter yang bisa diubah pengguna** di UI;
+  klien boleh mengubah atau mengosongkannya, jadi ia bukan pembatas apa pun.
+- `value` adalah **konstanta manifest** yang dipaksakan server. Untuk `op: in` /
+  `nin` nilainya daftar berkoma (`"paid,in_kitchen,ready"`); untuk `op: between`
+  tepat dua batas berkoma. Bentuk yang tidak memenuhi syarat operatornya
+  **ditolak** (fail closed), bukan dibiarkan menjadi predikat yang tidak
+  menyaring.
 
 **`assignments` — dari mana nilai atribut berasal.** Token boleh membawa atribut
 langsung di klaim `attrs`. Kalau tidak, server menyelesaikannya dari entity yang
@@ -491,6 +516,73 @@ username pemanggil menentukan nilainya. Inilah sebabnya `row_scope: {from:
 session}` cukup ditulis **tanpa** `attr` pada entity yang punya `scope` — nama
 atributnya = `scope.field`. Hasilnya di-memo sesaat (atribut yang berubah saat
 sesi berjalan berlaku tanpa login ulang).
+
+**Batas per PERAN: `row_scope` pada grant.** `row_scope` di atas bersifat
+**per-entity**: ia menjawab "batas siapa", berlaku untuk setiap pemanggil, dan
+karena itu tidak bisa menyatakan aturan yang berlaku untuk **satu peran saja**.
+Menaruh filter `status` di sana — untuk aturan bisnis "hanya pesanan lunas yang
+masuk dapur" — justru akan membutakan **kasir** terhadap draft yang sedang ia
+susun, dan mengunci **dapur** keluar dari pekerjaannya sendiri.
+
+Karena itu sebuah action di dalam grant boleh membawa `row_scope`-nya sendiri.
+Ia action-scoped (bukan page-scoped), karena sebuah halaman hampir selalu
+mencakup beberapa aksi dengan kebutuhan berbeda: `list`/`view`/`update`
+mencocokkan baris, sedangkan `create` tidak.
+
+```yaml
+# roles.yaml — peran dapur hanya melihat pesanan yang sudah lunas, di cabangnya
+- page: "order-page"
+  actions:
+    - name: list
+      row_scope:
+        - { field: status, op: in, value: "paid,in_kitchen,ready,served" }
+        - { field: branch_id, op: eq, from: session }
+```
+
+Aturannya:
+
+- **Digabung dengan AND**, tidak pernah menggantikan. Predikat grant di-AND
+  dengan `row_scope` entity dan dengan filter klien. Dua batasan pada field yang
+  sama karena itu **menyempitkan**; tidak ada yang saling menghapus.
+- **Sebuah batasan tidak pernah bisa dilebarkan atau dihapus klien.** Nilainya
+  dari manifest atau dari sesi; `from: session` gagal-closed (403) bila atributnya
+  tak bisa diselesaikan — sama seperti `row_scope` entity.
+- **Baris di luar batas dibaca sebagai TIDAK ADA (404), bukan 403.** Batasnya
+  tidak boleh menjadi oracle keberadaan: `list` menyembunyikan baris itu, jadi
+  `find`/`update`/`delete` menjawab sama. 403 disimpan untuk batas yang **tidak
+  bisa diselesaikan** (salah konfigurasi) — itu keadaan yang harus berisik.
+- **Grant yang tidak bisa diresolusi dilewati per-grant, dan dilaporkan.** Nama
+  page/action yang salah ketik tidak boleh mematikan seluruh role (itu pernah
+  terjadi — semua request jadi 404 tanpa error), dan tidak boleh pula menghapus
+  batasan baris tanpa jejak: resolver menuliskan setiap grant yang gagal ke log.
+- **Bentuk `grants` diperiksa pada dua titik, dengan SATU aturan.** `grants` adalah
+  JSON bebas pada entity `role`, dan pembacaan bertipe bersifat **lossy**:
+  `json.Unmarshal` membuang kunci yang tidak dikenalnya. Jadi `row_scopes:`
+  (alih-alih `row_scope:`) tetap menghasilkan permission-nya sambil
+  **menghilangkan batasnya** — fail-open, dan tak terlihat. Karena itu bentuk
+  mentahnya dibaca `auth.ValidateGrantListShape`, dipakai oleh **gerbang deploy**
+  (`formspec check` dan `formspec validate`) **dan** loader role saat runtime.
+  Aturannya: `page` wajib; tiap grup punya `actions` atau `tabs`; tiap action
+  punya `name`; dan untuk `row_scope` — field wajib, `op` di closed set, dan
+  **tepat satu** sumber nilai, kecuali operator tanpa nilai (`null`/`notnull`/
+  `root`). Field yang ada di _entity_ target serta resolusi page/action diperiksa
+  Materializer, memakai validator `spec.ValidateRowScopeFilters` yang sama.
+
+- **Batas baris yang tidak bisa diterapkan adalah PENOLAKAN, bukan catatan log.**
+  Dua kelas cacat berperilaku berlawanan dan tidak boleh disamakan: grant yang
+  page/action-nya tidak resolve hanya menghilangkan permission (sudah
+  fail-closed dengan sendirinya), sedangkan grant yang batasnya tidak terbaca
+  atau tidak bisa diterapkan **mempertahankan permission-nya dan menghilangkan
+  batasnya**. `resource.find`/`resource.fetch` dari script memakai batas yang
+  sama dengan jalur HTTP (permission `view`), sehingga script tidak bisa melihat
+  baris yang HTTP sembunyikan dari pemanggil yang sama. Pemanggil **sistem**
+  (subscription, worker, job terjadwal) tidak disaring — itu diputuskan lapisan
+  dispatch, tidak pernah disimpulkan dari "tidak ada identitas", karena pemanggil
+  anonim juga tanpa identitas.
+
+  Sebelum aturan ini, satu-satunya penegak aturan #1 kafe ("hanya pesanan LUNAS
+  yang masuk dapur") adalah **kolom Kanban**: `list`/`find` ke API tetap memuat
+  pesanan `draft`, lengkap dengan `guest_token` milik tamu.
 
 **Gerbang validasi (anti "hijau tapi tak pernah jalan").** `formspec validate`
 menolak `row_scope` `from: session` tanpa `attr` yang atributnya tidak punya
@@ -939,7 +1031,7 @@ meresolusinya sendiri, sehingga transisi ber-approval **tidak memancarkan apa
 pun**. Terukur pada kafe `void-order` (`emit: on_cancel`): order menjadi
 `cancelled` sementara mejanya tetap `occupied` — jembatan meja-lah yang
 mendengarkan `on_cancel` — sehingga tamu berikutnya tidak bisa check-in.
-Menjalankan transisi yang sama **tanpa** workflow memancarkan event-nya, dan
+Menjalankan transisi yang sama **tanpa** gate approval memancarkan event-nya, dan
 itulah yang membuat asimetri ini tidak terlihat.
 
 Konsekuensinya untuk penulis spec: jangan mengandalkan approval sebagai alasan
@@ -964,6 +1056,38 @@ worker: poll pending → cek idempotency → **sync call** ke target action →
 delivered, atau backoff retry → dead-letter. `retry.initial_delay_ms` menyetel
 jeda sebelum percobaan retry **pertama**; retry berikutnya mengikuti strategi
 `backoff` yang dideklarasikan mulai dari jeda itu.
+
+**Cek idempotency memakai `deliver[].idempotency_key`.** Cara memanggil target
+yang dijanjikan §12.2 memuat `deliver: [{channel: reliable_event, target: {...},
+idempotency_key: "balance.{id}"}]` — jadi kunci itulah yang diperiksa worker
+sebelum panggilan sinkron:
+
+- Template `{dotted.path}` di-resolve dari **payload event** (bukan dari record:
+  yang diterima target adalah proyeksi yang dijanjikan `payload.fields`).
+- Key yang sudah **completed** → consequence **dilewati** (retry = replay, dan
+  bagi sebuah konsekuensi replay berarti "tidak melakukan apa-apa"). Tanpa ini
+  retry adalah tulis-ganda — terukur pada kafe: me-requeue event `journal-posted`
+  yang sama mengakumulasi pergerakan saldo dua kali (`143750 → 287500`).
+- Key **pending/failed** → dijalankan: percobaan yang gagal harus bisa di-retry
+  (delivery at-least-once).
+- Template yang **tidak bisa di-resolve** (payload tak punya path itu) →
+  **gagal**, bukan jadi literal: literal `balance.{id}` membuat semua event yang
+  kekurangan `id` memakai kunci yang SAMA, sehingga delivery kedua dilewati
+  sebagai "sudah selesai" — konsekuensi yang hilang, lebih buruk daripada
+  duplikat.
+- Entry **tanpa** `idempotency_key` tetap seperti sebelumnya: idempotensi alami
+  adalah kontrak target (`idempotent: true` diwajibkan untuk panggilan lintas
+  boundary, §5 / 02-core-extended §5).
+
+Kuncinya di-namespace `deliver:{resource}.{action}` di tabel yang sama dengan
+kunci idempotency HTTP, sehingga satu delivery tidak bisa bertabrakan dengan
+idempotency sebuah action. **Batas jujurnya:** kunci diklaim (`pending`)
+**sebelum** target dipanggil dan ditandai `completed` sesudahnya, jadi crash
+tepat di antara tulisan target dan penandaan menyisakan key `pending` → retry
+berikutnya mengklaim ulang dan menjalankannya sekali lagi. Jendela itu hanya
+bisa ditutup oleh idempotensi alami target (mis. kunci unik
+`(source_id, account_id, period)`), bukan oleh store ini — yang ditutup store
+ini adalah kasus terukur: retry **setelah** sukses.
 
 **`kind: Subscription`** — module lain bereaksi terhadap event resource lain
 tanpa mengubah publisher (lihat [`02-core-extended.md`](02-core-extended.md)

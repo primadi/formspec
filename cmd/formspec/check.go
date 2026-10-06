@@ -218,6 +218,27 @@ func runCheck(args []string) {
 	// (form/table/component/widget) that no manifest declares (10.12).
 	checkReferences(result, idx, res.Manifests)
 
+	// Check 3.8: grant JSON shape checks on Seed manifests — a `row_scope` typo
+	// or a wrong nested key should fail at deploy time, not at runtime as a role
+	// that quietly loses its row restriction.
+	for source, msg := range validateSeedRoleGrants(res.Manifests) {
+		result.add(source, "error", "%s", msg)
+	}
+
+	// Check 3.9: cross-manifest scope-source validation (S5, kafe 1.8). `check`
+	// used to skip this layer entirely while `validate` ran it, so the two
+	// commands disagreed about the same tree — measured on a tree whose only
+	// `assignments` mapping had been removed: `validate` reported 10 problems
+	// (every entity whose `from: session` scope lost its source) while `check`
+	// reported 0 error / 0 warning. Both commands are gates, so both run it, and
+	// the GRANT half of the same rule runs with it.
+	for source, msg := range validateScopeSources(res.Manifests) {
+		result.add(source, "error", "%s", msg)
+	}
+	for source, msg := range validateGrantScopeSources(res.Manifests) {
+		result.add(source, "error", "%s", msg)
+	}
+
 	// Check 2.9.4: kind: Datastore driver×serves compatibility +
 	// module `spec.datastore` binding targets (platform/06-datastore.md §1.1/§2).
 	//

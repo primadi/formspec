@@ -254,10 +254,16 @@ type AppContext struct {
 	RootURL     string
 	AppRenderer string
 	Access      string
-	// PublicEntities is the raw `public_entities` allowlist of an
-	// `access: public` App. It is the ONLY statement of what an anonymous
-	// caller may see, so BuildBundle uses it to build its permission checker
-	// rather than treating every mounted entity as public.
+	// PublicEntities is the DERIVED anonymous allowlist of an `access: public`
+	// App (plan docs_internal/plan/implicit-public-grants.md). It is no longer
+	// declared in the manifest: it is computed from the App's surface (menu ∪
+	// registered_views) by Registry.DerivePublicGrants, so a table block implies
+	// `list` and a create form implies `create`.
+	//
+	// nil means "derive from the caller's checker" (a private App, or a
+	// hand-built AppContext in a test); a non-nil pointer — including a pointer
+	// to an empty slice — replaces it. `[]` therefore means "this App exposes
+	// nothing anonymously", not "fall back to the legacy module-wide grant".
 	PublicEntities *[]spec.PublicEntityDecl
 	StackFamily    string
 	PersistBackend string
@@ -669,56 +675,16 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 	// EXPLICITLY mounts (appCtx.owns) — framework/implicit modules (formspec.core,
 	// core) are cross-cutting and stay reachable as before.
 	surfaceGate := appCtx.Modules != nil && !appCtx.Unfiltered
-	reachableViewRoutes := map[string]bool{}
-	reachableEntities := map[string]bool{} // canonical "module/name"
-	if surfaceGate {
-		var addMenu func(items []spec.MenuItem)
-		addMenu = func(items []spec.MenuItem) {
-			for _, it := range items {
-				if len(it.Children) > 0 {
-					addMenu(it.Children)
-					continue
-				}
-				if it.Route == "" {
-					continue
-				}
-				reachableViewRoutes[it.Route] = true
-				// A "/<module>/<plural>" route targets a derived entity page —
-				// register the entity it displays.
-				if parts := strings.Split(strings.Trim(it.Route, "/"), "/"); len(parts) == 2 {
-					if ref, ok := ix.moduleOfPlural(parts[0], parts[1]); ok {
-						reachableEntities[ref] = true
-					}
-				}
-			}
-		}
-		addMenu(menu)
-		for _, rv := range appCtx.RegisteredViews {
-			if rv.View != "" {
-				mod, name, ok := strings.Cut(rv.View, "/")
-				if !ok {
-					continue
-				}
-				if route, err := r.resolveViewRouteLocked(mod, name); err == nil {
-					reachableViewRoutes[route] = true
-				}
-				continue
-			}
-			if canonical, ok := spec.NormalizeEntityRef(rv.Entity); ok {
-				reachableEntities[canonical] = true
-			}
-		}
-	}
+	// The reachable surface (menu ∪ registered_views) is computed ONCE, by the
+	// same helper the anonymous grant derivation uses (internal/ui/surface.go),
+	// so the routes the App offers and the data grants it implies cannot drift.
+	surface := r.computeAppSurfaceLocked(ix, surfaceGate, appCtx.owns, menu, appCtx.RegisteredViews)
+	reachableViewRoutes := surface.routes
 	// gated reports whether module is subject to the App surface allowlist.
-	gated := func(module string) bool { return surfaceGate && appCtx.owns(module) }
-	// entityRoutable reports whether the entity's derived routes exist.
-	entityRoutable := func(module, name string) bool {
-		return !gated(module) || reachableEntities[module+"/"+name]
-	}
-	// viewRoutable reports whether a derived route for a non-entity kind exists.
-	viewRoutable := func(module, route string) bool {
-		return !gated(module) || reachableViewRoutes[route]
-	}
+	gated := surface.gated
+	// entityRoutable / viewRoutable report whether a derived route exists.
+	entityRoutable := surface.entityRoutable
+	viewRoutable := surface.viewRoutable
 
 	// Wizard reachability (plan docs_internal/plan/wizard-commit-patch-dan-
 	// peluncur.md, todo 5.25.7).
@@ -1141,11 +1107,6 @@ func newEntityIndex(entities EntityLister) *entityIndex {
 	}
 	return ix
 }
-
-// isModule reports whether the module owns at least one entity. Used to decide
-// whether a "/M/<segment>" route is a derived entity page (M is a module, so
-// the segment MUST name one of its entities) or just an opaque authored route.
-func (ix *entityIndex) isModule(module string) bool { return ix.modules[module] }
 
 // pluralOf returns the plural (route segment) of a module-local entity.
 func (ix *entityIndex) pluralOf(module, name string) (string, bool) {

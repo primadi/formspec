@@ -31,7 +31,7 @@ Context for AI coding agents working on the FormSpec backend (Go, Starlark, YAML
 - `kind: Config` — module configuration (read via ctx.config)
 - `kind: Subscription` — cross-module event reaction
 - `kind: Entity` `persist.raw_ddl` — DDL di luar bahasa spec (trigger, function, index ekspresi); migrasi struktural sendiri otomatis + berklasifikasi
-- `kind: Workflow` — approval-based state machine transitions
+- `kind: Entity` `state_machine.transitions[].approval` — approval gate declared ON the transition it holds
 - `kind: Api` — external API surface override
 - `kind: Webhook` — verified inbound endpoints
 - `kind: Integrator` — cross-module bridge

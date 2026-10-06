@@ -1,7 +1,8 @@
 // impl/inventory/create_out_movement.go
 //
 // Implementasi native untuk Subscription job "create-out-movement".
-// Dipicu oleh kind: Subscription → on: billing.order, event: paid → deliver: queue, job: create-out-movement.
+// Handler Subscription: dipicu oleh `order-to-movement`
+// (`events: [billing.order.paid]` → `handler: SalesInventoryIntegrator.CreateOutMovementHandler`).
 // File ini TIDAK termasuk dalam deployment artifact.
 
 package inventory

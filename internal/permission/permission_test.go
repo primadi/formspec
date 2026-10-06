@@ -444,10 +444,10 @@ func TestValidatePublicAction(t *testing.T) {
 			RateLimit: rl,
 		}, spec.KindEntity)
 		if len(errs) == 0 {
-			t.Fatal("`public` on an entity action must be refused — the App's public_entities allowlist owns that decision")
+			t.Fatal("`public` on an entity action must be refused — a public view owns that decision")
 		}
-		if !strings.Contains(errs[0].Error(), "public_entities") {
-			t.Errorf("the error must point at public_entities, got: %v", errs[0])
+		if !strings.Contains(errs[0].Error(), "Service") {
+			t.Errorf("the error must say the flag is Service-only, got: %v", errs[0])
 		}
 	})
 

@@ -222,7 +222,7 @@ func TestEntityStore_SoftDelete(t *testing.T) {
 	}
 
 	// Soft delete
-	if err := store.SoftDelete(ctx, "t1", id); err != nil {
+	if err := store.SoftDelete(ctx, DeleteParams{WorkspaceID: "t1", ID: id, SystemCaller: true}); err != nil {
 		t.Fatalf("SoftDelete failed: %v", err)
 	}
 

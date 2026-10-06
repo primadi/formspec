@@ -18,8 +18,8 @@ spec:
   # dilebarkan lewat query string), dan pemegang
   # `cafe-order.orders.read_all` (pemilik/auditor) sengaja dilewati.
   # Permukaan publik (halaman status tamu) TIDAK terpengaruh: permintaan
-  # anonim di route itu memakai scope milik grant `public_entities` — lihat
-  # `api.applyRowScope`.
+  # anonim di route itu memakai scope dari grant turunan (dari `param` route
+  # pada Table block halaman status) — lihat `api.applyRowScope`.
   row_scope:
     - { field: branch_id, op: eq, from: session }
   fields:
@@ -53,7 +53,21 @@ spec:
       title: "Waktu Pesan"
     - name: branch_id
       type: relation
-      relation: { type: belongs_to, resource: cafe-master.branch }
+      relation:
+        type: belongs_to
+        resource: cafe-master.branch
+        # Denormalisasi finansial (02-core-extended.md §1.1, todo 7.10):
+        # konfigurasi pajak & service charge cabang DISALIN ke pesanan saat
+        # dibuat. Ini bukan sekadar cache — `computed` hanya boleh membaca
+        # field record itu sendiri (`evaluateComputed` berjalan SEBELUM relasi
+        # di-resolve, jadi `branch.tax_percent` tidak tersedia di formula),
+        # sehingga tanpa salinan ini rantai nilai di bawah mustahil dihitung.
+        # Efek sampingnya yang memang diinginkan: pesanan lama tidak berubah
+        # nilai pajaknya bila tarif cabang diubah kemudian.
+        snapshot:
+          - { from: tax_percent, as: tax_percent }
+          - { from: service_charge_percent, as: service_charge_percent }
+          - { from: apply_service_charge, as: apply_service_charge }
       required: true
       title: "Cabang"
     - name: channel
@@ -69,7 +83,7 @@ spec:
       title: "Sesi Meja"
       description: "Wajib bila channel = qr_table"
     # Kunci milik tamu (#45): disalin dari sesi meja saat pesanan dibuat anonim,
-    # lalu dipakai `public_entities[].scope` pada App publik untuk membatasi
+    # lalu dipakai scope grant turunan pada App publik untuk membatasi
     # `list` anonim ke baris ini saja. Tanpa field ini, "anonim boleh list"
     # berarti seluruh pesanan kafe — dan itulah kenapa `list` publik dulu tidak
     # diberikan sama sekali.
@@ -109,10 +123,28 @@ spec:
     # `moneyinput` (numpad, mata uang ikut terbawa).
     # `subtotal` sudah diturunkan server-side dari baris pesanan (S7 menetapkan
     # aritmetika money, jadi `sum` atas money sah). Rantai diskon/pajak menuju
-    # `total_amount` BELUM diturunkan: ia butuh `discount_amount`, `tax_amount`
-    # (dari `branch.tax_percent`), `service_charge_amount`, dan `points_value` —
-    # semuanya opsional, sehingga formulanya harus menangani operand kosong
-    # lebih dulu. Dicatat, bukan dikira-kira.
+    # `total_amount` KINI diturunkan (rantai di bawah): subtotal (dari baris,
+    # sudah turunan) + service charge + pajak − diskon opsional. Sebelum ini ia
+    # tidak punya penulis sama sekali, sehingga jurnal GL, laporan penjualan,
+    # struk, dan kolom Total kosong untuk setiap pesanan (kafe 10.65).
+    # Tarif pajak & service charge cabang, DISALIN saat pesanan dibuat
+    # (`snapshot:` pada `branch_id` di atas). Ia ada sebagai field karena
+    # `computed` tidak bisa membaca entity lain; lihat komentar rantai nilai di
+    # bawah.
+    - name: tax_percent
+      type: percent
+      scale: 2
+      title: "Pajak Cabang (%)"
+      description: "Tarif PB1 cabang saat pesanan dibuat."
+    - name: service_charge_percent
+      type: percent
+      scale: 2
+      title: "Service Charge Cabang (%)"
+      description: "Tarif service charge cabang saat pesanan dibuat."
+    - name: apply_service_charge
+      type: boolean
+      title: "Pakai Service Charge"
+      description: "Apakah cabang ini menerapkan service charge."
     - name: subtotal
       type: money
       title: "Subtotal"
@@ -142,19 +174,46 @@ spec:
     - name: service_charge_amount
       type: money
       title: "Service Charge"
-      # computed: branch.service_charge_percent × subtotal.
       description: "Service charge cabang ini, dihitung dari subtotal."
+      # computed: branch.service_charge_percent × subtotal — tapi hanya bila
+      # cabang menerapkan service charge; selain itu nol bermata uang sama.
+      #
+      # `if … else money_zero(subtotal)`, bukan `… else 0`: aritmetika money
+      # menolak campuran money+number (05-field-types.md §2.1, "tidak ada
+      # koersi diam-diam"), jadi cabang "tidak ada" harus tetap bertipe money.
+      # `money_zero(x)` mengambil mata uang dari operand, bukan hardcode IDR.
+      computed:
+        formula: 'resource.subtotal * resource.service_charge_percent / 100 if resource.apply_service_charge else money_zero(resource.subtotal)'
     - name: tax_amount
       type: money
       title: "Pajak"
-      # computed: branch.tax_percent × (subtotal + service charge).
       description: "Pajak PB1 cabang ini."
+      # computed: branch.tax_percent × (subtotal + service charge) — basis
+      # mengikuti komentar field ini sejak awal; lihat changelog 2026-10-03-003
+      # untuk perubahan angka yang ditimbulkannya.
+      computed:
+        formula: '(resource.subtotal + resource.service_charge_amount) * resource.tax_percent / 100'
     - name: total_amount
       type: money
       # Kolom turunan money numerik (membaca `.amount`),
       # jadi sortir/rentang atas total sah diandalkan.
+      #
+      # ⚠️ `computed` dievaluasi saat BACA, bukan dipersist — jadi kolom
+      # turunan `_total_amount` tetap NULL dan `?sort=total_amount`
+      # mengurutkan NULL. Sisa yang tercatat (kafe 10.68 ⏸️).
       index: true
       title: "Total"
+      # Rantai nilai lengkap. Setiap operand opsional dibaca lewat `resource.`
+      # (FieldMap → `None` bila field tidak ada), sebab menyebut field yang
+      # absen sebagai identifier adalah error compile yang lalu DIAM-DIAM
+      # membuat field ini kosong — akar masalah 10.65.
+      #
+      # Diskon dijumlahkan lewat `sum([...])`: `sum` mengabaikan `None` dan
+      # tetap berada di jalur money selama ada satu elemen money (anchor
+      # `money_zero`), jadi pesanan tanpa diskon tidak jatuh ke penjumlahan
+      # angka.
+      computed:
+        formula: 'resource.subtotal + resource.service_charge_amount + resource.tax_amount - sum([money_zero(resource.subtotal), resource.discount_amount, resource.manual_discount_amount, resource.points_value])'
     - name: paid_amount
       type: money
       title: "Sudah Dibayar"
@@ -325,6 +384,31 @@ spec:
               widget: textarea
               required_when: "fields.status == 'paid'"
           render: { mode: modal }
+        # D5: void setelah bayar WAJIB lewat approval supervisor. Gate ini dulu
+        # manifest `kind: Workflow` terpisah; kini ia dideklarasikan DI transisi
+        # yang di-gate, sehingga transisi multi-origin ini tercover utuh by
+        # construction dan deklarasi tidak bisa menyimpang dari yang di-gate.
+        # Duty `supervisor-check` di-qualify jadi
+        # `workflow.cafe-order.order.void-order.supervisor-check`, dan grant di
+        # `modules/formspec.core/seeds/roles.yaml` yang memberikannya.
+        approval:
+          steps:
+            - name: supervisor-check
+              permission: supervisor-check
+              title: "Persetujuan Void Pesanan"
+              description: "Periksa nomor pesanan, total, dan alasan void sebelum menyetujui. Void dari dapur/ready/served berarti makanan sudah dibuat."
+              display_fields: [number, total_amount, void_reason]
+              approvers: 1
+              mode: any
+              # Reassign = duty (permission), bukan nama role: hak takeover
+              # pindah ke pemegang `manager-check` setelah 4 jam, dan siapa
+              # memegangnya ditentukan grant di `seeds/roles.yaml` — cabut grant
+              # itu, cabut hak takeover-nya, tanpa menyentuh manifest ini.
+              escalation:
+                after: "4h"
+                reassign: manager-check
+          # Ditolak supervisor -> kembali ke state asal; pesanan tetap berjalan.
+          on_reject: { to: paid }
   # ── Event — pemicu integrasi lintas-app (stok & jurnal) ──
   # Transisi memancarkan event lewat `emit:`
   # yang DINYATAKAN di state machine di atas. Nama event tetap berkonvensi

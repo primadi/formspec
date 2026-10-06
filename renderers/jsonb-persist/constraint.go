@@ -1,7 +1,9 @@
 package db
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -29,6 +31,16 @@ import (
 // Classification lives HERE, at the storage boundary, rather than in the HTTP
 // layer, so every writer gets the same error class — the API, a Starlark
 // handler, a seed, an operator script — instead of only the HTTP path.
+//
+// ─── Second class: enum CHECK (added 2026-10-02, kafe 10.61) ───
+//
+// A value outside a field's declared `enum_values` is also a CLIENT-VISIBLE
+// rejection, and it was answering 500 for the same reason (the raw text
+// `CHECK constraint failed: json_extract(data, '$.reason') IN (…)` reached the
+// client verbatim). `docs/spec/backend/05-field-types.md` §enum already
+// mandates `VALIDATION_ERROR` for it, so the platform was violating a written
+// contract, not merely being unhelpful. Classified here by the same argument:
+// whoever writes the row gets the same class.
 
 // ErrUniqueViolation is the sentinel for a uniqueness-constraint violation.
 // Callers match it with errors.Is; the concrete error also carries the
@@ -63,8 +75,9 @@ func (e *UniqueViolationError) Error() string {
 // Unwrap makes errors.Is(err, ErrUniqueViolation) work.
 func (e *UniqueViolationError) Unwrap() error { return ErrUniqueViolation }
 
-// classifyConstraintError returns a UniqueViolationError when err is a
-// uniqueness violation, and err unchanged otherwise (including nil).
+// classifyConstraintError returns a UniqueViolationError or an
+// EnumViolationError when err is one of those constraint violations, and err
+// unchanged otherwise (including nil).
 //
 // It is idempotent: an already-classified error carries a message that no
 // longer matches the driver patterns, so a second pass is a no-op.
@@ -72,8 +85,17 @@ func classifyConstraintError(err error) error {
 	if err == nil {
 		return nil
 	}
+	// Already classified — return as-is rather than nesting a second wrapper.
+	// The message no longer matches the driver patterns, so the guards below
+	// would be no-ops anyway; being explicit keeps the guarantee local.
+	if errors.Is(err, ErrUniqueViolation) || errors.Is(err, ErrInvalidEnumValue) {
+		return err
+	}
 	if detail, ok := uniqueViolationDetail(err.Error()); ok {
 		return &UniqueViolationError{Detail: detail, Err: err}
+	}
+	if ev, ok := enumViolationFrom(err.Error()); ok {
+		return ev
 	}
 	return err
 }
@@ -199,4 +221,118 @@ func normalizeConstraintDetail(detail string) string {
 // something a caller sent or can change.
 var frameworkScopeColumns = map[string]bool{
 	"tenant_id": true,
+}
+
+// ─── Enum CHECK violation ───
+//
+// The second client-visible class this file names: a value outside a field's
+// declared `enum_values`. `GenerateDDL` emits exactly one CHECK per enum field
+// (`CHECK (json_extract(data, '$.status') IN (…))` on SQLite,
+// `CHECK ((data->>'status') IN (…))` on PostgreSQL), and nothing else in the
+// generated schema emits a CHECK — so a CHECK rejection on these tables IS an
+// enum rejection; there is no other constraint to confuse it with.
+//
+// Measured 2026-10-02 (kafe 10.61): a bad enum answered **500 INTERNAL_ERROR**
+// carrying the raw driver text
+// (`insert row: constraint failed: CHECK constraint failed: json_extract(data,
+// '$.reason') IN (…) (275)`), while `docs/spec/backend/05-field-types.md` §enum
+// mandates `VALIDATION_ERROR` (422) — "nilai di luar himpunan →
+// `VALIDATION_ERROR`". The CHECK text also named the field, so the client could
+// have shown something actionable and instead showed "Internal server error".
+
+// ErrInvalidEnumValue is the sentinel for a value rejected by the generated
+// enum CHECK constraint. Callers match it with errors.Is.
+var ErrInvalidEnumValue = fmt.Errorf("value outside declared enum")
+
+// EnumViolationError reports which enum field was rejected and which values the
+// manifest allows, so a caller can show a message instead of a driver string.
+//
+// Field is empty when the driver text does not carry it — PostgreSQL reports
+// only the constraint NAME (`violates check constraint "…"`), not the
+// expression, so the rejection is still classified (422, not 500) but cannot
+// name the field. That is a limit of the driver, not of the classification.
+// Allowed is empty for the same reason.
+type EnumViolationError struct {
+	// Field is the logical field name, e.g. "reason".
+	Field string
+	// Allowed is the declared `enum_values` set, in manifest order.
+	Allowed []string
+	// Err is the original driver error, kept for logs.
+	Err error
+}
+
+func (e *EnumViolationError) Error() string {
+	if e.Field == "" {
+		return "value outside the declared enum"
+	}
+	if len(e.Allowed) == 0 {
+		return fmt.Sprintf("field %q has a value outside the declared enum", e.Field)
+	}
+	return fmt.Sprintf("field %q must be one of: %s", e.Field, strings.Join(e.Allowed, ", "))
+}
+
+// Unwrap makes errors.Is(err, ErrInvalidEnumValue) work.
+func (e *EnumViolationError) Unwrap() error { return ErrInvalidEnumValue }
+
+// enumViolationFrom recognizes an enum CHECK rejection and extracts the field
+// and allowed set when the driver text carries them.
+//
+//	SQLite   "CHECK constraint failed: json_extract(data, '$.status') IN ('a', 'b') (275)"
+//	Postgres `new row for relation "…" violates check constraint "…"` (no expression)
+func enumViolationFrom(msg string) (*EnumViolationError, bool) {
+	if i := strings.Index(msg, "CHECK constraint failed:"); i >= 0 {
+		expr := strings.TrimSpace(msg[i+len("CHECK constraint failed:"):])
+		// Drop the driver's extended result code, e.g. " (275)".
+		expr = enumExtendedCodeSuffix.ReplaceAllString(expr, "")
+		field, allowed := parseEnumCheckExpression(expr)
+		return &EnumViolationError{Field: field, Allowed: allowed}, true
+	}
+	if strings.Contains(msg, "violates check constraint") {
+		return &EnumViolationError{}, true
+	}
+	return nil, false
+}
+
+// enumExtendedCodeSuffix matches SQLite's trailing extended result code, e.g.
+// " (275)". Only a NUMERIC parenthesized suffix is stripped: the expression
+// itself contains parentheses ("IN ('a', 'b')"), so a plain LastIndex(" (")
+// would truncate the allowed values when no code is appended.
+var enumExtendedCodeSuffix = regexp.MustCompile(`\s*\(\d+\)\s*$`)
+
+// jsonExtractPath matches the SQLite payload expression's field path,
+// `json_extract(data, '$.status')` → "status".
+var jsonExtractPath = regexp.MustCompile(`\$\.([A-Za-z0-9_]+)`)
+
+// arrowPath matches the PostgreSQL payload expression's field name,
+// `(data->>'status')` → "status".
+var arrowPath = regexp.MustCompile(`->>\s*'([A-Za-z0-9_]+)'`)
+
+// parseEnumCheckExpression splits "<payload-expr> IN ('a', 'b')" into the field
+// name and the allowed set. The split is on the LAST " IN (" so a field whose
+// name contains " in " cannot shift the boundary.
+//
+// Values are unquoted by trimming single quotes; a value containing a comma or
+// an escaped quote would be split wrongly, which is acceptable because the set
+// is used for a human-facing message only — the CHECK constraint itself is what
+// enforces the rule.
+func parseEnumCheckExpression(expr string) (field string, allowed []string) {
+	i := strings.LastIndex(expr, " IN (")
+	if i < 0 {
+		return "", nil
+	}
+	lhs := strings.TrimSpace(expr[:i])
+	rhs := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(expr[i+len(" IN ("):]), ")"))
+
+	if m := jsonExtractPath.FindStringSubmatch(lhs); m != nil {
+		field = m[1]
+	} else if m := arrowPath.FindStringSubmatch(lhs); m != nil {
+		field = m[1]
+	}
+
+	for _, part := range strings.Split(rhs, ",") {
+		if v := strings.Trim(strings.TrimSpace(part), "'"); v != "" {
+			allowed = append(allowed, v)
+		}
+	}
+	return field, allowed
 }

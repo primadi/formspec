@@ -71,9 +71,3 @@ func StateDirFor(dsn, specPath string) string {
 	}
 	return filepath.Join(ProjectRootOf(specPath), dir)
 }
-
-// stateDirFromDSN derives a state directory from a DSN like
-// "sqlite:.formspec/data.db" → ".formspec". Falls back to ".formspec".
-func stateDirFromDSN(dsn string) string {
-	return StateDirFromDSN(dsn)
-}

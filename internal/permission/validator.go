@@ -116,10 +116,11 @@ func ValidateAction(action spec.Action, module string) []error {
 //     rate limit is an abuse vector, and nothing downstream can invent the
 //     limit the author did not state.
 //  2. `public` is refused on ENTITY actions. Entity actions are reachable
-//     anonymously through the App's `public_entities` allowlist — the single
-//     place an operator reviews what anonymous callers may touch. A per-action
-//     switch would route around that review, so an entity must use the App
-//     allowlist instead (kafe 10.39).
+//     anonymously only through the App's DERIVED public grants — computed from
+//     the surface the App exposes (plan implicit-public-grants.md), which is
+//     the single place an operator reviews what anonymous callers may touch. A
+//     per-action switch would route around that review, so an entity must be
+//     exposed through a view instead (kafe 10.39).
 //
 // kind is spec.KindEntity or spec.KindService; the caller knows which it is
 // validating.
@@ -131,7 +132,7 @@ func ValidatePublicAction(action spec.Action, kind spec.Kind) []error {
 
 	if kind != spec.KindService {
 		errs = append(errs, fmt.Errorf(
-			"action %q: `public: true` is only valid on a Service action — an entity action reaches anonymous callers through the App's `public_entities` allowlist; declare it there instead",
+			"action %q: `public: true` is only valid on a Service action — an entity action reaches anonymous callers only through the public views its App exposes; expose the entity through a page/form instead",
 			action.Name))
 	}
 	if action.RateLimit == nil {

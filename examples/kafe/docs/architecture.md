@@ -352,12 +352,12 @@ _Alasan:_ menyelesaikan tiga masalah sekaligus:
 > Idealnya FormSpec menyediakan allowlist publik **per-entity** + scoping
 > per-record. Sampai itu ada, `guest_token` adalah pengaman aplikasi.
 
-### D5 — Void/pembatalan lewat Workflow, bukan tombol kasir
+### D5 — Void/pembatalan lewat approval, bukan tombol kasir
 
-Transisi ke `cancelled` dari status setelah bayar dijaga `kind: Workflow`
-(approval supervisor), bukan hanya permission.
+Transisi ke `cancelled` dari status setelah bayar dijaga `approval` supervisor
+(dideklarasikan pada transisi `void-order` itu sendiri), bukan hanya permission.
 
-Workflow-nya merujuk transisi **lewat namanya** (`name: void-order`), bukan
+Gate-nya melekat pada transisi **multi-origin** ini, jadi keempat state asalnya
 lewat pasangan `from`/`to`. Alasannya langsung: `void-order` punya empat state
 asal (`paid`, `in_kitchen`, `ready`, `served`), dan satu pasangan state hanya
 bisa mengawal satu di antaranya — void dari tiga state lain akan lolos approval

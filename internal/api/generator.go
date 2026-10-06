@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/primadi/formspec/internal/entity"
-	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/webhook"
 	"github.com/primadi/formspec/pkg/spec"
@@ -340,13 +339,13 @@ func generatePrepareRoutes(module, name, plural string, es *spec.EntitySpec, isS
 			} else {
 				// `required_permission: purchase-orders.receive-goods` means
 				// "this entity's action" — the same shorthand the grant
-				// materializer expands (internal/permission.AutoPrefixPermission).
+				// materializer expands (spec.QualifyPermission).
 				// Using the string verbatim here made the route check
 				// `purchase-orders.receive-goods` while the materialized grant was
 				// `cafe-stock.purchase-orders.receive-goods`, so the permission
 				// could never match: every call returned 403 with a message naming
 				// a permission that LOOKS declared in the manifest.
-				perm = permission.AutoPrefixPermission(perm, module)
+				perm = spec.QualifyPermission(perm, module)
 			}
 			routes = append(routes, RouteDescriptor{
 				Module: module,
@@ -429,7 +428,7 @@ func GenerateCustomActionRoutes(registry *entity.Registry) []RouteDescriptor {
 				if perm == "" {
 					perm = info.Module + "." + plural + "." + action.Name
 				} else {
-					perm = permission.AutoPrefixPermission(perm, info.Module)
+					perm = spec.QualifyPermission(perm, info.Module)
 				}
 
 				routes = append(routes, RouteDescriptor{
@@ -506,7 +505,7 @@ func UICustomActionRoutesForEntity(module, name string, es *spec.EntitySpec) []R
 		if perm == "" {
 			perm = module + "." + plural + "." + action.Name
 		} else {
-			perm = permission.AutoPrefixPermission(perm, module)
+			perm = spec.QualifyPermission(perm, module)
 		}
 
 		routes = append(routes, RouteDescriptor{

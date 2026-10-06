@@ -191,10 +191,11 @@ func (s *EntityUserStore) LinkOAuthIdentity(ctx context.Context, workspaceID, us
 		return err
 	}
 	_, err = s.store.Update(ctx, db.UpdateParams{
-		WorkspaceID: workspaceID,
-		ID:          userID,
-		Version:     rec.Version,
-		UpdatedBy:   stringField(rec.Data, "username"),
+		WorkspaceID:  workspaceID,
+		ID:           userID,
+		Version:      rec.Version,
+		UpdatedBy:    stringField(rec.Data, "username"),
+		SystemCaller: true,
 		Data: map[string]any{
 			"username":       stringField(rec.Data, "username"),
 			"password_hash":  stringField(rec.Data, "password_hash"),
@@ -222,10 +223,11 @@ func (s *EntityUserStore) UnlinkOAuthIdentity(ctx context.Context, workspaceID, 
 		return err
 	}
 	_, err = s.store.Update(ctx, db.UpdateParams{
-		WorkspaceID: workspaceID,
-		ID:          userID,
-		Version:     rec.Version,
-		UpdatedBy:   stringField(rec.Data, "username"),
+		WorkspaceID:  workspaceID,
+		ID:           userID,
+		Version:      rec.Version,
+		UpdatedBy:    stringField(rec.Data, "username"),
+		SystemCaller: true,
 		Data: map[string]any{
 			"username":       stringField(rec.Data, "username"),
 			"password_hash":  stringField(rec.Data, "password_hash"),
@@ -257,10 +259,11 @@ func (s *EntityUserStore) SetAssignments(ctx context.Context, workspaceID, userI
 		return err
 	}
 	_, err = s.store.Update(ctx, db.UpdateParams{
-		WorkspaceID: workspaceID,
-		ID:          userID,
-		Version:     rec.Version,
-		UpdatedBy:   stringField(rec.Data, "username"),
+		WorkspaceID:  workspaceID,
+		ID:           userID,
+		Version:      rec.Version,
+		UpdatedBy:    stringField(rec.Data, "username"),
+		SystemCaller: true,
 		Data: map[string]any{
 			"username":       stringField(rec.Data, "username"),
 			"password_hash":  stringField(rec.Data, "password_hash"),
@@ -287,10 +290,11 @@ func (s *EntityUserStore) SetEmailVerified(ctx context.Context, workspaceID, use
 		return err
 	}
 	_, err = s.store.Update(ctx, db.UpdateParams{
-		WorkspaceID: workspaceID,
-		ID:          userID,
-		Version:     rec.Version,
-		UpdatedBy:   stringField(rec.Data, "username"),
+		WorkspaceID:  workspaceID,
+		ID:           userID,
+		Version:      rec.Version,
+		UpdatedBy:    stringField(rec.Data, "username"),
+		SystemCaller: true,
 		Data: map[string]any{
 			"username":       stringField(rec.Data, "username"),
 			"password_hash":  stringField(rec.Data, "password_hash"),
@@ -328,10 +332,11 @@ func (s *EntityUserStore) TakeoverUnverifiedEmail(ctx context.Context, workspace
 		return fmt.Errorf("auth: dead hash: %w", err)
 	}
 	_, err = s.store.Update(ctx, db.UpdateParams{
-		WorkspaceID: workspaceID,
-		ID:          userID,
-		Version:     rec.Version,
-		UpdatedBy:   stringField(rec.Data, "username"),
+		WorkspaceID:  workspaceID,
+		ID:           userID,
+		Version:      rec.Version,
+		UpdatedBy:    stringField(rec.Data, "username"),
+		SystemCaller: true,
 		Data: map[string]any{
 			"username":       stringField(rec.Data, "username"),
 			"password_hash":  deadHash, // previous claimant's password stops working
@@ -390,8 +395,9 @@ func (s *EntityUserStore) CreateUser(ctx context.Context, workspaceID string, u 
 		displayName = u.Username
 	}
 	_, err = s.store.Insert(ctx, db.InsertParams{
-		WorkspaceID: workspaceID,
-		CreatedBy:   u.Username,
+		WorkspaceID:  workspaceID,
+		CreatedBy:    u.Username,
+		SystemCaller: true,
 		Data: map[string]any{
 			"username":       u.Username,
 			"email":          u.Email,
@@ -446,10 +452,11 @@ func (s *EntityUserStore) UpdateUser(ctx context.Context, workspaceID string, u 
 	}
 	passwordHash := stringField(rec.Data, "password_hash")
 	_, err = s.store.Update(ctx, db.UpdateParams{
-		WorkspaceID: workspaceID,
-		ID:          u.ID,
-		Version:     rec.Version,
-		UpdatedBy:   username,
+		WorkspaceID:  workspaceID,
+		ID:           u.ID,
+		Version:      rec.Version,
+		UpdatedBy:    username,
+		SystemCaller: true,
 		Data: map[string]any{
 			"username":       username,
 			"password_hash":  passwordHash,
@@ -501,10 +508,11 @@ func (s *EntityUserStore) SetPassword(ctx context.Context, workspaceID, userID, 
 	}
 	username := stringField(rec.Data, "username")
 	_, err = s.store.Update(ctx, db.UpdateParams{
-		WorkspaceID: workspaceID,
-		ID:          userID,
-		Version:     rec.Version,
-		UpdatedBy:   username,
+		WorkspaceID:  workspaceID,
+		ID:           userID,
+		Version:      rec.Version,
+		UpdatedBy:    username,
+		SystemCaller: true,
 		Data: map[string]any{
 			"username":       username,
 			"password_hash":  hash,

@@ -161,15 +161,23 @@ func TestKafe_OnPaidCreatesBalancedJournal(t *testing.T) {
 	app := bootKafe(t)
 	seedKafeAccounts(t, app)
 
-	// subtotal 125000 + tax 12500 + service charge 6250 = total 143750, the
-	// exact figures the manual walkthrough recorded for ORD-2026-00021.
+	// Basis pajak yang DIPUTUSKAN pemilik (2026-10-03):
+	//   service charge = 5%  × subtotal            = 6250
+	//   pajak          = 10% × (subtotal + service) = 13125
+	//   total          = subtotal + service + pajak = 144375
+	//
+	// Angka di sini pernah 12500/143750 (pajak atas subtotal saja). Itu keliru
+	// terhadap aturan yang berlaku, dan karena payload ini DISUPLAI TANGAN (bukan
+	// hasil `computed`), angka lama tidak pernah ketahuan: yang salah adalah
+	// dokumen contohnya, bukan jurnalnya. Diselaraskan ke basis yang sama dengan
+	// `order/entity.yaml` dan e2e `kafe_order_total_computed_e2e_test.go`.
 	payload := map[string]any{
 		"id":                     "11111111-1111-1111-1111-111111111111",
 		"number":                 "ORD-E2E-00001",
 		"transaction_date":       recentDate(),
-		"total_amount":           map[string]any{"amount": "143750", "currency": "IDR"},
+		"total_amount":           map[string]any{"amount": "144375", "currency": "IDR"},
 		"subtotal":               map[string]any{"amount": "125000", "currency": "IDR"},
-		"tax_amount":             map[string]any{"amount": "12500", "currency": "IDR"},
+		"tax_amount":             map[string]any{"amount": "13125", "currency": "IDR"},
 		"service_charge_amount":  map[string]any{"amount": "6250", "currency": "IDR"},
 		"discount_amount":        map[string]any{"amount": "0", "currency": "IDR"},
 		"manual_discount_amount": map[string]any{"amount": "0", "currency": "IDR"},
@@ -201,8 +209,8 @@ func TestKafe_OnPaidCreatesBalancedJournal(t *testing.T) {
 	if debit != credit {
 		t.Errorf("journal does not balance: debit=%v credit=%v (lines=%v)", debit, credit, lines)
 	}
-	if debit != 143750 {
-		t.Errorf("cash/debit side = %v, want the order total 143750", debit)
+	if debit != 144375 {
+		t.Errorf("cash/debit side = %v, want the order total 144375", debit)
 	}
 }
 

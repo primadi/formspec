@@ -10,6 +10,12 @@
 //
 //   [{ "page": "...", "actions": [{"name": "create"}],
 //      "tabs": [{ "tab": "...", "actions": [{"name": "list"}] }] }]
+//
+// An action may also carry a `row_scope` — the per-role row restriction that a
+// per-entity `row_scope` cannot express (kafe 10.67: only paid orders reach the
+// kitchen). The conversion lives in `@/lib/grants` because `grants` is free JSON
+// on the role entity: nothing validates it, and the backend resolver SKIPS what
+// it cannot read, so a wrong key silently enforces nothing.
 
 import { useEffect, useMemo, useState } from "react"
 import {
@@ -26,6 +32,16 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { fetchMetaBundle } from "@/lib/api"
+import {
+  SCOPE_OPERATORS,
+  describePredicate,
+  grantKey,
+  grantsToSelection,
+  prunePredicates,
+  selectionToGrants,
+  type Grant,
+  type ScopePredicate,
+} from "@/lib/grants"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import type {
@@ -43,21 +59,6 @@ interface GrantsEditorProps {
   onChange?: (value: unknown) => void
   readonly?: boolean
   error?: string
-}
-
-interface GrantAction {
-  name: string
-}
-
-interface GrantTab {
-  tab: string
-  actions: GrantAction[]
-}
-
-interface Grant {
-  page: string
-  actions?: GrantAction[]
-  tabs?: GrantTab[]
 }
 
 interface ActionModel {
@@ -435,49 +436,6 @@ function buildPageModels(bundle: MetaBundle): PageModel[] {
 }
 
 // Key format: "page" | "page::action" | "page::tab::action"
-function grantKey(page: string, tab?: string, action?: string): string {
-  if (tab && action) return `${page}::${tab}::${action}`
-  if (action) return `${page}::${action}`
-  return page
-}
-
-function grantsToKeys(grants: Grant[] | undefined): Set<string> {
-  const keys = new Set<string>()
-  for (const g of grants ?? []) {
-    if (g.tabs?.length) {
-      for (const t of g.tabs) {
-        for (const a of t.actions) keys.add(grantKey(g.page, t.tab, a.name))
-      }
-    } else {
-      for (const a of g.actions ?? [])
-        keys.add(grantKey(g.page, undefined, a.name))
-    }
-  }
-  return keys
-}
-
-function keysToGrants(models: PageModel[], keys: Set<string>): Grant[] {
-  const grants: Grant[] = []
-  for (const m of models) {
-    if (m.tabs.length) {
-      const tabs: GrantTab[] = []
-      for (const t of m.tabs) {
-        const actions = t.actions
-          .filter((a) => keys.has(grantKey(m.page, t.label, a.name)))
-          .map((a) => ({ name: a.name }))
-        if (actions.length) tabs.push({ tab: t.label, actions })
-      }
-      if (tabs.length) grants.push({ page: m.page, tabs })
-    } else {
-      const actions = m.actions
-        .filter((a) => keys.has(grantKey(m.page, undefined, a.name)))
-        .map((a) => ({ name: a.name }))
-      if (actions.length) grants.push({ page: m.page, actions })
-    }
-  }
-  return grants
-}
-
 // ── Selection helpers ──
 
 function pageChecked(
@@ -594,16 +552,45 @@ export function GrantsEditor({
     () => (bundle ? buildPageModels(bundle) : []),
     [bundle],
   )
-  const [keys, setKeys] = useState<Set<string>>(() =>
-    grantsToKeys(value as Grant[] | undefined),
+  const initial = useMemo(
+    () => grantsToSelection(value as Grant[] | undefined),
+    [value],
   )
+  const [keys, setKeys] = useState<Set<string>>(() => initial.keys)
+  // Row scopes being edited, keyed exactly like the checkboxes. Kept as raw
+  // predicate rows (not as FilterSpec) so a half-typed row can exist in the UI
+  // without ever reaching the manifest — `prunePredicates` is what turns them
+  // into a declaration, and it drops anything inert.
+  const [scopeEdits, setScopeEdits] = useState<
+    Record<string, ScopePredicate[]>
+  >({})
   const [query, setQuery] = useState("")
 
   // Sync internal selection when the external value changes (e.g. role data
   // loads after the form mounts).
   useEffect(() => {
-    setKeys(grantsToKeys(value as Grant[] | undefined))
+    setKeys(grantsToSelection(value as Grant[] | undefined).keys)
   }, [value])
+
+  /** The row scope of one action, preferring in-editor edits over stored data. */
+  const predicatesFor = (k: string): ScopePredicate[] => {
+    const edited = scopeEdits[k]
+    if (edited) return edited
+    return (initial.scopes[k] ?? []).map((s) => ({
+      field: s.field,
+      op: s.op ?? "eq",
+      from: s.from,
+      value: s.value,
+      attr: s.attr,
+      param: s.param,
+    }))
+  }
+
+  const setPredicates = (k: string, next: ScopePredicate[], keys2?: Set<string>) => {
+    const nextEdits = { ...scopeEdits, [k]: next }
+    setScopeEdits(nextEdits)
+    commit(keys2 ?? keys, nextEdits)
+  }
 
   const visibleModels = useMemo(
     () => filterModels(models, query),
@@ -614,9 +601,12 @@ export function GrantsEditor({
     [models, keys],
   )
 
-  const commit = (next: Set<string>) => {
+  const commit = (
+    next: Set<string>,
+    edits: Record<string, ScopePredicate[]> = scopeEdits,
+  ) => {
     setKeys(next)
-    onChange?.(keysToGrants(models, next))
+    onChange?.(selectionToGrants(models, { keys: next, scopes: initial.scopes }, edits))
   }
 
   const toggle = (key: string, checked: boolean) => {
@@ -657,7 +647,7 @@ export function GrantsEditor({
   }
 
   if (readonly) {
-    const grants = keysToGrants(models, keys)
+    const grants = selectionToGrants(models, { keys, scopes: initial.scopes })
     return (
       <pre className="py-1 text-xs font-mono whitespace-pre-wrap wrap-break-word text-muted-foreground">
         {grants.length ? JSON.stringify(grants, null, 2) : "-"}
@@ -727,36 +717,40 @@ export function GrantsEditor({
                         <span className="text-sm">{t.label}</span>
                       </div>
                       <div className="ml-6 space-y-1">
-                        {t.actions.map((a) => (
-                          <ActionRow
-                            key={a.name}
-                            action={a}
-                            checked={keys.has(
-                              grantKey(m.page, t.label, a.name),
-                            )}
-                            onToggle={(c) =>
-                              toggle(grantKey(m.page, t.label, a.name), c)
-                            }
-                            readonly={readonly}
-                          />
-                        ))}
+                        {t.actions.map((a) => {
+                          const k = grantKey(m.page, t.label, a.name)
+                          return (
+                            <ActionRow
+                              key={a.name}
+                              action={a}
+                              checked={keys.has(k)}
+                              onToggle={(c) => toggle(k, c)}
+                              readonly={readonly}
+                              predicates={predicatesFor(k)}
+                              onPredicates={(next) => setPredicates(k, next)}
+                            />
+                          )
+                        })}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="ml-6 space-y-1">
-                  {m.actions.map((a) => (
-                    <ActionRow
-                      key={a.name}
-                      action={a}
-                      checked={keys.has(grantKey(m.page, undefined, a.name))}
-                      onToggle={(c) =>
-                        toggle(grantKey(m.page, undefined, a.name), c)
-                      }
-                      readonly={readonly}
-                    />
-                  ))}
+                  {m.actions.map((a) => {
+                    const k = grantKey(m.page, undefined, a.name)
+                    return (
+                      <ActionRow
+                        key={a.name}
+                        action={a}
+                        checked={keys.has(k)}
+                        onToggle={(c) => toggle(k, c)}
+                        readonly={readonly}
+                        predicates={predicatesFor(k)}
+                        onPredicates={(next) => setPredicates(k, next)}
+                      />
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -788,26 +782,183 @@ function ActionRow({
   checked,
   onToggle,
   readonly,
+  predicates,
+  onPredicates,
 }: {
   action: ActionModel
   checked: boolean
   onToggle: (checked: boolean) => void
   readonly: boolean
+  predicates: ScopePredicate[]
+  onPredicates: (next: ScopePredicate[]) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const active = predicates.length > 0
+
   return (
-    <label className="flex cursor-pointer items-start gap-1.5 text-xs">
-      <Checkbox
-        checked={checked}
-        onCheckedChange={(c: boolean | "indeterminate") => onToggle(!!c)}
-        disabled={readonly}
-        className="mt-0.5"
-      />
-      <span className="min-w-0">
-        <span className="block font-medium">{action.label}</span>
-        <span className="block font-mono text-[10px] text-muted-foreground">
-          {action.permissions.join(", ")}
-        </span>
-      </span>
-    </label>
+    <div className="space-y-1">
+      <div className="flex items-start gap-1.5 text-xs">
+        <Checkbox
+          checked={checked}
+          onCheckedChange={(c: boolean | "indeterminate") => onToggle(!!c)}
+          disabled={readonly}
+          className="mt-0.5"
+        />
+        <button
+          type="button"
+          onClick={() => checked && setOpen((v) => !v)}
+          disabled={!checked}
+          className="min-w-0 flex-1 text-left disabled:cursor-default"
+        >
+          <span className="block font-medium">
+            {action.label}
+            {active && (
+              <span className="ml-1.5 rounded bg-muted px-1 py-0.5 font-normal text-[10px] text-muted-foreground">
+                {predicates.length} batasan baris
+              </span>
+            )}
+          </span>
+          <span className="block font-mono text-[10px] text-muted-foreground">
+            {action.permissions.join(", ")}
+          </span>
+        </button>
+        {checked && !readonly && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+          >
+            {open ? "tutup" : active ? "ubah batasan" : "batasi baris"}
+          </button>
+        )}
+      </div>
+
+      {checked && open && !readonly && (
+        <RowScopeEditor predicates={predicates} onChange={onPredicates} />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Edits the row scope of ONE granted action.
+ *
+ * Why this exists at all: a row restriction is the only way to state a
+ * per-ROLE rule like "only paid orders reach the kitchen" (kafe 10.67). An
+ * entity `row_scope` cannot express it — that one filters by session attribute
+ * and applies to every caller, so using it would blind the cashier to the
+ * drafts they are composing.
+ *
+ * The editor writes what the backend reads: `field` + `op` + exactly one value
+ * source (`value`, or `from: session|route`). Anything inert is dropped by
+ * `prunePredicates` before it can reach the manifest, because a `row_scope` that
+ * cannot be resolved makes the backend refuse every read (fail-closed 403).
+ */
+function RowScopeEditor({
+  predicates,
+  onChange,
+}: {
+  predicates: ScopePredicate[]
+  onChange: (next: ScopePredicate[]) => void
+}) {
+  const update = (i: number, patch: Partial<ScopePredicate>) => {
+    onChange(predicates.map((p, j) => (i === j ? { ...p, ...patch } : p)))
+  }
+  const remove = (i: number) => onChange(predicates.filter((_, j) => j !== i))
+  const add = () => onChange([...predicates, { field: "", op: "eq", value: "" }])
+
+  return (
+    <div className="ml-6 space-y-1 rounded border bg-muted/30 p-1.5">
+      <p className="text-[10px] leading-snug text-muted-foreground">
+        Hanya baris yang cocok SEMUA batasan di bawah yang boleh diakses peran
+        ini. `value` = konstanta (mis. <span className="font-mono">paid,ready</span> untuk
+        operator <span className="font-mono">in</span>);{" "}
+        <span className="font-mono">session</span> = atribut sesi (mis. cabang).
+      </p>
+
+      {predicates.map((p, i) => {
+        const source = p.from ?? "literal"
+        return (
+          <div key={i} className="flex flex-wrap items-center gap-1">
+            <Input
+              value={p.field}
+              onChange={(e) => update(i, { field: e.target.value })}
+              placeholder="field"
+              className="h-7 w-28 font-mono text-[11px]"
+            />
+            <select
+              value={p.op}
+              onChange={(e) => update(i, { op: e.target.value })}
+              className="h-7 rounded border bg-background px-1 font-mono text-[11px]"
+            >
+              {SCOPE_OPERATORS.map((op) => (
+                <option key={op} value={op}>
+                  {op}
+                </option>
+              ))}
+            </select>
+            <select
+              value={source}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === "literal") update(i, { from: undefined, attr: undefined, param: undefined })
+                else if (v === "session") update(i, { from: "session", value: undefined, attr: "" })
+                else update(i, { from: "route", value: undefined, param: "" })
+              }}
+              className="h-7 rounded border bg-background px-1 text-[11px]"
+            >
+              <option value="literal">nilai tetap</option>
+              <option value="session">atribut sesi</option>
+              <option value="route">parameter URL</option>
+            </select>
+            {source === "session" ? (
+              <Input
+                value={p.attr ?? ""}
+                onChange={(e) => update(i, { attr: e.target.value })}
+                placeholder="attr (mis. branch_id)"
+                className="h-7 w-40 font-mono text-[11px]"
+              />
+            ) : source === "route" ? (
+              <Input
+                value={p.param ?? ""}
+                onChange={(e) => update(i, { param: e.target.value })}
+                placeholder="param (mis. token)"
+                className="h-7 w-40 font-mono text-[11px]"
+              />
+            ) : (
+              <Input
+                value={p.value ?? ""}
+                onChange={(e) => update(i, { value: e.target.value })}
+                placeholder="value"
+                className="h-7 w-40 font-mono text-[11px]"
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+            >
+              hapus
+            </button>
+          </div>
+        )
+      })}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={add}
+          className="text-[10px] font-medium text-muted-foreground underline-offset-2 hover:underline"
+        >
+          + tambah batasan
+        </button>
+        {predicates.length > 0 && (
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {prunePredicates(predicates).map(describePredicate).join(" · ") ||
+              "belum ada batasan yang bisa disimpan"}
+          </span>
+        )}
+      </div>
+    </div>
   )
 }

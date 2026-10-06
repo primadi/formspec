@@ -13,6 +13,7 @@ import (
 
 	"github.com/primadi/formspec/internal/auth/oauth"
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
@@ -446,6 +447,26 @@ func (s *Service) permissionsForUser(ctx context.Context, workspaceID, app strin
 	}
 	// Fallback (no role store/materializer wired): direct permissions only.
 	return user.Permissions, nil
+}
+
+// GrantRowScope returns the row scope the caller's roles attach to one
+// permission (see PermissionResolver.GrantScope), or an error when a row
+// restriction was declared but cannot be applied — in which case the caller must
+// be refused rather than served an unscoped read.
+//
+// The API layer calls this on every read and write to answer the second half of
+// authorization — "may this caller act on THIS ROW?" — from the role grants
+// rather than from the request. A caller cannot widen or drop it, which is what
+// makes it a boundary rather than a convenience (kafe 10.67: only paid orders
+// reach the kitchen; GAP-08: the kitchen sees its own branch).
+//
+// Returns (nil, nil) when nothing restricts the permission.
+func (s *Service) GrantRowScope(ctx context.Context, workspaceID, app string, roles []string, permission string) ([]spec.FilterSpec, error) {
+	s.ensureResolver()
+	if s.resolver == nil || len(roles) == 0 {
+		return nil, nil
+	}
+	return s.resolver.GrantScope(ctx, workspaceID, app, roles, permission)
 }
 
 // Register creates a new user account via self-service sign-up (registry

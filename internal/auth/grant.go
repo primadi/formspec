@@ -1,8 +1,10 @@
 package auth
 
+import "github.com/primadi/formspec/pkg/spec"
+
 // Grant types model the admin-facing permission grant hierarchy:
 //
-//	Role → Page → (Tab →) Action (+ conditions)
+//	Role → Page → (Tab →) Action (+ conditions / row scope)
 //
 // This is the admin's mental model (one-to-one with what they see in the UI).
 // At enforcement time these grants are MATERIALIZED into concrete
@@ -30,10 +32,27 @@ type TabGrant struct {
 	Actions []ActionGrant `json:"actions"`
 }
 
-// ActionGrant is one action-level grant, optionally carrying ABAC conditions.
+// ActionGrant is one action-level grant, optionally carrying ABAC conditions
+// and a row scope.
+//
+// Two constraints live here and they are NOT interchangeable:
+//
+//   - `RowScope` restricts WHICH ROWS the action may touch. It is a filter
+//     list, so it is enforced by the storage layer together with the entity's
+//     own `row_scope` — a role may hold `list` on orders yet see only the paid
+//     ones (kafe 10.67: "hanya pesanan lunas yang masuk dapur").
+//   - `Conditions` constrains the PAYLOAD being written (an attribute
+//     predicate over `resource` + `params`). It cannot express a row filter:
+//     a read would have to load every row and evaluate it one by one, which
+//     breaks pagination and pushes nothing into the query.
 type ActionGrant struct {
 	// Name is the action name (e.g. "create", "submit", or a custom action).
 	Name string `json:"name"`
+	// RowScope restricts the rows this granted action applies to. Values come
+	// from the request context (`from: session|route`) or are a literal
+	// constant (`value`), never from the client — a caller cannot widen or drop
+	// it by editing the request. Empty = every row the permission reaches.
+	RowScope []spec.FilterSpec `json:"row_scope,omitempty"`
 	// Conditions are attribute-based constraints (FormSpecExpr) evaluated at
 	// enforcement time against the resource data (todo 6.2.6). Empty = no
 	// constraint beyond the permission itself.

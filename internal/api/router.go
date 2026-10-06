@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -9,10 +10,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/primadi/formspec/internal/action"
 	formspec_app "github.com/primadi/formspec/internal/app"
+	"github.com/primadi/formspec/internal/approval"
 	"github.com/primadi/formspec/internal/config"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/job"
@@ -20,7 +23,6 @@ import (
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/webhook"
-	"github.com/primadi/formspec/internal/workflow"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -43,6 +45,12 @@ type RouterBuilder struct {
 	apps          map[string]*formspec_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
 	settings      *spec.Settings                       // resolved global settings namespace (spec §10)
 	specVersionFn func() int64                         // returns the current spec version (for Meta API polling)
+
+	// publicGrantsOnce/publicGrantsCache memoize the derived anonymous
+	// allowlist (plan implicit-public-grants.md). Derivation walks the whole UI
+	// registry, and isPublicAction asks for the map on every entity route.
+	publicGrantsOnce  sync.Once
+	publicGrantsCache map[string]map[string]bool
 	// enableAPIAuth mounts /api/v1/auth/* (login/refresh) on the external
 	// surface. Default false — auth lives on the UI surface (/_ui/auth/*),
 	// which is always available; /api/v1 is deny-by-default for external
@@ -122,16 +130,16 @@ func (b *RouterBuilder) SetWebhookKeyResolver(k webhook.KeyResolver) {
 	b.factory.SetWebhookKeyResolver(k)
 }
 
-// SetWorkflowRegistry sets the kind: Workflow registry used to intercept
+// SetApprovalRegistry sets the approval-gate registry used to intercept
 // state-machine transitions for approval (todo 7.4).
-func (b *RouterBuilder) SetWorkflowRegistry(w *workflow.Registry) {
-	b.factory.SetWorkflowRegistry(w)
+func (b *RouterBuilder) SetApprovalRegistry(w *approval.Registry) {
+	b.factory.SetApprovalRegistry(w)
 }
 
-// SetWorkflowApprovalStore wires the approval store used to persist
+// SetApprovalRequestStore wires the approval store used to persist
 // in-flight approval requests (todo 7.4).
-func (b *RouterBuilder) SetWorkflowApprovalStore(s *db.WorkflowApprovalStore) {
-	b.factory.SetWorkflowApprovalStore(s)
+func (b *RouterBuilder) SetApprovalRequestStore(s *db.ApprovalRequestStore) {
+	b.factory.SetApprovalRequestStore(s)
 }
 
 // SetAuditWriter wires the audit writer used to record workflow approval
@@ -143,6 +151,13 @@ func (b *RouterBuilder) SetAuditWriter(w AuditWriter) {
 // SetEntityCache wires the optional read-through find-by-id cache (Fase 14).
 func (b *RouterBuilder) SetEntityCache(c *EntityCache) {
 	b.factory.SetEntityCache(c)
+}
+
+// SetGrantScopeLookup wires the resolver for per-role row scopes (kafe 10.67 /
+// GAP-08). The api layer takes a function so it keeps no dependency on the auth
+// service's concrete type; resource/formspec.go passes authSvc.GrantRowScope.
+func (b *RouterBuilder) SetGrantScopeLookup(lookup func(ctx context.Context, workspaceID, app string, roles []string, permission string) ([]spec.FilterSpec, error)) {
+	b.factory.SetGrantScopeLookup(lookup)
 }
 
 // SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
@@ -218,33 +233,77 @@ func (b *RouterBuilder) SetSettings(s *spec.Settings) {
 }
 
 // legacyPublicActions are the actions a public App granted anonymously before
-// `public_entities` existed (module-wide, S3 / gap #6). Kept as the default so
-// Apps that have not declared an allowlist keep working unchanged.
+// `public_entities` existed (module-wide, S3 / gap #6). Kept only as the
+// documented fallback for an App whose surface cannot be resolved (no UI
+// registry wired) — never as the normal path.
 var legacyPublicActions = map[string]bool{"list": true, "find": true, "create": true}
+
+// derivedPublicGrants computes, for every `access: public` App, the anonymous
+// allowlist implied by the surface it exposes (plan
+// docs_internal/plan/implicit-public-grants.md). The manifest no longer
+// declares this: a grant is a consequence of the views the App mounts, so a
+// table block implies `list`, a create form implies `create`, and a
+// route-param table filter implies a server-enforced row scope.
+//
+// Derivation needs the UI registry (to resolve view routes and walk blocks) and
+// the entity registry (to read fields). When either is missing — legacy tests
+// that build a RouterBuilder by hand — it degrades to the documented legacy
+// module-wide grant rather than opening nothing, which keeps those tests
+// meaningful without pretending the new model ran.
+func (b *RouterBuilder) derivedPublicGrants() map[string][]spec.PublicEntityDecl {
+	out := map[string][]spec.PublicEntityDecl{}
+	for name, app := range b.apps {
+		if app.Spec == nil || app.Spec.Access != spec.AppAccessPublic {
+			continue
+		}
+		if b.uiRegistry == nil || b.registry == nil {
+			continue
+		}
+		decls := b.uiRegistry.DerivePublicGrants(b.listEntityDescriptors, ui.PublicGrantInput{
+			Modules:         app.Modules,
+			Menu:            app.Menu,
+			RegisteredViews: app.Spec.RegisteredViews,
+		})
+		out[name] = decls
+	}
+	return out
+}
 
 // publicGrants resolves the anonymous allowlist for every public App, keyed by
 // "module/entity" (or "module/*" for the legacy module-wide grant) and mapping
 // to the set of actions granted on the UI surface (frontend/05-app-kinds.md §1).
 //
-// Per App:
-//   - `public_entities` declared → exactly those entity/action pairs. An
-//     explicitly empty list grants nothing.
-//   - `public_entities` absent → legacy module-wide list/find/create. It also
-//     exposes entities that only share a module with the intended one, so an
-//     App should declare the allowlist (S3, gaps #6/#45).
+// Computed once and cached: it is asked for every registered entity route, and
+// derivation walks the whole UI registry.
 func (b *RouterBuilder) publicGrants() map[string]map[string]bool {
-	out := map[string]map[string]bool{}
-	for _, app := range b.apps {
-		if app.Spec == nil || app.Spec.Access != spec.AppAccessPublic {
-			continue
-		}
-		if pe := app.Spec.PublicEntities; pe != nil {
-			for _, decl := range *pe {
-				// Accepts "module/entity" and "module.entity" — normalized so the
-				// lookup below always compares canonical keys.
+	b.publicGrantsOnce.Do(func() {
+		out := map[string]map[string]bool{}
+		derived := b.derivedPublicGrants()
+		for name, app := range b.apps {
+			if app.Spec == nil || app.Spec.Access != spec.AppAccessPublic {
+				continue
+			}
+			decls, ok := derived[name]
+			if !ok {
+				// No UI/entity registry to derive from — keep the documented
+				// legacy behaviour so a hand-built builder still gates.
+				for module := range app.Modules {
+					key := module + "/*"
+					if out[key] == nil {
+						out[key] = map[string]bool{}
+					}
+					for act := range legacyPublicActions {
+						out[key][act] = true
+					}
+				}
+				continue
+			}
+			for _, decl := range decls {
+				// Accepts "module/entity" and "module.entity" — normalized so
+				// the lookup below always compares canonical keys.
 				key, ok := spec.NormalizeEntityRef(decl.Entity)
 				if !ok {
-					continue // validation rejects this; never widen access here
+					continue // never widen access on an unresolvable ref
 				}
 				if out[key] == nil {
 					out[key] = map[string]bool{}
@@ -253,21 +312,10 @@ func (b *RouterBuilder) publicGrants() map[string]map[string]bool {
 					out[key][act] = true
 				}
 			}
-			continue
 		}
-		for module := range app.Modules {
-			// Mark the whole module public — the App author chose
-			// `access: public` knowing the surface is anonymous.
-			key := module + "/*"
-			if out[key] == nil {
-				out[key] = map[string]bool{}
-			}
-			for act := range legacyPublicActions {
-				out[key][act] = true
-			}
-		}
-	}
-	return out
+		b.publicGrantsCache = out
+	})
+	return b.publicGrantsCache
 }
 
 // isPublicAction reports whether anonymous callers may perform `action` on
@@ -288,12 +336,16 @@ func (b *RouterBuilder) isPublicAction(module, entity, action string) bool {
 // publicScope returns the row filter a public grant declares for anonymous reads
 // of module/entity (#45). It is a per-surface declaration: the same entity read
 // by a cashier on a POS surface is not filtered by it.
+//
+// The scope now comes from the DERIVED grant (plan implicit-public-grants.md):
+// a table block whose `param` binds a route placeholder (`{guest_token:
+// ":guest_token"}`) implies a row filter the server must enforce — the client
+// cannot widen or drop a route parameter, which is what makes it a scope rather
+// than a client-side filter.
 func (b *RouterBuilder) publicScope(module, entity string) []spec.FilterSpec {
-	for _, app := range b.apps {
-		if app.Spec == nil || app.Spec.Access != spec.AppAccessPublic || app.Spec.PublicEntities == nil {
-			continue
-		}
-		for _, decl := range *app.Spec.PublicEntities {
+	derived := b.derivedPublicGrants()
+	for _, decls := range derived {
+		for _, decl := range decls {
 			key, ok := spec.NormalizeEntityRef(decl.Entity)
 			if !ok || key != module+"/"+entity {
 				continue
@@ -505,6 +557,18 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			// Server-side Print PDF generation (todo 5.13.2) — renders a
 			// kind: Print manifest + record to PDF without a browser.
 			r.Get("/print/{module}/{name}/{id}", b.HandlePrint())
+
+			// Approval inbox (kind: ApprovalInbox, frontend/06-page-kinds.md
+			// §11, todo 5.13.6). The kind is zero-config: its source is the
+			// pending Workflow steps the caller may act on, and those rows live
+			// in the framework table `formspec_workflow_approval`, which is not
+			// an Entity — hence a dedicated endpoint rather than an entity
+			// route. Registered on the UI surface (session auth), like print.
+			// Plan: docs_internal/plan/approval-inbox-endpoint.md.
+			r.Route("/workflow", func(r chi.Router) {
+				r.Get("/approvals", b.HandleApprovalInbox())
+				r.Post("/approvals/{id}", b.HandleApprovalDecision())
+			})
 
 			// Entity CRUD — all entities, regardless of spec.expose.
 			// No SPA fallback here: /_ui/entity/* is a REST API surface that

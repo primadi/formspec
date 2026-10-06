@@ -259,22 +259,6 @@ func (u *assetUploader) upload(ctx context.Context, module, entity, id string, p
 	return updates, nil
 }
 
-// assetSource returns the asset path declared for a file field, if any. It is
-// how reconcile learns that a record's photo has a source file to restore — a
-// hand-written literal key does not.
-func assetSource(rec map[string]any, field string) (string, bool) {
-	m, ok := rec[field].(map[string]any)
-	if !ok {
-		return "", false
-	}
-	raw, ok := m[assetMarker]
-	if !ok || len(m) != 1 {
-		return "", false
-	}
-	path, _ := raw.(string)
-	return path, path != ""
-}
-
 // findField looks up a field by name in an entity spec.
 func findField(es *spec.EntitySpec, name string) *spec.Field {
 	if es == nil {

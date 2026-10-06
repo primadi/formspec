@@ -312,7 +312,7 @@ var KnownKinds = KindSet{
 	"App": true, "Module": true, "Document": true, "Entity": true, "Service": true,
 	"Config": true, "Subscription": true,
 	// Core Extended
-	"Workflow": true, "Api": true, "Webhook": true, "Mockup": true, "KindDefinition": true, "Integrator": true,
+	"Api": true, "Webhook": true, "Mockup": true, "KindDefinition": true, "Integrator": true,
 	// Renderer / meta-kinds
 	"Renderer": true, "VisualSpecKind": true, "PersistBackend": true,
 	// Frontend — no "Menu": navigation lives in App.spec.menu / Module.spec.menu.
@@ -383,8 +383,9 @@ func (l *Loader) Validate(raw RawManifest) error {
 			return fmt.Errorf("%s: %w", raw.Source, err)
 		}
 		// `public` is a Service-only flag: an entity reaches anonymous callers
-		// through its App's `public_entities` allowlist, which is the single
-		// place an operator reviews that decision (kafe 10.39).
+		// only through the public views its App exposes (the grants are derived
+		// from that surface — plan implicit-public-grants.md), so the decision is
+		// reviewed as part of the App's views, not per-action (kafe 10.39).
 		for i := range entitySpec.Actions {
 			if errs := permission.ValidatePublicAction(entitySpec.Actions[i], spec.KindEntity); len(errs) > 0 {
 				return fmt.Errorf("%s: %w", raw.Source, errs[0])
@@ -393,7 +394,7 @@ func (l *Loader) Validate(raw RawManifest) error {
 	}
 
 	// Service actions carry `public`, the anonymous allowlist for a Service
-	// (there is no App-level `public_entities` for services). It is the only
+	// (there is no surface-derived grant for services). It is the only
 	// kind where the flag is legal, so it is also the only place that has to
 	// vet it — including the rate-limit requirement that keeps an anonymous
 	// endpoint from being an abuse vector.
@@ -406,24 +407,6 @@ func (l *Loader) Validate(raw RawManifest) error {
 			if errs := permission.ValidatePublicAction(serviceSpec.Actions[i], spec.KindService); len(errs) > 0 {
 				return fmt.Errorf("%s: %w", raw.Source, errs[0])
 			}
-		}
-	}
-
-	// Workflow trigger contract (S9, kafe 1.7): the trigger must pick exactly
-	// one form. Whether the referenced transition actually exists is checked in
-	// the cross-manifest layer (`formspec validate`), which can see the target
-	// Entity's state machine — this layer only owns the manifest's own shape.
-	if raw.Kind == "Workflow" && raw.Spec != nil {
-		specMap, ok := raw.Spec.(map[string]any)
-		if !ok {
-			return fmt.Errorf("%s: workflow spec must be a mapping", raw.Source)
-		}
-		wf, err := RawSpecToWorkflowSpec(specMap)
-		if err != nil {
-			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
-		}
-		if err := spec.ValidateWorkflowSpec(wf); err != nil {
-			return fmt.Errorf("%s: %w", raw.Source, err)
 		}
 	}
 
@@ -670,19 +653,6 @@ func RawSpecToSubscriptionSpec(specMap map[string]any) (*spec.SubscriptionSpec, 
 		return nil, fmt.Errorf("unmarshal subscription spec: %w", err)
 	}
 	return &sub, nil
-}
-
-// RawSpecToWorkflowSpec converts a raw spec map to a typed WorkflowSpec.
-func RawSpecToWorkflowSpec(specMap map[string]any) (*spec.WorkflowSpec, error) {
-	b, err := yaml.Marshal(specMap)
-	if err != nil {
-		return nil, fmt.Errorf("re-marshal spec: %w", err)
-	}
-	var wf spec.WorkflowSpec
-	if err := yaml.Unmarshal(b, &wf); err != nil {
-		return nil, fmt.Errorf("unmarshal workflow spec: %w", err)
-	}
-	return &wf, nil
 }
 
 // RawSpecToIntegratorSpec converts a raw spec map to a typed IntegratorSpec.

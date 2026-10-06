@@ -17,6 +17,12 @@ type Role struct {
 	Module      string // scope for module-owner (todo 6.3.4)
 	Description string
 	Grants      []Grant
+	// GrantShapeProblems are defects found in the role's RAW `grants` value —
+	// keys the typed read cannot see because json.Unmarshal drops what it does
+	// not know (e.g. `row_scopes` instead of `row_scope`). Carried on the role so
+	// the resolver can DENY a permission whose row restriction is unreadable
+	// instead of granting it unrestricted (see PermissionResolver.GrantScope).
+	GrantShapeProblems []GrantShapeProblem
 }
 
 // RoleStore reads roles from the formspec.core.role entity.
@@ -43,6 +49,8 @@ func (s *RoleStore) CreateRole(ctx context.Context, workspaceID string, r *Role)
 	_, err := s.store.Insert(ctx, db.InsertParams{
 		WorkspaceID: workspaceID,
 		CreatedBy:   "system",
+		// Auth internals run with no caller identity to consult.
+		SystemCaller: true,
 		Data: map[string]any{
 			"name":        r.Name,
 			"app":         r.App,
@@ -103,7 +111,14 @@ func roleFromRecord(rec *db.EntityRecord) *Role {
 		Description: stringField(rec.Data, "description"),
 	}
 	// Parse grants JSON.
+	//
+	// The RAW value is validated before the typed read, because the typed read is
+	// lossy by construction: an unknown key (`row_scopes`) is dropped silently, so
+	// a role with a misspelled row restriction would look perfectly configured
+	// here. Validation on the raw value is what makes that visible — and the
+	// resolver turns a row-restriction defect into a denial (10.67).
 	if raw, ok := rec.Data["grants"]; ok {
+		r.GrantShapeProblems = ValidateGrantListShape(raw)
 		if b, err := json.Marshal(raw); err == nil {
 			_ = json.Unmarshal(b, &r.Grants)
 		}

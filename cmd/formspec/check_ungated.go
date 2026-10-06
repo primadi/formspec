@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/primadi/formspec/internal/manifest"
-	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
@@ -85,7 +84,7 @@ func checkUngatedActions(result *checkResult, manifests []manifest.RawManifest) 
 			// not the same defect — reported only when it differs from the
 			// conventional name.
 			conventional := module + "." + plural + "." + a.Name
-			declared := permission.AutoPrefixPermission(a.RequiredPermission, module)
+			declared := spec.QualifyPermission(a.RequiredPermission, module)
 			if spec.IsReservedAction(a.Name) {
 				if declared == conventional {
 					continue // equals the route's own permission — no redirect

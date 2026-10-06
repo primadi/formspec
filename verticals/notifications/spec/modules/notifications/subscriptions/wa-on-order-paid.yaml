@@ -5,7 +5,15 @@ metadata:
   module: notifications
   description: Kirim notifikasi WhatsApp setiap order dibayar
 spec:
-  on: { resource: billing.order, event: paid }
-  deliver:
-    - channel: queue
-      job: send-wa-notification
+  # Subscription bereaksi lewat HANDLER (`events:` + `handler:`), bukan lewat
+  # `deliver:` — `deliver:` adalah daftar konsekuensi milik PUBLISHER, dan
+  # `on:`/`deliver:` pada Subscription bukan bentuk yang spec punya (schema
+  # menolak keduanya, `additionalProperties: false`).
+  #
+  # Event ditulis dengan nama penuh `{module}.{entity}.{event}` — nama yang
+  # dipancarkan transisi `confirm-payment` di billing (publish.durable: true).
+  events:
+    - billing.order.paid
+  handler:
+    type: native
+    ref: "Notifications.SendWANotificationHandler"

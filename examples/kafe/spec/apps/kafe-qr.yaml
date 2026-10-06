@@ -20,54 +20,46 @@ spec:
       rightbar: none
       bottombar: none
       footer: auto
-  # Anonim hanya boleh menyentuh entity & aksi yang didaftarkan di bawah.
-  # Sebelum `public_entities` ada, `access: public` memberi anonim
-  # `list`/`find`/`create` untuk SELURUH entity di module yang di-mount —
-  # sehingga memount `cafe-order` ikut membuka `shift` dan `cash-movement`
-  # (data kas & shift), dan `cafe-master` ikut membuka `member` (nomor HP
-  # pelanggan) dan `employee`. Itu tertutup oleh daftar ini (GAP-06).
+  # Akses anonim TIDAK dideklarasikan di sini. Ia diturunkan dari permukaan App
+  # (`registered_views` di bawah + `public` pada tiap view): apa pun yang
+  # dibaca/ditulis view publik itulah yang dibuka untuk anonim.
   #
-  # Pelanggan memesan lewat QR: hanya perlu MELIHAT katalog + MEMBUAT pesanan.
-  # Update/delete tidak pernah anonim — pembatalan lewat approval supervisor
-  # (kind: Workflow), bukan tombol pelanggan.
-  public_entities:
-    - { entity: cafe-master.menu-category, actions: [list, find] }
-    - { entity: cafe-master.menu-item, actions: [list, find] }
-    # Harga per cabang: daftar anonim hanya boleh dibaca BERSAMA cabang yang
-    # diminta (`?branch_id=…`, diisi picker dari sesi meja). Sebelumnya daftar
-    # ini terbuka tanpa syarat, sehingga satu permintaan tanpa parameter
-    # mengembalikan harga SELURUH cabang (item 3.5).
-    - entity: cafe-master.menu-item-price
-      actions: [list]
-      scope:
-        - { field: branch_id, op: eq, from: route }
-    # Meja di-resolve dari token QR (find saja — pelanggan tidak perlu list meja).
-    - { entity: cafe-master.dining-table, actions: [find] }
-    # Satu kunjungan per meja; token sesi menjadi kunci akses pelanggan.
-    - { entity: cafe-order.table-session, actions: [create, find] }
-    # Pesanan dibuat anonim; penyelesaiannya (bayar, submit) dilakukan kasir
-    # di kafe-pos.
-    #
-    # `list` untuk anonim hanya diberikan BERSAMA scope (#45): tanpa scope itu,
-    # "anonim boleh list" berarti seluruh pesanan kafe — termasuk meja dan tamu
-    # lain — dan itulah yang membuat grant ini berbahaya sebelum 2.2. Dengan
-    # scope, pelanggan hanya menerima baris yang token tamunya cocok dengan
-    # token di URL, dan permintaan tanpa token **ditolak** (bukan berarti
-    # "tanpa filter"). Nilainya dibaca engine dari query, jadi klien tidak bisa
-    # melebarkannya.
-    #
-    # `create` tetap terbuka (pelanggan anonim memesan); `find` sengaja TIDAK
-    # diberikan: ia men-resolve lewat id dan scope tidak bisa menjaganya
-    # (validator menolak kombinasi itu).
-    #
-    # Catatan: grant ini TIDAK melebarkan akses kasir. Route `/_ui/entity`
-    # dipakai bersama oleh kafe-pos; permintaan yang sudah terautentikasi tetap
-    # wajib punya `cafe-order.orders.list`, dan scope anonim tidak berlaku
-    # untuknya (kalau berlaku, table POS yang tidak membawa token akan 403).
-    - entity: cafe-order.order
-      actions: [create, list]
-      scope:
-        - { field: guest_token, op: eq, from: route }
+  # Kenapa diturunkan, bukan didaftarkan manual: halaman pelanggan sudah
+  # menyatakan niatnya sendiri — Page ber-`public: true`, field child dengan
+  # `picker` yang menyebut entity sumber, Table dengan `param` route yang
+  # menjadi scope baris. Daftar manual kedua kalinya hanya bisa DRIFT dari
+  # kenyataan itu (item yang ditulis tapi tak dipakai klien, atau sebaliknya
+  # view baru yang lupa didaftarkan → 401 pada jalur yang seharusnya jalan).
+  #
+  # Hasil turunan untuk App ini (terukur, lihat TestDerivePublicGrants_KafeQR):
+  #   cafe-order.order            create, list  (+ scope guest_token dari route)
+  #   cafe-order.table-session    create, find
+  #   cafe-master.dining-table    find         (dari context: {source: entity})
+  #   cafe-master.menu-item       list         (dari picker child field `lines`)
+  #   cafe-master.menu-item-price list         (dari picker.display.price_entity)
+  #
+  # Perhatikan yang TIDAK ikut — inilah presisinya:
+  #   * `menu-category` tidak di-grant: chip kategori dibaca dari baris yang
+  #     sudah dimuat (`picker.display.category_field`), jadi tak ada request.
+  #   * `menu-item` hanya `list`, bukan `find`: picker tidak pernah fetch satu
+  #     item lewat id.
+  #   * `order.find` tidak diberikan: grant `order` ber-scope, dan `find`
+  #     resolve lewat id sehingga scope tak bisa menjaganya.
+  #   * `member`, `employee`, `shift`, `cash-movement` tidak pernah ikut hanya
+  #     karena se-modul.
+  #
+  # ⚠️ SATU DELTA YANG DISENGAJA TERBUKA (kafe 10.69 ⏸️): `menu-item-price`
+  # sebelumnya ber-scope `{field: branch_id, from: route}`; turunan TIDAK bisa
+  # mereproduksinya, jadi grant-nya kini `list` tanpa scope. Sebabnya:
+  # price_filter picker bernilai `{session.branch_id}` — cabang datang dari
+  # record sesi (di-resolve lewat `session_id`), bukan dari parameter route pada
+  # entity harga, dan `from: session` memang ditolak untuk permukaan publik.
+  # Artinya anonim kini bisa membaca harga SEMUA cabang, bukan hanya cabangnya.
+  # Tidak ada PII di sana, tetapi ini pelemahan nyata dibanding manifest lama —
+  # dicatat sebagai item, bukan disembunyikan.
+  #
+  # Update/delete tidak pernah anonim: pembatalan lewat approval supervisor
+  # (pada transisi `void-order`), bukan tombol pelanggan.
   modules:
     - cafe-master
     - cafe-order
@@ -75,8 +67,8 @@ spec:
   # TIDAK punya menu (no-nav), jadi satu-satunya deklarasi permukaannya ada di
   # sini: tiga Page yang dilalui pelanggan dari scan QR sampai lihat status.
   # Tanpa daftar ini tidak ada satu pun route yang dibuat (semuanya 404) —
-  # entity di `public_entities` TETAP dapat diakses lewat API (katalog/pesanan),
-  # tetapi tidak punya route yang bisa dibuka langsung di SPA.
+  # grant anonim pun diturunkan dari daftar ini, jadi tanpa entri di sini
+  # katalog/pesanan juga tidak terbuka lewat API (bukan hanya 404 di SPA).
   #
   #   /t/:qr_token       table-open       → buka/gabung sesi meja dari token QR
   #   /menu/:session_id  menu-catalog     → katalog + keranjang + kirim pesanan

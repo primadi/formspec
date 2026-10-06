@@ -45,7 +45,7 @@ Module → Resource`: dimiliki satu Data Owner (Workspace Owner), menampung
   (bawaan, framework-enforced, closed set `draft | submitted | cancelled`,
   ditegakkan delapan reserved action) dan state machine bisnis (field terpisah
   yang didefinisikan developer, transisi lewat action bernama, approval
-  berbasis role opsional lewat `kind: Workflow`).
+  berbasis role opsional lewat `state_machine.transitions[].approval`).
 - **Extension** — Document (`extend_storage`) yang ditulis module lain untuk
   menambah field/perilaku ke Document milik module lain tanpa fork dan tanpa
   merusak jalur upgrade-nya, wajib bisa di-uninstall bersih tanpa sisa. Field

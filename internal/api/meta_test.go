@@ -219,7 +219,14 @@ func TestHandleMetaUI_PublicApp_AnonymousAllowed(t *testing.T) {
 	}
 }
 
-func TestPublicEntities_PublicApp(t *testing.T) {
+// TestPublicEntities_PublicAppWithNoSurface_GrantsNothing pins the new rule
+// (plan implicit-public-grants.md): the anonymous allowlist is DERIVED from the
+// surface the App exposes, so an App that mounts modules but reaches no view
+// grants nothing. Before derivation this App got a module-wide grant
+// (list/find/create on every entity of `sales`) purely from `access: public` —
+// the behaviour that leaked `member`, `employee`, `shift` and `cash-movement`
+// on kafe.
+func TestPublicEntities_PublicAppWithNoSurface_GrantsNothing(t *testing.T) {
 	b := setupMetaTestRouter(t)
 	b.SetApps(map[string]*formspec_app.ResolvedApp{
 		"storefront": {
@@ -234,11 +241,14 @@ func TestPublicEntities_PublicApp(t *testing.T) {
 		},
 	})
 
-	if !b.isPublicEntity("sales", "product") {
-		t.Error("expected sales/product to be public (mounted by public App)")
+	// The test router has an empty UI registry, so the surface is empty — and an
+	// empty surface implies no grant. `formspec check` warns about exactly this
+	// manifest shape ("mounts modules but declares no menu and no registered_views").
+	if b.isPublicEntity("sales", "product") {
+		t.Error("a public App with no reachable view must grant nothing")
 	}
 	if b.isPublicEntity("hr", "employee") {
-		t.Error("expected hr/employee to NOT be public (not in public App modules)")
+		t.Error("hr/employee must NOT be public (not in the public App's modules)")
 	}
 }
 

@@ -423,6 +423,110 @@
       ],
       "additionalProperties": false
     },
+    "ApprovalReject": {
+      "description": "ApprovalReject declares the target state when the workflow is rejected.\n",
+      "type": "object",
+      "properties": {
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "ApprovalSpec": {
+      "description": "ApprovalSpec declares the approval gate on a state-machine transition\n(02-core-extended.md §2). It replaces the former `kind: Workflow` manifest:\nthe gate lives ON the transition it intercepts, so the declaration cannot\ndrift from the thing it gates, and a transition with several origin states is\ncovered by construction rather than by a reference kept in step by hand.\n\nIt is declared as `state_machine.transitions[].approval`.\n",
+      "type": "object",
+      "properties": {
+        "on_reject": {
+          "$ref": "#/$defs/ApprovalReject",
+          "description": "OnReject declares the state the record moves to when the chain is",
+          "nullable": true
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ApprovalStep"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApprovalStep": {
+      "description": "ApprovalStep is one approval step in the approval chain.\nSteps are evaluated sequentially; each must reach quorum before the next begins.\n",
+      "type": "object",
+      "properties": {
+        "approvers": {
+          "description": "quorum, default 1",
+          "type": "integer"
+        },
+        "description": {
+          "description": "Description explains what to check before deciding (S15).",
+          "type": "string"
+        },
+        "display_fields": {
+          "description": "DisplayFields names the record fields the approver needs to see to decide",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "escalation": {
+          "$ref": "#/$defs/StepEscalation",
+          "nullable": true
+        },
+        "mode": {
+          "$ref": "#/$defs/ApprovalStepMode",
+          "description": "all | any | sequential"
+        },
+        "name": {
+          "description": "Name identifies the step, so state about a workflow in flight can point at",
+          "type": "string",
+          "examples": [
+            "supervisor-check"
+          ],
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "permission": {
+          "description": "Permission is the DUTY this step requires — the `resource + action` form",
+          "type": "string",
+          "examples": [
+            "approve-void"
+          ]
+        },
+        "roles": {
+          "description": "Roles lists the roles eligible to sign — who, by NAME.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[gl.supervisor]"
+          ]
+        },
+        "title": {
+          "description": "Title is the human label for this approval task (S15). Without it the",
+          "type": "string"
+        },
+        "when": {
+          "description": "FormSpecExpr — skip step if false",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApprovalStepMode": {
+      "title": "Workflow Step Mode",
+      "description": "How a step's quorum is collected. Closed set. `all` is refused at validate — use `any` with `approvers: N`, or `sequential`.",
+      "type": "string",
+      "enum": [
+        "all",
+        "any",
+        "sequential"
+      ]
+    },
     "AssignmentDecl": {
       "description": "AssignmentDecl declares that an entity records a principal→dimension mapping\n(S5): a row of this entity links the principal identified by `PrincipalField`\nto the dimension value held in `Field`. The server resolves `from: session`\nrow-scope attributes from these declarations.\n",
       "type": "object",
@@ -1073,13 +1177,16 @@
     },
     "EventChannel": {
       "title": "Event Channel",
-      "description": "Delivery channel for an event. Closed set — every name is implemented by the delivery pipeline.",
+      "description": "Delivery channel for an event. `audit_log`/`websocket`/`pubsub`/`reliable_event` are implemented by the delivery pipeline; `queue` is declared by the spec but not yet delivered (todo 7.7.6).",
       "type": "string",
       "enum": [
         "audit_log",
         "websocket",
         "queue",
-        "reliable_event"
+        "pubsub",
+        "reliable_event",
+        "notification",
+        "webhook"
       ]
     },
     "EventDecl": {
@@ -1122,17 +1229,30 @@
       "properties": {
         "channel": {
           "$ref": "#/$defs/EventChannel",
-          "description": "audit_log | websocket | queue | reliable_event"
+          "description": "audit_log | websocket | queue | pubsub | reliable_event"
         },
         "dead_letter": {
           "$ref": "#/$defs/DeliveryTarget",
           "nullable": true
         },
+        "handler": {
+          "description": "Handler names an optional Service action that also delivers this event",
+          "type": "string"
+        },
         "idempotency_key": {
           "type": "string"
         },
         "job": {
-          "type": "string"
+          "description": "Job names the Service action a `queue` entry runs in the background,",
+          "type": "string",
+          "examples": [
+            "receipt-jobs.generate-receipt"
+          ]
+        },
+        "notification": {
+          "$ref": "#/$defs/NotificationDecl",
+          "description": "Notification describes what a `notification` entry delivers (todo 7.7.6).",
+          "nullable": true
         },
         "retry": {
           "$ref": "#/$defs/RetryDecl",
@@ -1140,6 +1260,12 @@
         },
         "target": {
           "$ref": "#/$defs/DeliveryTarget",
+          "description": "Target addresses an Entity/Service action for `reliable_event`.",
+          "nullable": true
+        },
+        "webhook": {
+          "$ref": "#/$defs/WebhookDeliveryDecl",
+          "description": "Webhook describes where a `webhook` entry posts the event (todo 7.7.6).",
           "nullable": true
         }
       },
@@ -1449,7 +1575,7 @@
       ]
     },
     "FilterSpec": {
-      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: an immutable, server-side filter — always merged into\n    the list request, never rendered as a control and not user-clearable.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n\nA value can also come from the request context instead of the manifest, via\n`from` (S2/#6): `from: session` takes it from an identity attribute named by\n`attr` and is resolved server-side only (a client cannot supply or widen it),\nwhile `from: route` takes it from the query parameter named by `param` (e.g. an\nunguessable guest token, where the token itself is the credential).\n",
+      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: a filter the renderer always merges into the list\n    request — never rendered as a control and not user-clearable *in the UI*.\n    It is NOT an authorization boundary: the merge happens in the browser\n    (renderers/react-shadcn/src/lib/filters.ts), so a client that calls the\n    API directly simply omits it. For a filter the server enforces, use the\n    entity's `row_scope` (EntitySpec.RowScope) instead.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n\nA value can also come from the request context instead of the manifest, via\n`from` (S2/#6): `from: session` takes it from an identity attribute named by\n`attr` and is resolved server-side only (a client cannot supply or widen it),\nwhile `from: route` takes it from the query parameter named by `param` (e.g. an\nunguessable guest token, where the token itself is the credential).\n\nWhen `from` is empty the value is the LITERAL in `value`, which is what makes\na server-enforced constant expressible — e.g. a role granted `list` on orders\nbut only for `{field: status, op: in, value: \"paid,in_kitchen\"}`. `default` is\nNOT that literal: it only pre-seeds a user-adjustable control, and the user\n(or any client) can change or clear it.\n",
       "type": "object",
       "properties": {
         "all_label": {
@@ -1464,14 +1590,14 @@
           ]
         },
         "default": {
-          "description": "Pre-set value for a user-adjustable filter. Supports \\\"today\\\" / \\\"today()\\\", resolved by the renderer as the server's current date.",
+          "description": "Pre-set value for a user-adjustable filter. Supports \\\"today\\\" / \\\"today()\\\", resolved by the renderer as the server's current date. NOT a server-enforced constant — use `value` for that.",
           "type": "string"
         },
         "field": {
           "type": "string"
         },
         "from": {
-          "description": "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = static `default`.",
+          "description": "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = the literal `value`.",
           "type": "string",
           "enum": [
             "session",
@@ -1520,6 +1646,13 @@
             "select",
             "date",
             "date_range"
+          ]
+        },
+        "value": {
+          "description": "Literal value used when `from` is empty. For `op: in`/`nin`/`between` this may be a comma-separated list, e.g. \\\"paid,in_kitchen\\\".",
+          "type": "string",
+          "examples": [
+            "paid,in_kitchen,ready"
           ]
         }
       },
@@ -2056,7 +2189,6 @@
         "Service",
         "Config",
         "Subscription",
-        "Workflow",
         "Api",
         "KindDefinition",
         "Webhook",
@@ -2232,6 +2364,47 @@
       },
       "required": [
         "strategy"
+      ],
+      "additionalProperties": false
+    },
+    "NotificationDecl": {
+      "description": "NotificationDecl describes the in-app notification a `notification` delivery\nentry creates.\n\nEvery field is a template over the EVENT PAYLOAD (`{dotted.path}`), because\nthat is what the delivery receives: the publisher declared `payload.fields`,\nso what is available here is exactly that projection — not the record.\n",
+      "type": "object",
+      "properties": {
+        "body": {
+          "description": "Body is the notification's text, interpolated from the payload.",
+          "type": "string"
+        },
+        "level": {
+          "description": "Level is the notification's severity (info | warning | critical).",
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "critical"
+          ],
+          "examples": [
+            "info"
+          ]
+        },
+        "recipient": {
+          "description": "Recipient is the payload path whose value becomes the notification's",
+          "type": "string",
+          "examples": [
+            "customer_id"
+          ]
+        },
+        "title": {
+          "description": "Title is the notification's heading, interpolated from the payload.",
+          "type": "string",
+          "examples": [
+            "Pesanan {number} dibayar"
+          ]
+        }
+      },
+      "required": [
+        "recipient",
+        "title"
       ],
       "additionalProperties": false
     },
@@ -3738,28 +3911,27 @@
       "additionalProperties": false
     },
     "StepEscalation": {
-      "description": "StepEscalation configures timeout and reassignment for one step.\n",
+      "description": "StepEscalation configures the timeout and the takeover that follows it for one\nstep.\n\nBoth fields are required together. The only escalation effect the engine\nimplements is REASSIGNMENT, so an `after` with nothing to reassign to — or a\nreassign with no timeout to fire — would pass through silently and change\nnothing at all. That is the same \"declaration with no effect\" shape this file\nkeeps refusing, and it is why `notify_roles` was removed: notification delivery\ndoes not exist, so the field could never have done anything.\n",
       "type": "object",
       "properties": {
         "after": {
-          "description": "duration e.g. \"48h\"",
-          "type": "string"
+          "description": "@schema {example: \"48h\"}",
+          "type": "string",
+          "examples": [
+            "48h"
+          ]
         },
-        "notify_roles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "reassign_roles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "reassign": {
+          "description": "Reassign names the DUTY that gains approval rights when the timeout fires.",
+          "type": "string",
+          "examples": [
+            "manager-check"
+          ]
         }
       },
       "required": [
-        "after"
+        "after",
+        "reassign"
       ],
       "additionalProperties": false
     },
@@ -3999,6 +4171,11 @@
       "description": "TransitionDecl defines a transition between states (Core §14).\nThe canonical manifest key for the triggering action is `via`;\n`action` is accepted as a legacy alias.\n",
       "type": "object",
       "properties": {
+        "approval": {
+          "$ref": "#/$defs/ApprovalSpec",
+          "description": "Approval gates this transition behind an approval chain (02-core-extended.md",
+          "nullable": true
+        },
         "audit": {
           "description": "Audit records this transition in the business audit trail. Meaningful only",
           "type": "boolean"
@@ -4267,6 +4444,30 @@
       ],
       "additionalProperties": false
     },
+    "WebhookDeliveryDecl": {
+      "description": "WebhookDeliveryDecl declares where a `webhook` delivery entry posts the event.\n\nUNSIGNED, deliberately, for this first version: there is no HMAC signature and\nno subscriber registry. The endpoint is declared where the consequence is —\n`url:` literally, or `url_from: {config: \u003ckey\u003e}` when the address belongs to\ndeployment config rather than to the module. Signing needs a per-subscriber\nsecret store, which is a separate decision (todo 7.7.6); until then a signed\nentry would be a promise the runtime cannot keep.\n",
+      "type": "object",
+      "properties": {
+        "headers": {
+          "description": "Headers are extra request headers (e.g. a routing key). Values may contain",
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "url": {
+          "description": "URL is the endpoint, literal. Use `url_from` when the address is",
+          "type": "string",
+          "examples": [
+            "https://example.com/hooks/order-paid"
+          ]
+        },
+        "url_from": {
+          "$ref": "#/$defs/WebhookURLRef",
+          "description": "URLFrom resolves the endpoint from a Config key instead of a literal.",
+          "nullable": true
+        }
+      },
+      "additionalProperties": false
+    },
     "WebhookKeyRef": {
       "description": "WebhookKeyRef references the secret key via config.\n",
       "type": "object",
@@ -4329,6 +4530,23 @@
       "required": [
         "header",
         "key"
+      ],
+      "additionalProperties": false
+    },
+    "WebhookURLRef": {
+      "description": "WebhookURLRef resolves a webhook endpoint from a Config key.\n",
+      "type": "object",
+      "properties": {
+        "config": {
+          "description": "@schema {example: \"billing.webhook_url\"}",
+          "type": "string",
+          "examples": [
+            "billing.webhook_url"
+          ]
+        }
+      },
+      "required": [
+        "config"
       ],
       "additionalProperties": false
     },
@@ -4463,135 +4681,6 @@
         "label",
         "field"
       ],
-      "additionalProperties": false
-    },
-    "WorkflowEscalation": {
-      "description": "WorkflowEscalation defines global escalation for the entire workflow.\n",
-      "type": "object",
-      "properties": {
-        "after": {
-          "type": "string"
-        },
-        "notify_roles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "after"
-      ],
-      "additionalProperties": false
-    },
-    "WorkflowReject": {
-      "description": "WorkflowReject declares the target state when the workflow is rejected.\n",
-      "type": "object",
-      "properties": {
-        "to": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "to"
-      ],
-      "additionalProperties": false
-    },
-    "WorkflowStep": {
-      "description": "WorkflowStep is one approval step in the workflow chain.\nSteps are evaluated sequentially; each must reach quorum before the next begins.\n",
-      "type": "object",
-      "properties": {
-        "approvers": {
-          "description": "quorum, default 1",
-          "type": "integer"
-        },
-        "description": {
-          "description": "Description explains what to check before deciding (S15).",
-          "type": "string"
-        },
-        "display_fields": {
-          "description": "DisplayFields names the record fields the approver needs to see to decide",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "escalation": {
-          "$ref": "#/$defs/StepEscalation",
-          "nullable": true
-        },
-        "mode": {
-          "$ref": "#/$defs/WorkflowStepMode",
-          "description": "all | any | sequential"
-        },
-        "roles": {
-          "description": "@schema {example: \"[gl.supervisor]\"}",
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "examples": [
-            "[gl.supervisor]"
-          ]
-        },
-        "title": {
-          "description": "Title is the human label for this approval task (S15). Without it the",
-          "type": "string"
-        },
-        "when": {
-          "description": "FormSpecExpr — skip step if false",
-          "type": "string"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorkflowStepMode": {
-      "title": "Workflow Step Mode",
-      "description": "How a step's quorum is collected. Closed set.",
-      "type": "string",
-      "enum": [
-        "all",
-        "any",
-        "sequential"
-      ]
-    },
-    "WorkflowTransitionRef": {
-      "description": "WorkflowTransitionRef identifies the intercepted transition. Two forms exist\nand are mutually exclusive (S9, kafe 1.7):\n\n\ttransition: { name: void-order }            # by transition name — preferred\n\ttransition: { from: draft, to: posted }     # by state pair (legacy)\n\nThe name form is preferred because a transition may have **several** origin\nstates (`from: [paid, in_kitchen, ready, served]`). A state pair can only\ndescribe one of them, so a workflow written as `from: paid` silently does not\ncover the other three — a hole with no error and no log. Naming the transition\ncovers all of its origin states at once, and the name can be validated against\nthe entity's state machine.\n",
-      "type": "object",
-      "properties": {
-        "from": {
-          "description": "@schema {example: \"draft\"}",
-          "type": "string",
-          "examples": [
-            "draft"
-          ]
-        },
-        "name": {
-          "description": "Name is the transition's `via` name in the entity's state machine,",
-          "type": "string",
-          "examples": [
-            "void-order"
-          ]
-        },
-        "to": {
-          "description": "@schema {example: \"posted\"}",
-          "type": "string",
-          "examples": [
-            "posted"
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorkflowTrigger": {
-      "description": "WorkflowTrigger declares which state machine transition this workflow\nintercepts.\n",
-      "type": "object",
-      "properties": {
-        "transition": {
-          "$ref": "#/$defs/WorkflowTransitionRef",
-          "nullable": true
-        }
-      },
       "additionalProperties": false
     }
   },
@@ -5018,6 +5107,110 @@
       ],
       "additionalProperties": false
     },
+    "ApprovalReject": {
+      "description": "ApprovalReject declares the target state when the workflow is rejected.\n",
+      "type": "object",
+      "properties": {
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "ApprovalSpec": {
+      "description": "ApprovalSpec declares the approval gate on a state-machine transition\n(02-core-extended.md §2). It replaces the former `kind: Workflow` manifest:\nthe gate lives ON the transition it intercepts, so the declaration cannot\ndrift from the thing it gates, and a transition with several origin states is\ncovered by construction rather than by a reference kept in step by hand.\n\nIt is declared as `state_machine.transitions[].approval`.\n",
+      "type": "object",
+      "properties": {
+        "on_reject": {
+          "$ref": "#/$defs/ApprovalReject",
+          "description": "OnReject declares the state the record moves to when the chain is",
+          "nullable": true
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ApprovalStep"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApprovalStep": {
+      "description": "ApprovalStep is one approval step in the approval chain.\nSteps are evaluated sequentially; each must reach quorum before the next begins.\n",
+      "type": "object",
+      "properties": {
+        "approvers": {
+          "description": "quorum, default 1",
+          "type": "integer"
+        },
+        "description": {
+          "description": "Description explains what to check before deciding (S15).",
+          "type": "string"
+        },
+        "display_fields": {
+          "description": "DisplayFields names the record fields the approver needs to see to decide",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "escalation": {
+          "$ref": "#/$defs/StepEscalation",
+          "nullable": true
+        },
+        "mode": {
+          "$ref": "#/$defs/ApprovalStepMode",
+          "description": "all | any | sequential"
+        },
+        "name": {
+          "description": "Name identifies the step, so state about a workflow in flight can point at",
+          "type": "string",
+          "examples": [
+            "supervisor-check"
+          ],
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "permission": {
+          "description": "Permission is the DUTY this step requires — the `resource + action` form",
+          "type": "string",
+          "examples": [
+            "approve-void"
+          ]
+        },
+        "roles": {
+          "description": "Roles lists the roles eligible to sign — who, by NAME.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[gl.supervisor]"
+          ]
+        },
+        "title": {
+          "description": "Title is the human label for this approval task (S15). Without it the",
+          "type": "string"
+        },
+        "when": {
+          "description": "FormSpecExpr — skip step if false",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApprovalStepMode": {
+      "title": "Workflow Step Mode",
+      "description": "How a step's quorum is collected. Closed set. `all` is refused at validate — use `any` with `approvers: N`, or `sequential`.",
+      "type": "string",
+      "enum": [
+        "all",
+        "any",
+        "sequential"
+      ]
+    },
     "AssignmentDecl": {
       "description": "AssignmentDecl declares that an entity records a principal→dimension mapping\n(S5): a row of this entity links the principal identified by `PrincipalField`\nto the dimension value held in `Field`. The server resolves `from: session`\nrow-scope attributes from these declarations.\n",
       "type": "object",
@@ -5668,13 +5861,16 @@
     },
     "EventChannel": {
       "title": "Event Channel",
-      "description": "Delivery channel for an event. Closed set — every name is implemented by the delivery pipeline.",
+      "description": "Delivery channel for an event. `audit_log`/`websocket`/`pubsub`/`reliable_event` are implemented by the delivery pipeline; `queue` is declared by the spec but not yet delivered (todo 7.7.6).",
       "type": "string",
       "enum": [
         "audit_log",
         "websocket",
         "queue",
-        "reliable_event"
+        "pubsub",
+        "reliable_event",
+        "notification",
+        "webhook"
       ]
     },
     "EventDecl": {
@@ -5717,17 +5913,30 @@
       "properties": {
         "channel": {
           "$ref": "#/$defs/EventChannel",
-          "description": "audit_log | websocket | queue | reliable_event"
+          "description": "audit_log | websocket | queue | pubsub | reliable_event"
         },
         "dead_letter": {
           "$ref": "#/$defs/DeliveryTarget",
           "nullable": true
         },
+        "handler": {
+          "description": "Handler names an optional Service action that also delivers this event",
+          "type": "string"
+        },
         "idempotency_key": {
           "type": "string"
         },
         "job": {
-          "type": "string"
+          "description": "Job names the Service action a `queue` entry runs in the background,",
+          "type": "string",
+          "examples": [
+            "receipt-jobs.generate-receipt"
+          ]
+        },
+        "notification": {
+          "$ref": "#/$defs/NotificationDecl",
+          "description": "Notification describes what a `notification` entry delivers (todo 7.7.6).",
+          "nullable": true
         },
         "retry": {
           "$ref": "#/$defs/RetryDecl",
@@ -5735,6 +5944,12 @@
         },
         "target": {
           "$ref": "#/$defs/DeliveryTarget",
+          "description": "Target addresses an Entity/Service action for `reliable_event`.",
+          "nullable": true
+        },
+        "webhook": {
+          "$ref": "#/$defs/WebhookDeliveryDecl",
+          "description": "Webhook describes where a `webhook` entry posts the event (todo 7.7.6).",
           "nullable": true
         }
       },
@@ -6044,7 +6259,7 @@
       ]
     },
     "FilterSpec": {
-      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: an immutable, server-side filter — always merged into\n    the list request, never rendered as a control and not user-clearable.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n\nA value can also come from the request context instead of the manifest, via\n`from` (S2/#6): `from: session` takes it from an identity attribute named by\n`attr` and is resolved server-side only (a client cannot supply or widen it),\nwhile `from: route` takes it from the query parameter named by `param` (e.g. an\nunguessable guest token, where the token itself is the credential).\n",
+      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: a filter the renderer always merges into the list\n    request — never rendered as a control and not user-clearable *in the UI*.\n    It is NOT an authorization boundary: the merge happens in the browser\n    (renderers/react-shadcn/src/lib/filters.ts), so a client that calls the\n    API directly simply omits it. For a filter the server enforces, use the\n    entity's `row_scope` (EntitySpec.RowScope) instead.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n\nA value can also come from the request context instead of the manifest, via\n`from` (S2/#6): `from: session` takes it from an identity attribute named by\n`attr` and is resolved server-side only (a client cannot supply or widen it),\nwhile `from: route` takes it from the query parameter named by `param` (e.g. an\nunguessable guest token, where the token itself is the credential).\n\nWhen `from` is empty the value is the LITERAL in `value`, which is what makes\na server-enforced constant expressible — e.g. a role granted `list` on orders\nbut only for `{field: status, op: in, value: \"paid,in_kitchen\"}`. `default` is\nNOT that literal: it only pre-seeds a user-adjustable control, and the user\n(or any client) can change or clear it.\n",
       "type": "object",
       "properties": {
         "all_label": {
@@ -6059,14 +6274,14 @@
           ]
         },
         "default": {
-          "description": "Pre-set value for a user-adjustable filter. Supports \\\"today\\\" / \\\"today()\\\", resolved by the renderer as the server's current date.",
+          "description": "Pre-set value for a user-adjustable filter. Supports \\\"today\\\" / \\\"today()\\\", resolved by the renderer as the server's current date. NOT a server-enforced constant — use `value` for that.",
           "type": "string"
         },
         "field": {
           "type": "string"
         },
         "from": {
-          "description": "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = static `default`.",
+          "description": "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = the literal `value`.",
           "type": "string",
           "enum": [
             "session",
@@ -6115,6 +6330,13 @@
             "select",
             "date",
             "date_range"
+          ]
+        },
+        "value": {
+          "description": "Literal value used when `from` is empty. For `op: in`/`nin`/`between` this may be a comma-separated list, e.g. \\\"paid,in_kitchen\\\".",
+          "type": "string",
+          "examples": [
+            "paid,in_kitchen,ready"
           ]
         }
       },
@@ -6651,7 +6873,6 @@
         "Service",
         "Config",
         "Subscription",
-        "Workflow",
         "Api",
         "KindDefinition",
         "Webhook",
@@ -6827,6 +7048,47 @@
       },
       "required": [
         "strategy"
+      ],
+      "additionalProperties": false
+    },
+    "NotificationDecl": {
+      "description": "NotificationDecl describes the in-app notification a `notification` delivery\nentry creates.\n\nEvery field is a template over the EVENT PAYLOAD (`{dotted.path}`), because\nthat is what the delivery receives: the publisher declared `payload.fields`,\nso what is available here is exactly that projection — not the record.\n",
+      "type": "object",
+      "properties": {
+        "body": {
+          "description": "Body is the notification's text, interpolated from the payload.",
+          "type": "string"
+        },
+        "level": {
+          "description": "Level is the notification's severity (info | warning | critical).",
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "critical"
+          ],
+          "examples": [
+            "info"
+          ]
+        },
+        "recipient": {
+          "description": "Recipient is the payload path whose value becomes the notification's",
+          "type": "string",
+          "examples": [
+            "customer_id"
+          ]
+        },
+        "title": {
+          "description": "Title is the notification's heading, interpolated from the payload.",
+          "type": "string",
+          "examples": [
+            "Pesanan {number} dibayar"
+          ]
+        }
+      },
+      "required": [
+        "recipient",
+        "title"
       ],
       "additionalProperties": false
     },
@@ -8333,28 +8595,27 @@
       "additionalProperties": false
     },
     "StepEscalation": {
-      "description": "StepEscalation configures timeout and reassignment for one step.\n",
+      "description": "StepEscalation configures the timeout and the takeover that follows it for one\nstep.\n\nBoth fields are required together. The only escalation effect the engine\nimplements is REASSIGNMENT, so an `after` with nothing to reassign to — or a\nreassign with no timeout to fire — would pass through silently and change\nnothing at all. That is the same \"declaration with no effect\" shape this file\nkeeps refusing, and it is why `notify_roles` was removed: notification delivery\ndoes not exist, so the field could never have done anything.\n",
       "type": "object",
       "properties": {
         "after": {
-          "description": "duration e.g. \"48h\"",
-          "type": "string"
+          "description": "@schema {example: \"48h\"}",
+          "type": "string",
+          "examples": [
+            "48h"
+          ]
         },
-        "notify_roles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "reassign_roles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "reassign": {
+          "description": "Reassign names the DUTY that gains approval rights when the timeout fires.",
+          "type": "string",
+          "examples": [
+            "manager-check"
+          ]
         }
       },
       "required": [
-        "after"
+        "after",
+        "reassign"
       ],
       "additionalProperties": false
     },
@@ -8594,6 +8855,11 @@
       "description": "TransitionDecl defines a transition between states (Core §14).\nThe canonical manifest key for the triggering action is `via`;\n`action` is accepted as a legacy alias.\n",
       "type": "object",
       "properties": {
+        "approval": {
+          "$ref": "#/$defs/ApprovalSpec",
+          "description": "Approval gates this transition behind an approval chain (02-core-extended.md",
+          "nullable": true
+        },
         "audit": {
           "description": "Audit records this transition in the business audit trail. Meaningful only",
           "type": "boolean"
@@ -8862,6 +9128,30 @@
       ],
       "additionalProperties": false
     },
+    "WebhookDeliveryDecl": {
+      "description": "WebhookDeliveryDecl declares where a `webhook` delivery entry posts the event.\n\nUNSIGNED, deliberately, for this first version: there is no HMAC signature and\nno subscriber registry. The endpoint is declared where the consequence is —\n`url:` literally, or `url_from: {config: \u003ckey\u003e}` when the address belongs to\ndeployment config rather than to the module. Signing needs a per-subscriber\nsecret store, which is a separate decision (todo 7.7.6); until then a signed\nentry would be a promise the runtime cannot keep.\n",
+      "type": "object",
+      "properties": {
+        "headers": {
+          "description": "Headers are extra request headers (e.g. a routing key). Values may contain",
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "url": {
+          "description": "URL is the endpoint, literal. Use `url_from` when the address is",
+          "type": "string",
+          "examples": [
+            "https://example.com/hooks/order-paid"
+          ]
+        },
+        "url_from": {
+          "$ref": "#/$defs/WebhookURLRef",
+          "description": "URLFrom resolves the endpoint from a Config key instead of a literal.",
+          "nullable": true
+        }
+      },
+      "additionalProperties": false
+    },
     "WebhookKeyRef": {
       "description": "WebhookKeyRef references the secret key via config.\n",
       "type": "object",
@@ -8924,6 +9214,23 @@
       "required": [
         "header",
         "key"
+      ],
+      "additionalProperties": false
+    },
+    "WebhookURLRef": {
+      "description": "WebhookURLRef resolves a webhook endpoint from a Config key.\n",
+      "type": "object",
+      "properties": {
+        "config": {
+          "description": "@schema {example: \"billing.webhook_url\"}",
+          "type": "string",
+          "examples": [
+            "billing.webhook_url"
+          ]
+        }
+      },
+      "required": [
+        "config"
       ],
       "additionalProperties": false
     },
@@ -9059,135 +9366,6 @@
         "field"
       ],
       "additionalProperties": false
-    },
-    "WorkflowEscalation": {
-      "description": "WorkflowEscalation defines global escalation for the entire workflow.\n",
-      "type": "object",
-      "properties": {
-        "after": {
-          "type": "string"
-        },
-        "notify_roles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "after"
-      ],
-      "additionalProperties": false
-    },
-    "WorkflowReject": {
-      "description": "WorkflowReject declares the target state when the workflow is rejected.\n",
-      "type": "object",
-      "properties": {
-        "to": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "to"
-      ],
-      "additionalProperties": false
-    },
-    "WorkflowStep": {
-      "description": "WorkflowStep is one approval step in the workflow chain.\nSteps are evaluated sequentially; each must reach quorum before the next begins.\n",
-      "type": "object",
-      "properties": {
-        "approvers": {
-          "description": "quorum, default 1",
-          "type": "integer"
-        },
-        "description": {
-          "description": "Description explains what to check before deciding (S15).",
-          "type": "string"
-        },
-        "display_fields": {
-          "description": "DisplayFields names the record fields the approver needs to see to decide",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "escalation": {
-          "$ref": "#/$defs/StepEscalation",
-          "nullable": true
-        },
-        "mode": {
-          "$ref": "#/$defs/WorkflowStepMode",
-          "description": "all | any | sequential"
-        },
-        "roles": {
-          "description": "@schema {example: \"[gl.supervisor]\"}",
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "examples": [
-            "[gl.supervisor]"
-          ]
-        },
-        "title": {
-          "description": "Title is the human label for this approval task (S15). Without it the",
-          "type": "string"
-        },
-        "when": {
-          "description": "FormSpecExpr — skip step if false",
-          "type": "string"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorkflowStepMode": {
-      "title": "Workflow Step Mode",
-      "description": "How a step's quorum is collected. Closed set.",
-      "type": "string",
-      "enum": [
-        "all",
-        "any",
-        "sequential"
-      ]
-    },
-    "WorkflowTransitionRef": {
-      "description": "WorkflowTransitionRef identifies the intercepted transition. Two forms exist\nand are mutually exclusive (S9, kafe 1.7):\n\n\ttransition: { name: void-order }            # by transition name — preferred\n\ttransition: { from: draft, to: posted }     # by state pair (legacy)\n\nThe name form is preferred because a transition may have **several** origin\nstates (`from: [paid, in_kitchen, ready, served]`). A state pair can only\ndescribe one of them, so a workflow written as `from: paid` silently does not\ncover the other three — a hole with no error and no log. Naming the transition\ncovers all of its origin states at once, and the name can be validated against\nthe entity's state machine.\n",
-      "type": "object",
-      "properties": {
-        "from": {
-          "description": "@schema {example: \"draft\"}",
-          "type": "string",
-          "examples": [
-            "draft"
-          ]
-        },
-        "name": {
-          "description": "Name is the transition's `via` name in the entity's state machine,",
-          "type": "string",
-          "examples": [
-            "void-order"
-          ]
-        },
-        "to": {
-          "description": "@schema {example: \"posted\"}",
-          "type": "string",
-          "examples": [
-            "posted"
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorkflowTrigger": {
-      "description": "WorkflowTrigger declares which state machine transition this workflow\nintercepts.\n",
-      "type": "object",
-      "properties": {
-        "transition": {
-          "$ref": "#/$defs/WorkflowTransitionRef",
-          "nullable": true
-        }
-      },
-      "additionalProperties": false
     }
   },
   "title": "FormSpec Manifest",
@@ -9236,7 +9414,6 @@
         "Webhook",
         "Widget",
         "Wizard",
-        "Workflow",
         "Workspace"
       ]
     },
@@ -9389,17 +9566,6 @@
               "examples": [
                 "jsonb-persist"
               ]
-            },
-            "public_entities": {
-              "description": "Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs",
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/PublicEntityDecl"
-              },
-              "examples": [
-                "[{entity: catalog/product, actions: [list, find]}]"
-              ],
-              "nullable": true
             },
             "publishes": {
               "description": "cross-app interfaces offered",
@@ -10102,88 +10268,6 @@
           },
           "required": [
             "handler"
-          ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "apiVersion",
-        "kind",
-        "metadata",
-        "spec"
-      ]
-    },
-    {
-      "properties": {
-        "apiVersion": {
-          "type": "string",
-          "const": "formspec.dev/v1"
-        },
-        "kind": {
-          "type": "string",
-          "const": "Workflow"
-        },
-        "metadata": {
-          "description": "Metadata is common to all FormSpec resources.\n",
-          "type": "object",
-          "properties": {
-            "annotations": {
-              "type": "object",
-              "additionalProperties": {}
-            },
-            "description": {
-              "type": "string"
-            },
-            "labels": {
-              "type": "object",
-              "additionalProperties": {}
-            },
-            "module": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "name"
-          ],
-          "additionalProperties": false
-        },
-        "spec": {
-          "title": "Workflow Spec",
-          "description": "WorkflowSpec defines an approval workflow attached to a state machine\ntransition (02-core-extended.md §2).\n",
-          "type": "object",
-          "properties": {
-            "entity": {
-              "description": "@schema {example: \"gl.journal-entry\"}",
-              "type": "string",
-              "examples": [
-                "gl.journal-entry"
-              ]
-            },
-            "escalation": {
-              "$ref": "#/$defs/WorkflowEscalation",
-              "nullable": true
-            },
-            "on": {
-              "$ref": "#/$defs/WorkflowTrigger",
-              "nullable": true
-            },
-            "on_reject": {
-              "$ref": "#/$defs/WorkflowReject",
-              "nullable": true
-            },
-            "steps": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/WorkflowStep"
-              }
-            }
-          },
-          "required": [
-            "entity",
-            "on"
           ],
           "additionalProperties": false
         }

@@ -111,7 +111,9 @@ func (r *WorkspaceRegistry) Ensure(ctx context.Context, info WorkspaceInfo) (cre
 	if _, err := r.store.Insert(ctx, db.InsertParams{
 		WorkspaceID: WorkspaceRegistryScope,
 		CreatedBy:   "system",
-		Data:        data,
+		// Auth internals run with no caller identity to consult.
+		SystemCaller: true,
+		Data:         data,
 	}); err != nil {
 		return false, fmt.Errorf("auth: insert workspace %q: %w", info.Slug, err)
 	}
@@ -148,7 +150,11 @@ func (r *WorkspaceRegistry) Delete(ctx context.Context, slug string) error {
 	if rec == nil {
 		return ErrWorkspaceNotFound
 	}
-	if err := r.store.SoftDelete(ctx, WorkspaceRegistryScope, rec.ID); err != nil {
+	if err := r.store.SoftDelete(ctx, db.DeleteParams{
+		WorkspaceID:  WorkspaceRegistryScope,
+		ID:           rec.ID,
+		SystemCaller: true,
+	}); err != nil {
 		return fmt.Errorf("auth: delete workspace %q: %w", slug, err)
 	}
 	return nil

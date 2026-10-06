@@ -969,7 +969,7 @@ func restoreFromWithStorage(
 								continue
 							}
 							data[nkField] = newKey
-							if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: workspace, CreatedBy: "restore", Data: data}); err != nil {
+							if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: workspace, CreatedBy: "restore", Data: data, SystemCaller: true}); err != nil {
 								_, _ = fmt.Fprintf(os.Stderr, "Error: insert (remap) %s.%s: %v\n", module, entityName, err)
 								report.Failed++
 								entityReport.Failed++
@@ -987,7 +987,7 @@ func restoreFromWithStorage(
 				entityReport.Restored++
 				continue
 			}
-			if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: workspace, CreatedBy: "restore", Data: data}); err != nil {
+			if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: workspace, CreatedBy: "restore", Data: data, SystemCaller: true}); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Error: insert %s.%s: %v\n", module, entityName, err)
 				report.Failed++
 				entityReport.Failed++
@@ -1083,6 +1083,9 @@ func updateByNaturalKey(ctx context.Context, store *db.EntityStore, workspaceID,
 	_, err = store.Update(ctx, db.UpdateParams{
 		WorkspaceID: workspaceID, ID: rec.ID, Version: rec.Version,
 		UpdatedBy: "restore", Data: data,
+		// Restore is a framework operation: the rows come from a backup, not
+		// from a caller whose permissions could be consulted.
+		SystemCaller: true,
 	})
 	return err
 }

@@ -115,7 +115,10 @@ func setupTransitionContractFixture(t *testing.T, putContractOnAction bool, minR
 	recordID, err := store.Insert(context.Background(), db.InsertParams{
 		WorkspaceID: "t1",
 		CreatedBy:   "tester",
-		Data:        map[string]any{"status": "posted"},
+		// Seed straight into a post-initial state → declare a system write
+		// (kafe 10.72: create must otherwise start at the initial state).
+		SystemCaller: true,
+		Data:         map[string]any{"status": "posted"},
 	})
 	if err != nil {
 		t.Fatalf("seed insert: %v", err)
@@ -292,7 +295,9 @@ func TestPatchTransition_NoContractIsUnchanged(t *testing.T) {
 	}
 	id, err := store.Insert(context.Background(), db.InsertParams{
 		WorkspaceID: "t1", CreatedBy: "tester",
-		Data: map[string]any{"status": "posted"},
+		// System write: seed straight into a post-initial state (kafe 10.72).
+		SystemCaller: true,
+		Data:         map[string]any{"status": "posted"},
 	})
 	if err != nil {
 		t.Fatalf("seed insert: %v", err)

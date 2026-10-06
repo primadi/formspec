@@ -12,7 +12,6 @@ func KindMapping() []KindEntry {
 		{Kind: "Subscription", SpecStruct: "SubscriptionSpec"},
 
 		// — Core Extended —
-		{Kind: "Workflow", SpecStruct: "WorkflowSpec"},
 		{Kind: "Api", SpecStruct: "ApiSpec"},
 		{Kind: "Webhook", SpecStruct: "WebhookSpec"},
 		{Kind: "Integrator", SpecStruct: "IntegratorSpec"},

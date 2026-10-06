@@ -27,17 +27,44 @@ import (
 
 // viewKinds are the kinds a MenuItem.view may name — the "View resources" the
 // menu can navigate to.
+//
+// This is ONE of FOUR copies of the kind → route convention that must agree:
+//
+//	this map · (*Registry).ResolveViewRoute (internal/ui/registry.go) ·
+//	routeExists/navigationPrefix (internal/ui/meta.go) ·
+//	buildRoutes (renderers/react-shadcn/src/shell/router.tsx)
+//
+// Widget, Print, ApprovalInbox and NotificationCenter were each missing here
+// while the client registered a route for them, so an author who wrote a
+// perfectly navigable `view: approval-inbox:supervisor-inbox` menu entry was
+// told it "would navigate nowhere" (kafe-pos, todo 5.25.9).
 var viewKinds = map[spec.Kind]bool{
-	spec.KindPage:      true,
-	spec.KindForm:      true,
-	spec.KindTable:     true,
-	spec.KindWizard:    true,
-	spec.KindReport:    true,
-	spec.KindKanban:    true,
-	spec.KindTimeline:  true,
-	spec.KindCalendar:  true,
-	spec.KindDashboard: true,
-	spec.KindListing:   true,
+	spec.KindPage:               true,
+	spec.KindForm:               true,
+	spec.KindTable:              true,
+	spec.KindWizard:             true,
+	spec.KindReport:             true,
+	spec.KindKanban:             true,
+	spec.KindTimeline:           true,
+	spec.KindCalendar:           true,
+	spec.KindDashboard:          true,
+	spec.KindWidget:             true,
+	spec.KindListing:            true,
+	spec.KindPrint:              true,
+	spec.KindApprovalInbox:      true,
+	spec.KindNotificationCenter: true,
+}
+
+// viewKindNames lists viewKinds in a stable order for error messages. Deriving
+// it from the map (rather than hard-coding prose) means the message can never
+// again advertise a smaller vocabulary than the checker actually accepts.
+func viewKindNames() string {
+	names := make([]string, 0, len(viewKinds))
+	for k := range viewKinds {
+		names = append(names, string(k))
+	}
+	sort.Strings(names)
+	return strings.Join(names, "/")
 }
 
 // validateDanglingRefs checks App.module and MenuItem.view references against
@@ -103,8 +130,8 @@ func danglingMenuView(items []spec.MenuItem, views map[string]bool) string {
 	for _, it := range items {
 		if it.View != "" && !views[it.View] {
 			return fmt.Sprintf(
-				"menu item %q references view %q, which is not a registered Form/Table/Page/Wizard/Report/Kanban/Timeline/Calendar/Dashboard/Listing — the menu entry would navigate nowhere",
-				it.Label, it.View)
+				"menu item %q references view %q, which is not a registered %s — the menu entry would navigate nowhere",
+				it.Label, it.View, viewKindNames())
 		}
 		if msg := danglingMenuView(it.Children, views); msg != "" {
 			return msg

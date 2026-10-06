@@ -145,6 +145,29 @@ func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource
 						deps.logger().Error("event.audit_log_write_failed", map[string]any{"event": ev.Name, "error": err.Error()})
 					}
 				}
+			case "queue":
+				// Background job (todo 7.7.6): the entry names a Service action
+				// (`job:`), and the work runs in the outbox worker — which is the
+				// queue. `ValidateEventDurability` already requires
+				// `publish.durable: true` for this channel, so the entry IS in the
+				// outbox (enqueued here, or atomically with the mutation via
+				// PendingEvents); this case only makes sure it lands there.
+				//
+				// A non-durable queue entry cannot exist through the validator,
+				// but the struct can be built programmatically — refusing it is
+				// better than silently doing nothing.
+				if !ev.Durable {
+					deps.logger().Error("event.queue_not_durable", map[string]any{
+						"event": ev.Name, "resource": resource, "job": ch.Job,
+						"reason": "`queue` requires publish.durable: true — without the outbox there is no worker to run the job",
+					})
+					continue
+				}
+				if deps.Outbox != nil && !outboxAlreadyEnqueued {
+					if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
+						deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
+					}
+				}
 			case "reliable_event":
 				// Durable delivery with the strongest guarantee (Core Extended
 				// §12.1, §17): the event goes through the outbox, so the worker
@@ -162,9 +185,19 @@ func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource
 					}
 				}
 			default:
-				// queue, webhook, notification — explicitly out of scope for
-				// this pass (see plan notes).
-				deps.logger().Warn("event.channel_not_implemented", map[string]any{"event": ev.Name, "channel": ch.Channel})
+				// An unknown/undelivered channel did NOT deliver. This path is
+				// best-effort (non-durable) and has no retry to leverage, so the
+				// only honest signal is a loud log — but it must be an ERROR, not
+				// a warning: reporting it as merely noteworthy is how a
+				// consequence that never happens reads as "configured" (todo
+				// 7.7.6).
+				reason, known := spec.ChannelUnsupported(string(ch.Channel))
+				if !known {
+					reason = "the runtime has no delivery branch for it"
+				}
+				deps.logger().Error("event.channel_not_delivered", map[string]any{
+					"event": ev.Name, "resource": resource, "channel": ch.Channel, "reason": reason,
+				})
 			}
 		}
 

@@ -496,7 +496,7 @@ func TestAuthSessionRevoke_E2E(t *testing.T) {
 		t.Fatalf("list sessions: %v", err)
 	}
 	for _, rec := range res.Data {
-		if err := sessionStore.SoftDelete(context.Background(), "default", rec.ID); err != nil {
+		if err := sessionStore.SoftDelete(context.Background(), db.DeleteParams{WorkspaceID: "default", ID: rec.ID, SystemCaller: true}); err != nil {
 			t.Fatalf("delete session: %v", err)
 		}
 	}

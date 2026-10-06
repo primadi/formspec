@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"sort"
+	"strings"
 
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/pkg/spec"
@@ -78,6 +80,67 @@ func containsString(list []string, s string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// forbiddenFieldWrites returns the fields in a request payload that the caller
+// is not allowed to SET, because they lack the field's `required_permission`
+// (05-field-types.md §5.3).
+//
+// §5.3 guards BOTH directions — "tidak boleh melihat **atau menyetel** field
+// sensitif ini tanpa permission tambahan … dan penyetelannya di payload
+// ditolak". Only the read half used to exist (sanitizeData strips the field from
+// responses), which is the worse half to leave open: a caller who cannot READ a
+// field could still WRITE it, so `salary: 999999` was accepted from a role that
+// could not afterwards see what it had set.
+//
+// Rejection (not stripping) is what §5.3 specifies: silently dropping the value
+// would answer 200 for a request the caller believes succeeded, and they would
+// have no way to learn their input was ignored.
+//
+// Sorted for a deterministic message — the payload is a map, and a random order
+// would make the same request report a different field each time.
+func forbiddenFieldWrites(entitySpec *spec.EntitySpec, identity *auth.Identity, body map[string]any) []string {
+	if entitySpec == nil || len(body) == 0 {
+		return nil
+	}
+	var out []string
+	for _, f := range entitySpec.Fields {
+		if f.RequiredPermission == "" {
+			continue
+		}
+		// Only the caller's INTENT matters: a field present in the payload is a
+		// field they are trying to set. (An update merges onto the stored record,
+		// so a stored value the caller never sent must not be flagged here.)
+		if _, sent := body[f.Name]; !sent {
+			continue
+		}
+		if identity != nil && identity.HasPermission(f.RequiredPermission) {
+			continue
+		}
+		out = append(out, f.Name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// denyForbiddenFieldWrites writes a 403 and returns false when the payload sets
+// a field the caller may not set; returns true when the request may proceed.
+func (f *HandlerFactory) denyForbiddenFieldWrites(w http.ResponseWriter, entitySpec *spec.EntitySpec, identity *auth.Identity, body map[string]any) bool {
+	fields := forbiddenFieldWrites(entitySpec, identity, body)
+	if len(fields) == 0 {
+		return true
+	}
+	details := make([]ErrorDetailItem, 0, len(fields))
+	for _, name := range fields {
+		details = append(details, ErrorDetailItem{
+			Level:   "field",
+			Field:   name,
+			Message: "setting field " + name + " requires its required_permission",
+		})
+	}
+	writeErrorWithDetails(w, http.StatusForbidden, "FORBIDDEN",
+		"missing permission to set field(s): "+strings.Join(fields, ", "), details)
 	return false
 }
 

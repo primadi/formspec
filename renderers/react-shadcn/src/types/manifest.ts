@@ -27,7 +27,8 @@ export const KIND_ENTITY = "Entity"
 export const KIND_SERVICE = "Service"
 export const KIND_CONFIG = "Config"
 export const KIND_SUBSCRIPTION = "Subscription"
-export const KIND_WORKFLOW = "Workflow"
+// No KIND_WORKFLOW: approval is declared ON the entity transition it gates
+// (`state_machine.transitions[].approval`), not as a separate manifest kind.
 export const KIND_API = "Api"
 export const KIND_WEBHOOK = "Webhook"
 export const KIND_INTEGRATOR = "Integrator"
@@ -68,7 +69,6 @@ export type ResourceKind =
   | "Service"
   | "Config"
   | "Subscription"
-  | "Workflow"
   | "Api"
   | "Webhook"
   | "Integrator"
@@ -701,7 +701,7 @@ export interface PayloadDecl {
 }
 
 export interface EventDeliveryDecl {
-  channel: "audit_log" | "websocket" | "queue" | "reliable_event"
+  channel: "audit_log" | "websocket" | "queue" | "pubsub" | "reliable_event"
   target?: DeliveryTarget
   job?: string
   retry?: RetryDecl
@@ -1049,6 +1049,19 @@ export interface FilterSpec {
   /** Pre-set value for a user-adjustable filter. Supports "today" / "today()",
    *  resolved by the renderer as the server's current date. */
   default?: string
+  /**
+   * LITERAL value used when `from` is empty. This is the SERVER-enforced
+   * constant (a grant's `row_scope`, or an entity's `row_scope`) — the renderer
+   * never turns it into a query parameter, because a boundary the client can
+   * omit is not a boundary.
+   */
+  value?: string
+  /** Where the server reads the value at request time: `session` (identity
+   *  attribute in `attr`) or `route` (query parameter in `param`). Empty means
+   *  the literal `value`. Resolved server-side only. */
+  from?: "session" | "route"
+  attr?: string
+  param?: string
   /** For select filters: show the "All" (clear) option. Default true. */
   show_all?: boolean
   /** For select filters: caption of the "All" (clear) option. Default "(ALL)". */
@@ -1660,18 +1673,7 @@ export interface ListResponseMeta {
 }
 
 export interface ErrorResponse {
-  error: {
-    code: string
-    message: string
-    details?: ErrorDetail[]
-    request_id?: string
-    /**
-     * Present on 409 `CONTEXT_REQUIRED` only: the session contexts the caller
-     * may act in. Mirrors `auth.ContextChoice` (backend §8.7) — the client
-     * shows a picker and re-sends login with the chosen `id` as `assignment`.
-     */
-    choices?: ContextChoice[]
-  }
+  error: ErrorDetail
 }
 
 /**
@@ -1685,9 +1687,46 @@ export interface ContextChoice {
   value: string
 }
 
+/**
+ * The error ENVELOPE — mirrors `internal/api.ErrorDetail`: `{code, message,
+ * details?, choices?}`.
+ *
+ * Split from {@link ErrorDetailItem} on purpose. One type used to serve both
+ * jobs and declared the detail ENTRY as `{field?, code, message}`, which never
+ * matched the wire: the server sends `{level, field?, message}` (`internal/api`
+ * `ErrorDetailItem`, `pkg/spec` `ErrorDetail`) and never sends `code` in an
+ * entry. Nothing caught it because no consumer read `details` yet, so the
+ * mismatch would have surfaced at the first per-field error UI — exactly the
+ * feature `details` exists for (kafe 10.64).
+ */
 export interface ErrorDetail {
-  field?: string
   code: string
+  message: string
+  details?: ErrorDetailItem[]
+  /**
+   * Present on 409 `CONTEXT_REQUIRED` only: the session contexts the caller
+   * may act in. Mirrors `auth.ContextChoice` (backend §8.7) — the client
+   * shows a picker and re-sends login with the chosen `id` as `assignment`.
+   */
+  choices?: ContextChoice[]
+}
+
+/**
+ * One structured error ENTRY — mirrors `internal/api.ErrorDetailItem` and
+ * `pkg/spec.ErrorDetail`, and matches `sdk/browser`'s `ErrorDetailItem`
+ * field-for-field so the two clients cannot describe the same wire
+ * differently (kafe 10.64).
+ *
+ * `level` is declared optional although the API always emits it (no
+ * `omitempty` on the Go side): this type describes responses from any
+ * deployment, and `pkg/spec` does omit an empty level. `field` is absent for a
+ * record-level failure, and for a PostgreSQL enum CHECK the driver reports only
+ * a constraint name — so a consumer must handle "no field" regardless of which
+ * server produced it.
+ */
+export interface ErrorDetailItem {
+  level?: string
+  field?: string
   message: string
 }
 
@@ -1722,7 +1761,8 @@ export type FilterOp =
 export class FormaApiError extends Error {
   status: number
   code: string
-  details?: ErrorDetail[]
+  /** Per-field / per-level detail from the server (422 mostly) — see {@link ErrorDetailItem}. */
+  details?: ErrorDetailItem[]
   /**
    * Session contexts the caller must choose between — set only for 409
    * `CONTEXT_REQUIRED`. The client renders a picker from these and retries
@@ -1734,7 +1774,7 @@ export class FormaApiError extends Error {
     status: number,
     code: string,
     message: string,
-    details?: ErrorDetail[],
+    details?: ErrorDetailItem[],
     choices?: ContextChoice[],
   ) {
     super(message)

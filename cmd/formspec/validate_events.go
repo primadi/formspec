@@ -4,7 +4,7 @@
 // consequence the publisher promises: the outbox worker will make a sync call to
 // `target.resource` + `target.action` (02-core-basic.md §12.2). Whether that
 // target actually resolves is only answerable with every manifest in view, so
-// this check lives beside validateIntegrators / validateWorkflows in the CLI's
+// this check lives beside validateIntegrators / validateApprovals in the CLI's
 // cross-manifest layer rather than in the per-manifest loader.
 //
 // The failure mode it exists to catch previously validated GREEN: kafe's
@@ -24,17 +24,21 @@ import (
 	"github.com/primadi/formspec/pkg/spec"
 )
 
+// actionSet is what a delivery reference can resolve against: an entity's or
+// Service's declared actions, plus whether each is idempotent (7.7.3).
+// Package-level so `queue` and `notification` references resolve through one
+// function instead of each rebuilding the lookup.
+type actionSet struct {
+	actions    map[string]bool
+	idempotent map[string]bool
+}
+
 // validateEventTargets checks every `deliver: channel: reliable_event` target
 // against the declared entities and services. Returns source path -> message.
 func validateEventTargets(manifests []manifest.RawManifest) map[string]string {
 	rejects := map[string]string{}
 
 	// Index what a target can be: an entity action, or a service action.
-	// "module.entity" is the spelling a target uses.
-	type actionSet struct {
-		actions    map[string]bool
-		idempotent map[string]bool
-	}
 	entityActions := map[string]*actionSet{}
 	serviceActions := map[string]*actionSet{}
 
@@ -97,6 +101,61 @@ func validateEventTargets(manifests []manifest.RawManifest) map[string]string {
 
 		for _, ev := range es.Events {
 			for _, d := range ev.Deliver {
+				// `queue` (todo 7.7.6): the entry MUST name the Service action it
+				// runs. An unresolvable job validates green and then dead-letters
+				// at runtime — the consequence silently never happens, which is
+				// the failure this file exists to catch.
+				if d.Channel == spec.ChannelQueue {
+					if strings.TrimSpace(d.Job) == "" {
+						rejects[m.Source] = fmt.Sprintf(
+							"event %q delivers on channel `queue` without a `job:` — the outbox worker has nothing to call, so the consequence would silently never happen",
+							ev.Name)
+						continue
+					}
+					module, svcName, actionName, err := spec.ResolveJobRef(d.Job, ownModule)
+					if err != nil {
+						rejects[m.Source] = fmt.Sprintf("event %q: %v", ev.Name, err)
+						continue
+					}
+					set, ok := serviceActions[module+"."+svcName]
+					if !ok {
+						// Service not in this manifest set (a module shipped
+						// separately) — cannot verify; skip rather than reject.
+						continue
+					}
+					if !set.actions[actionName] {
+						rejects[m.Source] = fmt.Sprintf(
+							"event %q names job %q, but Service action %s.%s does not exist — the outbox worker would retry it to dead-letter and the job would silently never run",
+							ev.Name, d.Job, module+"."+svcName, actionName)
+					}
+					continue
+				}
+				// `notification` (todo 7.7.6): the entry must say WHAT to deliver.
+				// `notification:` writes the in-app row (and `recipient` is what
+				// `row_scope` matches, so a missing one produces a row nobody can
+				// read); `handler:` names the Service action for other channels.
+				// Neither = it delivers nothing, which is the failure this whole
+				// file exists to catch.
+				if d.Channel == spec.ChannelNotification {
+					if d.Notification == nil && strings.TrimSpace(d.Handler) == "" {
+						rejects[m.Source] = fmt.Sprintf(
+							"event %q delivers on channel `notification` with neither `notification:` (in-app) nor `handler:` — it would deliver nothing",
+							ev.Name)
+						continue
+					}
+					if d.Notification != nil && strings.TrimSpace(d.Notification.Recipient) == "" {
+						rejects[m.Source] = fmt.Sprintf(
+							"event %q: `notification` has no `recipient` — the row would have no addressee, and the entity's `row_scope` admits only the addressee, so nobody could ever read it",
+							ev.Name)
+						continue
+					}
+					if h := strings.TrimSpace(d.Handler); h != "" {
+						if msg := validateServiceActionRef(h, ownModule, serviceActions); msg != "" {
+							rejects[m.Source] = fmt.Sprintf("event %q notification `handler:` %s", ev.Name, msg)
+						}
+					}
+					continue
+				}
 				if d.Channel != spec.ChannelReliableEvent || d.Target == nil {
 					continue
 				}
@@ -140,6 +199,30 @@ func validateEventTargets(manifests []manifest.RawManifest) map[string]string {
 	}
 
 	return rejects
+}
+
+// validateServiceActionRef resolves a `service.action` / `module.service.action`
+// reference against the declared Services, returning "" when it is fine or a
+// ready-to-append message when it is not.
+//
+// Shared by `queue`'s `job:` and `notification`'s `handler:` — two fields, one
+// reference vocabulary, so the two cannot drift into different rules. A Service
+// outside this manifest set is SKIPPED, not rejected: its action cannot be
+// verified here (the same rule the delivery-target check uses).
+func validateServiceActionRef(ref, ownModule string, serviceActions map[string]*actionSet) string {
+	module, svcName, actionName, err := spec.ResolveServiceActionRef(ref, ownModule)
+	if err != nil {
+		return err.Error()
+	}
+	set, ok := serviceActions[module+"."+svcName]
+	if !ok {
+		return ""
+	}
+	if !set.actions[actionName] {
+		return fmt.Sprintf("names %q, but Service action %s.%s does not exist — the outbox worker would retry it to dead-letter and it would silently never run",
+			ref, module+"."+svcName, actionName)
+	}
+	return ""
 }
 
 // splitTargetRef resolves a declared target resource ("module.entity") to

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
@@ -174,12 +175,14 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		return ui.AppContext{}, "unknown app " + name
 	}
 	return ui.AppContext{
-		Name:        resolved.Name,
-		Title:       resolved.Spec.Title,
-		Logo:        resolved.Spec.Logo,
-		RootURL:     resolved.Spec.RootURL,
-		AppRenderer: resolved.Spec.AppRenderer,
-		Access:      string(resolved.Spec.Access), PublicEntities: resolved.Spec.PublicEntities, StackFamily: resolved.Spec.StackFamily,
+		Name:            resolved.Name,
+		Title:           resolved.Spec.Title,
+		Logo:            resolved.Spec.Logo,
+		RootURL:         resolved.Spec.RootURL,
+		AppRenderer:     resolved.Spec.AppRenderer,
+		Access:          string(resolved.Spec.Access),
+		PublicEntities:  b.derivedPublicEntitiesFor(resolved),
+		StackFamily:     resolved.Spec.StackFamily,
 		PersistBackend:  resolved.Spec.PersistBackend,
 		ThemeRef:        resolved.Spec.ThemeRef,
 		Chrome:          resolved.Spec.Chrome,
@@ -191,6 +194,26 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		RegisteredViews: resolved.Spec.RegisteredViews,
 		Settings:        b.mergeRunningSettings(r.Context(), b.settings),
 	}, ""
+}
+
+// derivedPublicEntitiesFor returns the anonymous allowlist implied by the
+// surface this App exposes, or nil when the App is not public (the caller then
+// uses its own checker). The pointer distinguishes "derived, possibly empty"
+// from "not applicable" — an App with no public views must expose nothing, not
+// fall back to the legacy module-wide grant.
+func (b *RouterBuilder) derivedPublicEntitiesFor(app *formspec_app.ResolvedApp) *[]spec.PublicEntityDecl {
+	if app == nil || app.Spec == nil || app.Spec.Access != spec.AppAccessPublic {
+		return nil
+	}
+	if b.uiRegistry == nil || b.registry == nil {
+		return nil // nothing to derive from — keep the caller's checker
+	}
+	decls := b.uiRegistry.DerivePublicGrants(b.listEntityDescriptors, ui.PublicGrantInput{
+		Modules:         app.Modules,
+		Menu:            app.Menu,
+		RegisteredViews: app.Spec.RegisteredViews,
+	})
+	return &decls
 }
 
 // mergeRunningSettings overlays the `app-setting` entity's running value over

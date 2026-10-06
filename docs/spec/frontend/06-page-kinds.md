@@ -1125,13 +1125,43 @@ ditegakkan backend, bukan disembunyikan di UI. Tiap baris menampilkan entity
 terkait + ringkasan + langkah saat ini; klik baris → detail entity (konteks
 penuh sebelum memutuskan).
 
+**Sumbernya bukan entity, jadi ia punya surface sendiri.** Barisnya hidup di
+tabel framework `formspec_workflow_approval`, sehingga tidak ada route entity
+yang bisa mengeksposnya. Kontrak HTTP-nya:
+
+```
+GET  /{ws}/_ui/workflow/approvals?app={app}
+POST /{ws}/_ui/workflow/approvals/{id}   → {"decision":"approve"|"reject"}
+```
+
+Item yang dikembalikan: `{id, entity, record_id, workflow, from, to, active_step,
+total_steps, title, description, display_fields, can_decide, created_at}`.
+Aturan yang mengikat renderer:
+
+- `title`/`description` berasal dari `steps[].title`/`description`, dan `display_fields`
+  dari `steps[].display_fields` — nilai record yang approver butuhkan untuk
+  memutuskan, dibaca server (bukan oleh klien, yang belum tentu boleh membacanya).
+  Entri `display_fields` membawa `label` + `type` dari deklarasi field entity, dan
+  **nilainya jatuh ke input pemohon** (`params` baris approval) bila record belum
+  memilikinya — transisi yang di-intercept tidak menulis apa pun sampai approval
+  selesai, jadi tanpa fallback itu justru field keputusan (`void_reason`) tampil
+  kosong.
+- **`can_decide` memisahkan “terdaftar” dari “boleh dijalankan”.** Keanggotaan role
+  pada step menentukan apa yang muncul; permission yang menggerbangi route transisi
+  menentukan apa yang bisa dieksekusi. Baris dengan `can_decide: false` tetap
+  ditampilkan (itu antrean caller) dan tombolnya non-aktif — bukan disembunyikan,
+  karena tugas yang tak bisa ia kerjakan tetap perlu terlihat.
+- `display_fields` hanya terisi bila caller memegang `{module}.{plural}.view`.
+  Tugasnya tetap terlihat; nilainya tidak.
+- Keputusan `POST` masuk lewat **mesin approval yang sama** dengan halaman record:
+  quorum, larangan menyetujui permintaan sendiri, audit bertanda tangan, dan emit
+  event transisi semuanya berlaku.
+
 **Action inline** `approve`/`reject` per baris = pencatatan approval
 bertanda tangan di Workflow (§ core-extended §2); `reject` mengikuti
 `on_reject`. Transisi yang di-intercept baru eksekusi setelah quorum seluruh
 step tercapai — di luar tanggung jawab kind ini. **Badge count** = jumlah
-pending caller, `realtime: true` default (subscribe perubahan Workflow,
-[`04-spec-resolution-api.md`](04-spec-resolution-api.md) §5). `filters`/`search`
-opsional seperti Table.
+pending caller. `filters`/`search` opsional seperti Table.
 
 ## 12. `notification-center`
 

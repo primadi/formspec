@@ -8,6 +8,6 @@
     "root": "https://schemas.formspec.dev/v1/formspec.schema.json",
     "kinds": "https://schemas.formspec.dev/v1/kinds/{Kind}.schema.json"
   },
-  "kinds": ["Api","App","ApprovalInbox","Calendar","Config","Dashboard","Datastore","Entity","Environment","Form","Integrator","Kanban","KindDefinition","Listing","Mockup","Module","NotificationCenter","Page","PersistBackend","Policy","Print","Renderer","Report","Seed","Service","Subscription","Table","Theme","Timeline","VisualSpecKind","Webhook","Widget","Wizard","Workflow","Workspace"],
-  "publishedAt": "2026-10-02T16:45:15Z"
+  "kinds": ["Api","App","ApprovalInbox","Calendar","Config","Dashboard","Datastore","Entity","Environment","Form","Integrator","Kanban","KindDefinition","Listing","Mockup","Module","NotificationCenter","Page","PersistBackend","Policy","Print","Renderer","Report","Seed","Service","Subscription","Table","Theme","Timeline","VisualSpecKind","Webhook","Widget","Wizard","Workspace"],
+  "publishedAt": "2026-10-06T08:18:06Z"
 }

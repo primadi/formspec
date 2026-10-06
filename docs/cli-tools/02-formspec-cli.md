@@ -91,16 +91,23 @@ sudah ter-cache. Sumber yang dipakai dicetak di baris pertama output
 (`schema: v1 (registry <url>, cache <dir>)` atau `schema: <dir> (local
 override)`).
 
-Dua lapis, keduanya dilaporkan per manifest:
+Tiga lapis, semuanya dilaporkan per manifest:
 
 1. **Engine loader** (`internal/manifest`) — ground truth apa yang `formspec dev` /
    `formspec apply` terima: error parse YAML dan validasi dalam Entity (expose,
    lifecycle, relation, state machine, `transaction_date`, reserved fields, …).
    Ini adalah hard gate.
-2. **JSON Schema** (`schemas/kinds/*.schema.json`) — kontrak untuk SEMUA kind
-   (App, Module, Form, Workflow, Table, …) yang belum di-deep-validate loader.
-   Menangkap sintaks usang seperti `expose: all` atau Workflow dengan
-   `states`/`transitions`.
+2. **Cross-manifest (Layer 1.5)** — hal yang hanya bisa diperiksa dengan seluruh
+   tree dalam pandangan, dan yang kalau lolos akan **diam-diam tidak melakukan
+   apa-apa**: target `deliver` (7.7.3) dan `job:` `queue` harus menunjuk
+   action/Service action yang ada, `Integration` wajib punya penangan cancel
+   simetris (7.7.2), role-grant dan `row_scope` harus bisa di-resolve, dan
+   `events:` sebuah `kind: Subscription` harus menunjuk event yang benar-benar
+   dideklarasikan (kalau tidak, subscription itu **tidak pernah menyala**).
+3. **JSON Schema** (`schemas/kinds/*.schema.json`) — kontrak untuk SEMUA kind
+   (App, Module, Form, Table, …) yang belum di-deep-validate loader.
+   Menangkap sintaks usang seperti `expose: all`, atau
+   `state_machine.transitions[].guard` dalam bentuk skalar.
 
 Catatan: lapis schema lebih ketat dari engine untuk konstruk shorthand yang
 belum bisa diekspresikan generator schema — mis. `guard: "..."` (string) vs
@@ -333,10 +340,10 @@ command dari direktori project menyasar **database/tenant yang berbeda** dari ya
 disajikan server. Terukur di `examples/kafe` (config: `spec: spec`,
 `dsn: sqlite:.formspec/kafe.db`):
 
-| | `formspec dev` | sebelum | sesudah |
-| --- | --- | --- | --- |
-| database | `.formspec/kafe.db` | `.formspec/data.db` | `.formspec/kafe.db` |
-| workspace | `kafe` | `demo` | `kafe` |
+|           | `formspec dev`      | sebelum             | sesudah             |
+| --------- | ------------------- | ------------------- | ------------------- |
+| database  | `.formspec/kafe.db` | `.formspec/data.db` | `.formspec/kafe.db` |
+| workspace | `kafe`              | `demo`              | `kafe`              |
 
 Akibat nyatanya: alur repair (`repl -f repair.star` → `migrate apply`) mengerjakan
 database yang tidak dibaca siapa pun, dan `formspec seed` tanpa flag membuat tenant
@@ -365,15 +372,15 @@ Predeclared di console: `ctx.*` (wired ke datastore aplikasi), `resource`
 (kosong — `resource.find`/`fetch`/`save` **belum ter-wire** di console; untuk
 perbaikan data pakai `ctx.db().query(...)`), `ok`, `fail`.
 
-| Flag            | Default                    | Fungsi                                                     |
-| --------------- | -------------------------- | ---------------------------------------------------------- |
-| `--spec`        | `spec` *(atau `spec:` di config)* | Path ke direktori YAML manifests                    |
-| `--dsn`         | `sqlite:.formspec/data.db` *(atau `dsn:` di config)* | Database DSN              |
-| `--workspace`   | workspace aktif *(config / #48 / `default`)* | Tenant scope untuk `ctx.workspace` dan `ctx.db()` |
-| `--environment` | —                          | Diterima untuk forward-compat; policy-nya masih deferred   |
-| `--no-sync`     | `false`                    | Buka datastore **tanpa** sync schema (lihat di bawah)      |
-| `-e`            | —                          | One-shot ekspresi (scriptable)                             |
-| `-f`            | —                          | One-shot script file                                       |
+| Flag            | Default                                              | Fungsi                                                   |
+| --------------- | ---------------------------------------------------- | -------------------------------------------------------- |
+| `--spec`        | `spec` _(atau `spec:` di config)_                    | Path ke direktori YAML manifests                         |
+| `--dsn`         | `sqlite:.formspec/data.db` _(atau `dsn:` di config)_ | Database DSN                                             |
+| `--workspace`   | workspace aktif _(config / #48 / `default`)_         | Tenant scope untuk `ctx.workspace` dan `ctx.db()`        |
+| `--environment` | —                                                    | Diterima untuk forward-compat; policy-nya masih deferred |
+| `--no-sync`     | `false`                                              | Buka datastore **tanpa** sync schema (lihat di bawah)    |
+| `-e`            | —                                                    | One-shot ekspresi (scriptable)                           |
+| `-f`            | —                                                    | One-shot script file                                     |
 
 `-f` adalah permukaan resmi untuk **perbaikan data sekali jalan**: migrasi yang
 ditolak karena datanya belum memenuhi syarat (mis. masih ada duplikat) tidak

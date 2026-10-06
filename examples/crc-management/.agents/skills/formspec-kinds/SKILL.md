@@ -1,6 +1,6 @@
 ---
 name: formspec-kinds
-description: Catalog of all FormSpec resource kinds grouped in 4 categories — Curation (App, Module, Workspace), Data (Entity, Service, Config, Subscription, Workflow, Api, Webhook, Mockup, Integrator, KindDefinition), UI (Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme), Infra (Renderer, PersistBackend, Environment, Policy, Datastore). Use when the user asks about FormSpec kinds, needs to choose the right kind for a task, asks how to declare a YAML manifest, or mentions specific kinds by name. Also use when creating a new FormSpec app to understand which kinds to declare.
+description: Catalog of all FormSpec resource kinds grouped in 4 categories — Curation (App, Module, Workspace), Data (Entity, Service, Config, Subscription, Api, Webhook, Mockup, Integrator, KindDefinition), UI (Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme), Infra (Renderer, PersistBackend, Environment, Policy, Datastore). Use when the user asks about FormSpec kinds, needs to choose the right kind for a task, asks how to declare a YAML manifest, or mentions specific kinds by name. Also use when creating a new FormSpec app to understand which kinds to declare. Approval is not a kind — it is `state_machine.transitions[].approval` on an Entity.
 metadata:
   version: "2.0"
   source: docs/spec/platform/03-kind-system.md + schemas/kinds/
@@ -9,7 +9,7 @@ metadata:
 # FormSpec Kinds — Complete Catalog
 
 Every FormSpec resource is declared as a YAML manifest with a `kind` field.
-This catalog groups all 34 built-in kinds into **4 categories**:
+This catalog groups all 33 built-in kinds into **4 categories**:
 
 > **Referensi atribut lengkap per kind:** <https://docs.formspec.dev/kind/> —
 > satu file per kind (34 file, 4 grup), tabel atribut **generated dari `pkg/spec`**
@@ -19,7 +19,7 @@ This catalog groups all 34 built-in kinds into **4 categories**:
 | #            | Group | Count                                                                                                                                                                    | Contains              | Mirrors |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | ------- |
 | **Curation** | 3     | `App`, `Module`, `Workspace`                                                                                                                                             | `docs/spec/platform/` |
-| **Data**     | 10    | `Entity`, `Service`, `Config`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                                    | `docs/spec/backend/`  |
+| **Data**     | 10    | `Entity`, `Service`, `Config`, `Subscription`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                                                | `docs/spec/backend/`  |
 | **UI**       | 15    | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `docs/spec/frontend/` |
 | **Infra**    | 5     | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore`                                                                                                       | `docs/spec/platform/` |
 
@@ -455,6 +455,47 @@ spec:
 Transitions use `via` (the triggering action name) — `action` is only a
 legacy alias. `guard` is `{ expression, message }`, not a list of roles.
 
+### Kontrak input — `params.inputs` (transisi & action)
+
+Kalau sebuah transisi/action butuh nilai dari pemanggil, deklarasikan
+`params.inputs`. **Ini bukan sekadar validasi** — hanya `params.validate` berarti
+UI tidak tahu apa yang harus ditanyakan, dan `conditions` yang membaca
+`params.get('x')` tidak akan pernah terpenuhi (tombol transisi mengirim body
+kosong).
+
+```yaml
+fields:
+  - { name: void_reason, type: text, title: "Alasan Void" }
+
+state_machine:
+  transitions:
+    - from: [paid, ready]
+      to: cancelled
+      via: void-order
+      params:
+        inputs:
+          - name: void_reason # == field Entity → MERUJUK field itu
+            widget: textarea
+            required_when: "fields.status == 'paid'"
+        render: { mode: modal } # opsional; default dari jumlah input
+```
+
+Aturan yang sering salah:
+
+| Salah                                                         | Benar                                            | Kenapa                                                                                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `inputs: [{name: void_reason, type: string}]` (field itu ada) | tanpa `type`                                     | Menulis `type` pada input yang merujuk ditolak validator: dua tipe untuk satu nilai, dan hanya milik field yang ditegakkan. |
+| `inputs: [{name: approver_note}]` (tanpa field)               | `type: text` wajib                               | Input ad-hoc tanpa tipe tidak bisa dirender maupun divalidasi.                                                              |
+| `inputs: [{name: approver_note, type: text, persist: true}]`  | tanpa `persist`                                  | Tidak ada field tujuan; nilainya hanya diteruskan ke handler.                                                               |
+| Satu deklarasi per state asal                                 | `required_when`                                  | Transisi dengan banyak `from` tetap satu deklarasi; predikat yang menyempitkan.                                             |
+| Duplikat deklarasi antar transisi                             | `params.inputs_from: [nama]` + `spec.input_sets` | Set input bernama di level Entity, dipakai ulang.                                                                           |
+
+Kontrak dijalankan **di server**, bukan hanya dirender: PATCH, `POST
+/{id}/{action}`, dan action Service semuanya menegakkan gabungan `validate` +
+`inputs`. Untuk transisi yang di-intercept approval, nilai yang diisi **pemohon**
+disimpan bersama baris approval dan diterapkan saat approver menyetujui —
+approver tidak perlu mengetik ulang (dan nilai approver menang bila ia mengirim).
+
 ### Service — Stateless Computation
 
 Stateless, pure computation. No `characteristic`, `doc_status`, or lifecycle guards.
@@ -481,6 +522,11 @@ spec:
 
 Module configuration, read via `ctx.config` in scripts.
 **Not to be confused** with `formspec-app.yaml` (which is CLI dev/serve config).
+
+The body is `spec.keys` — a map of key name → `{type, default, secret, public}`.
+**Not** `spec.data` (that shape is rejected by the schema). Each key declares its
+type (`int | string | bool | decimal | json`); `secret: true` keeps it out of the
+UI surface, and `public: true` opts a non-secret key into `GET /_ui/config/{name}`.
 
 ```yaml
 apiVersion: formspec.dev/v1
@@ -576,36 +622,89 @@ spec:
     ref: "GLHandler.OnInvoiceSubmitted"
 ```
 
-### Workflow — Multi-Approver Approval
+### Approval — Multi-Approver Gating (not a kind)
 
-Approval-based role gating attached to ONE Entity state-machine transition.
-The states/transitions live on the Entity (`state_machine` above); the
-Workflow only intercepts a single `from → to` transition and adds approval
-steps. Never declare `states:`/`transitions:` inside a Workflow manifest.
+Approval is NOT a separate kind. It is declared ON the Entity state-machine
+transition it gates, as `state_machine.transitions[].approval`. The gate lives on
+the transition, so it covers every origin state by construction and cannot drift
+from the thing it gates.
 
 ```yaml
-apiVersion: formspec.dev/v1
-kind: Workflow
-metadata:
-  name: journal-posting-approval
-  module: gl
-spec:
-  entity: gl.journal-entry
-  on: { transition: { from: draft, to: posted } }
-  steps:
-    - { roles: [gl.supervisor], approvers: 1 }
-    - {
-        roles: [gl.controller],
-        approvers: 1,
-        when: "resource.amount > 100000000",
-      }
-  on_reject: { to: rejected }
-  escalation: { after: 48h, notify_roles: [gl.manager] }
+state_machine:
+  field: status
+  transitions:
+    - from: [paid, in_kitchen, ready, served]
+      to: cancelled
+      via: void-order
+      approval:
+        steps:
+          # Duty: who may approve is decided by a ROLE GRANT, not by a role name here.
+          - {
+              name: supervisor-check,
+              permission: supervisor-check,
+              approvers: 1,
+            }
+          - {
+              name: controller-check,
+              roles: [gl.controller],
+              approvers: 1,
+              when: "resource.amount > 100000000",
+              escalation: { after: 48h, reassign: head-check },
+            }
+        on_reject: { to: paid }
 ```
 
-Step fields: `roles` (eligibility), `approvers` (quorum, default 1),
-`mode` (`all` | `any` | `sequential`), `when` (FormSpecExpr to skip a step),
-`escalation` (`after`, `notify_roles`, `reassign_roles`).
+A transition with `approval` does not execute on the first call: the request
+returns 202 with `approval_required` and a pending approval row is created. It
+runs — state write, `emit`, audit in one write — only after every applicable step
+reaches quorum. The requester can never approve their own request.
+
+Step fields: `name` (step identity), `permission` (the approval DUTY — preferred
+over `roles`), `roles` (eligibility; accepted as the migration alternative, and
+`CanApprove` accepts duty OR role), `approvers` (quorum, default 1),
+`mode` (absent/`any` = the number decides; `sequential` = one signature per role,
+in order), `when` (FormSpecExpr to skip a step),
+`title`/`description`/`display_fields` (the approval task's label and the record
+values the approver needs), `escalation` (`after` + `reassign` — a DUTY, not a
+role name).
+
+Quorum comes from the MANIFEST, never from a guess about who is eligible.
+`approvers` is the number; `mode: sequential` takes it from the role chain (so
+`approvers` is refused with it, as is `permission` — a chain is ordered by roles,
+a duty has no position in that order). **`mode: all` is refused by
+`formspec validate`**: "every eligible approver" cannot be derived from a
+manifest, since a role list is not a list of people and a duty's holders are not
+enumerable — the runtime used to answer `len(roles)`, a count of NAMES.
+
+A short `permission` is qualified to
+`workflow.{module}.{entity}.{transition}.{step}` and granted from a role. An
+escalation target is a duty too, and it is NOT a step — so it needs its own grant:
+
+```yaml
+grants:
+  - {
+      page: "workflow:journal-entry.post",
+      actions: [{ name: supervisor-check }],
+    }
+  # the takeover duty (escalation.reassign), granted the same way
+  - {
+      page: "workflow:journal-entry.post",
+      actions: [{ name: head-check }],
+    }
+```
+
+Escalation lives on the **step**: `steps[].escalation` has `after` + `reassign`,
+and reassignment is the one escalation effect that is implemented. `reassign` is a
+PERMISSION (qualified like a step duty), never a role name; `formspec validate`
+refuses `after` without `reassign`, `reassign` without `after`, and a `reassign`
+that names the step's OWN duty (escalating to the people who could already approve
+changes nothing). `notify_roles` was **removed** — notification delivery does not
+exist, so the field could never do anything.
+
+`name` is **required** on a step with `escalation` or `permission`, unique per
+gate, and identifier-shaped. A step declaring neither `roles` nor `permission`
+is un-approvable and `formspec validate` rejects it. A transition without `via`
+cannot carry `approval` (nothing names it), and `formspec validate` rejects it.
 
 ### Api — External API Surface Override
 
@@ -821,22 +920,22 @@ binding → service. See `docs/spec/platform/06-datastore.md` and
 
 ### Data
 
-| What you need                      | Kind to use                              |
-| ---------------------------------- | ---------------------------------------- |
-| Store & manage transactional data  | `Entity` (`characteristic: transaction`) |
-| Stable reference data              | `Entity` (`characteristic: master`)      |
-| Read-only seed data                | `Entity` (`characteristic: reference`)   |
-| System-managed aggregates          | `Entity` (`characteristic: summary`)     |
-| Computation without state          | `Service`                                |
-| Module-level configuration         | `Config`                                 |
-| Custom DDL (index, trigger)        | `persist.raw_ddl` pada `Entity`          |
-| React to another resource's events | `Subscription`                           |
-| Approval-based state transitions   | `Workflow`                               |
-| Override external API surface      | `Api`                                    |
-| Inbound webhook endpoint           | `Webhook`                                |
-| Mock third-party integration       | `Mockup`                                 |
-| Cross-module reactive bridge       | `Integrator`                             |
-| Extend the kind system             | `KindDefinition`                         |
+| What you need                      | Kind to use                                        |
+| ---------------------------------- | -------------------------------------------------- |
+| Store & manage transactional data  | `Entity` (`characteristic: transaction`)           |
+| Stable reference data              | `Entity` (`characteristic: master`)                |
+| Read-only seed data                | `Entity` (`characteristic: reference`)             |
+| System-managed aggregates          | `Entity` (`characteristic: summary`)               |
+| Computation without state          | `Service`                                          |
+| Module-level configuration         | `Config`                                           |
+| Custom DDL (index, trigger)        | `persist.raw_ddl` pada `Entity`                    |
+| React to another resource's events | `Subscription`                                     |
+| Approval-based state transitions   | `state_machine.transitions[].approval` (on Entity) |
+| Override external API surface      | `Api`                                              |
+| Inbound webhook endpoint           | `Webhook`                                          |
+| Mock third-party integration       | `Mockup`                                           |
+| Cross-module reactive bridge       | `Integrator`                                       |
+| Extend the kind system             | `KindDefinition`                                   |
 
 ### UI
 
@@ -890,8 +989,9 @@ binding → service. See `docs/spec/platform/06-datastore.md` and
 - **Validate before you trust:** run `formspec validate --spec <dir>` (engine loader +
   JSON Schema) and rely on the editor `yaml.schemas` → `schemas/formspec.schema.json`
   for autocomplete/validation. `spec.version: v1` is required on every Entity.
-- **`on:` is a normal YAML key** for Workflow (`on: { transition: ... }`) — do
-  not quote it; only YAML 1.1 parsers (e.g. PyYAML) misread it as boolean `true`.
+- **Approval is not a kind.** Multi-approver gating is
+  `state_machine.transitions[].approval` on the Entity whose transition it gates;
+  there is no `kind: Workflow` manifest.
 - **Menu: always provide `spec.menu` in Module if you use `type: module` adopt
   nodes in App.** An adopt node with an empty/null module menu produces no
   navigation entries — the module has zero sidebar visibility. If ALL modules

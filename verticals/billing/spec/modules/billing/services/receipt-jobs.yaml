@@ -1,0 +1,32 @@
+apiVersion: formspec.dev/v1
+kind: Service
+metadata:
+  name: receipt-jobs
+  module: billing
+  description: "Pekerjaan latar nota pesanan — rumah for `deliver: {channel: queue, job: ...}` (7.7.6)"
+spec:
+  version: v1
+
+  # Handler job hidup di `kind: Service`, bukan registry terpisah: sebuah job
+  # adalah komputasi tanpa state, dan Service sudah membawa resolusi `impl`,
+  # penegakan `uses`/permission, serta dispatcher yang sama.
+  #
+  # `deliver: {channel: queue, job: receipt-jobs.generate-receipt}` menyebut
+  # Service ini; entry-nya dijalankan worker outbox (channel `queue` mewajibkan
+  # `publish.durable: true`), jadi retry + dead-letter ikut berlaku.
+  actions:
+    - name: generate-receipt
+      description: "Render PDF nota dan simpan ke object storage"
+      # Idempoten: worker outbox me-retry, jadi menjalankan ulang tidak boleh
+      # menggandakan efek (7.7.3 menerapkan aturan yang sama pada target lain).
+      idempotent: true
+      required_permission: billing.receipt-jobs.generate-receipt
+      uses:
+        primitives: [storage]
+      impl: { type: native, ref: "Billing.GenerateReceiptHandler" }
+
+    - name: send-receipt-email
+      description: "Kirim nota ke email pelanggan"
+      idempotent: true
+      required_permission: billing.receipt-jobs.send-receipt-email
+      impl: { type: native, ref: "Billing.SendReceiptEmailHandler" }

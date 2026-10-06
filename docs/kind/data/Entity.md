@@ -18,14 +18,15 @@ Entity.** Needing kind lain berarti memperluas framework, bukan membangun app.
 Pilih karakteristik yang tepat (mutually exclusive — `formspec apply` menolak
 lebih dari satu):
 
-| Karakteristik | Arti | Wajib |
-|---|---|---|
-| `master` | Data referensi stabil (Customer, Product) | Boleh punya lifecycle atau tidak |
-| `transaction` | Append-heavy, time-partitioned (Invoice, Journal Entry) | Wajib field `transaction_date` |
-| `reference` | Seed data read-only (Provinsi, Tarif Pajak) | — |
-| `summary` | Projeksi terkelola sistem (GL Balance) | CUD permanen nonaktif via API |
+| Karakteristik | Arti                                                    | Wajib                            |
+| ------------- | ------------------------------------------------------- | -------------------------------- |
+| `master`      | Data referensi stabil (Customer, Product)               | Boleh punya lifecycle atau tidak |
+| `transaction` | Append-heavy, time-partitioned (Invoice, Journal Entry) | Wajib field `transaction_date`   |
+| `reference`   | Seed data read-only (Provinsi, Tarif Pajak)             | —                                |
+| `summary`     | Projeksi terkelola sistem (GL Balance)                  | CUD permanen nonaktif via API    |
 
 **Kapan TIDAK pakai Entity:**
+
 - Komputasi tanpa state → `kind: Service`
 - Hanya butuh UI override → tambah `kind: Form` / `kind: Table` (Entity tetap ada)
 
@@ -67,7 +68,17 @@ spec:
       - { name: active, label: "Aktif" }
       - { name: completed, label: "Selesai" }
     transitions:
-      - { from: active, to: completed, via: complete }
+      # Approval inline: transisi ini ditahan sampai pasti.
+      - from: active
+        to: completed
+        via: complete
+        approval:
+          steps:
+            - name: manager-check
+              permission: manager-check
+              approvers: 1
+              escalation: { after: 4h, reassign: head-check }
+          on_reject: { to: active }
   actions:
     - name: submit
       disabled: true
@@ -123,20 +134,20 @@ spec:
 Nama struct di kolom **Tipe** di atas adalah tipe Go di `pkg/spec/entity.go`
 (dan `pkg/spec/spec.go`). Kontrak normatifnya didokumentasikan di `docs/spec/backend/`:
 
-| Struct | Dokumentasi normatif |
-|---|---|
-| `Field` | [`05-field-types.md`](../../spec/backend/05-field-types.md) — katalog tipe (§1), money (§2), validasi (§3), tree (§4), keamanan & computed (§5) |
-| `EntityAuth` | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §1.4 |
-| `Action` | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §5 |
-| `EventDecl` | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §7 |
-| `StateMachine` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §1 |
-| `DeliveryDecl` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §3 |
-| `BackdatePolicy` / `ForwardDatePolicy` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §9 |
-| `HookDecl` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §15 |
-| `RateLimitSpec` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §17 |
-| `SoftDeactivateDecl` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §19 |
-| `PersistSpec` | [`04-persist-backend.md`](../../spec/backend/04-persist-backend.md) |
-| `ExtendStorage` | [`03-entity-extension.md`](../../spec/backend/03-entity-extension.md) |
+| Struct                                 | Dokumentasi normatif                                                                                                                            |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Field`                                | [`05-field-types.md`](../../spec/backend/05-field-types.md) — katalog tipe (§1), money (§2), validasi (§3), tree (§4), keamanan & computed (§5) |
+| `EntityAuth`                           | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §1.4                                                                                  |
+| `Action`                               | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §5                                                                                    |
+| `EventDecl`                            | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §7                                                                                    |
+| `StateMachine`                         | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §1                                                                              |
+| `DeliveryDecl`                         | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §3                                                                              |
+| `BackdatePolicy` / `ForwardDatePolicy` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §9                                                                              |
+| `HookDecl`                             | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §15                                                                             |
+| `RateLimitSpec`                        | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §17                                                                             |
+| `SoftDeactivateDecl`                   | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §19                                                                             |
+| `PersistSpec`                          | [`04-persist-backend.md`](../../spec/backend/04-persist-backend.md)                                                                             |
+| `ExtendStorage`                        | [`03-entity-extension.md`](../../spec/backend/03-entity-extension.md)                                                                           |
 
 ## Gotchas
 
@@ -156,5 +167,16 @@ Nama struct di kolom **Tipe** di atas adalah tipe Go di `pkg/spec/entity.go`
   `override_permission`.
 - Dua lapis state berjalan paralel: `doc_status` (framework) + custom
   `state_machine` (developer) — lihat `docs/spec/backend/01-core-basic.md` §1.6.
+- **Approval bukan kind terpisah** — dideklarasikan pada transisi
+  (`state_machine.transitions[].approval`, backend/02-core-extended.md §2). Gate
+  itu menahan transisi, jadi ia mengawal **semua** state asal transisi tersebut.
+  Transisi tanpa `via` tidak bisa diberi `approval` (tidak ada namanya).
+- **Duty approval = permission, bukan nama role** (`steps[].permission` dan
+  `escalation.reassign`), keduanya di-qualify jadi
+  `workflow.{module}.{entity}.{transition}.{duty}` dan diberikan lewat grant
+  `{ page: "workflow:{entity}.{transition}", actions: [{name: {duty}}] }`.
+- **`escalation` wajib lengkap**: `after` + `reassign`, dan `reassign` tidak
+  boleh menunjuk duty step itu sendiri (no-op) — `formspec validate` menolaknya.
 - **Cross-ref:** [`ai_skills/formspec-kinds`](../../ai_skills/formspec-kinds/SKILL.md)
   · [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md)
+  · [`docs/spec/backend/02-core-extended.md`](../spec/backend/02-core-extended.md)

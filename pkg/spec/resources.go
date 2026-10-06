@@ -169,19 +169,6 @@ type AppSpec struct {
 	Menu      []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
 	Publishes []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
 	Consumes  []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
-	// PublicEntities narrows which entities an `access: public` App exposes
-	// anonymously (S3, gaps #6/#45). Three states — the pointer distinguishes
-	// "absent" from "explicitly empty":
-	//   - absent (nil): legacy behavior — EVERY entity of every mounted module
-	//     gets anonymous list/find/create. Deprecated: it also exposes data that
-	//     merely happens to share a module with the intended entity (another
-	//     entity's PII, cash, or shift records).
-	//   - explicitly empty (`public_entities: []`): nothing is anonymous; every
-	//     entity of the App's modules requires authentication.
-	//   - non-empty: exactly these entity/action pairs are anonymous; everything
-	//     else in the same modules requires authentication.
-	// @schema {example: "[{entity: catalog/product, actions: [list, find]}]", description: "Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs"}
-	PublicEntities *[]PublicEntityDecl `yaml:"public_entities,omitempty" json:"public_entities,omitempty"`
 
 	// RegisteredViews declares the extra views this App exposes beyond its
 	// menu (plan docs_internal/plan/registered-views.md). The reachable surface
@@ -203,7 +190,7 @@ type AppSpec struct {
 	//
 	// This is SURFACE curation (least privilege), not a data authorization
 	// boundary: entity data routes are workspace/module-scoped, not per-App.
-	// RBAC and `public_entities` remain the data guards.
+	// RBAC and the App's derived public grants remain the data guards.
 	// @schema {example: "[{view: cafe-order/menu-catalog}, {entity: cafe-master/menu-item}]", description: "Extra views this App exposes beyond its menu: exactly one of entity (module/entity) or view (module/name) per entry"}
 	RegisteredViews []RegisteredViewDecl `yaml:"registered_views,omitempty" json:"registered_views,omitempty"`
 }
@@ -280,15 +267,6 @@ func NormalizeEntityRef(ref string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-// accessLabel renders an App access value for error messages ("" = the default,
-// private).
-func accessLabel(a AppAccess) string {
-	if a == "" {
-		return "private (default)"
-	}
-	return string(a)
 }
 
 // AppConfirm is the App-wide default confirm-dialog configuration
@@ -793,65 +771,70 @@ type DataMigrationSpec struct {
 	Module string `yaml:"module,omitempty" json:"module,omitempty"`
 }
 
-// ─── 1.1.2 WorkflowSpec ───
+// ─── 1.1.2 ApprovalSpec ───
 
-// WorkflowSpec defines an approval workflow attached to a state machine
-// transition (02-core-extended.md §2).
-type WorkflowSpec struct {
-	// @schema {example: "gl.journal-entry"}
-	Entity     string              `yaml:"entity" json:"entity"`
-	On         *WorkflowTrigger    `yaml:"on" json:"on"`
-	Steps      []WorkflowStep      `yaml:"steps" json:"steps"`
-	OnReject   *WorkflowReject     `yaml:"on_reject,omitempty" json:"on_reject,omitempty"`
-	Escalation *WorkflowEscalation `yaml:"escalation,omitempty" json:"escalation,omitempty"`
-}
-
-// WorkflowTrigger declares which state machine transition this workflow
-// intercepts.
-type WorkflowTrigger struct {
-	Transition *WorkflowTransitionRef `yaml:"transition,omitempty" json:"transition,omitempty"`
-}
-
-// WorkflowTransitionRef identifies the intercepted transition. Two forms exist
-// and are mutually exclusive (S9, kafe 1.7):
+// ApprovalSpec declares the approval gate on a state-machine transition
+// (02-core-extended.md §2). It replaces the former `kind: Workflow` manifest:
+// the gate lives ON the transition it intercepts, so the declaration cannot
+// drift from the thing it gates, and a transition with several origin states is
+// covered by construction rather than by a reference kept in step by hand.
 //
-//	transition: { name: void-order }            # by transition name — preferred
-//	transition: { from: draft, to: posted }     # by state pair (legacy)
-//
-// The name form is preferred because a transition may have **several** origin
-// states (`from: [paid, in_kitchen, ready, served]`). A state pair can only
-// describe one of them, so a workflow written as `from: paid` silently does not
-// cover the other three — a hole with no error and no log. Naming the transition
-// covers all of its origin states at once, and the name can be validated against
-// the entity's state machine.
-type WorkflowTransitionRef struct {
-	// Name is the transition's `via` name in the entity's state machine,
-	// scoped to the Workflow's `spec.entity`. A fully-qualified
-	// "{module}.{entity}.{transition}" is accepted only when it matches that
-	// entity.
-	// @schema {example: "void-order"}
-	Name string `yaml:"name,omitempty" json:"name,omitempty"`
-	// @schema {example: "draft"}
-	From string `yaml:"from,omitempty" json:"from,omitempty"`
-	// @schema {example: "posted"}
-	To string `yaml:"to,omitempty" json:"to,omitempty"`
+// It is declared as `state_machine.transitions[].approval`.
+type ApprovalSpec struct {
+	Steps []ApprovalStep `yaml:"steps" json:"steps"`
+	// OnReject declares the state the record moves to when the chain is
+	// rejected. Absent means the record stays where it is.
+	OnReject *ApprovalReject `yaml:"on_reject,omitempty" json:"on_reject,omitempty"`
 }
 
-// ByName reports whether the reference selects the transition by name rather
-// than by a from/to state pair.
-func (r *WorkflowTransitionRef) ByName() bool {
-	return r != nil && r.Name != ""
-}
-
-// WorkflowStep is one approval step in the workflow chain.
+// ApprovalStep is one approval step in the approval chain.
 // Steps are evaluated sequentially; each must reach quorum before the next begins.
-type WorkflowStep struct {
+type ApprovalStep struct {
+	// Name identifies the step, so state about a workflow in flight can point at
+	// a STEP rather than at its position. Without it every such reference is an
+	// index (`approvals`, `escalated_steps`, the persisted active step), and the
+	// meaning of an index changes silently when a step is added, removed, or
+	// skipped by its `when` condition — an escalation recorded for step 1 would
+	// then describe step 2.
+	//
+	// Optional, but required on a step that declares `permission` (a duty must be
+	// nameable to be granted), and unique within the workflow.
+	// @schema {example: "supervisor-check", pattern: "^[a-z][a-z0-9-]*$"}
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
+	// Roles lists the roles eligible to sign — who, by NAME.
+	//
+	// It still WORKS (`CanApprove` accepts a role holder), but it is not the
+	// form to reach for: naming a role here couples the manifest to a role NAME,
+	// and renaming that role silently disables the approval. `permission` — a
+	// `resource + action` duty granted from the role seed — does not. For a step
+	// that could use a duty, `formspec validate` says so (advisory).
+	//
+	// The exception is load-bearing: `mode: sequential` REQUIRES `roles`, because
+	// the chain is ordered BY them and a duty is a flat permission with no
+	// position in that order (the combination is refused by validation). A
+	// sequential step is therefore never nagged about it.
 	// @schema {example: "[gl.supervisor]"}
 	Roles      []string         `yaml:"roles" json:"roles"`
 	Approvers  int              `yaml:"approvers,omitempty" json:"approvers,omitempty"` // quorum, default 1
-	Mode       WorkflowStepMode `yaml:"mode,omitempty" json:"mode,omitempty"`           // all | any | sequential
+	Mode       ApprovalStepMode `yaml:"mode,omitempty" json:"mode,omitempty"`           // all | any | sequential
 	When       string           `yaml:"when,omitempty" json:"when,omitempty"`           // FormSpecExpr — skip step if false
 	Escalation *StepEscalation  `yaml:"escalation,omitempty" json:"escalation,omitempty"`
+	// Permission is the DUTY this step requires — the `resource + action` form
+	// AGENTS.md rule 6 asks for, instead of naming a role.
+	//
+	// A short name (`approve-void`) is qualified to
+	// `workflow.{module}.{gateName}.{stepName}`, so the duty is derived from
+	// what the workflow already declares and a grant can point at
+	// `{ page: "workflow:{gateName}", actions: [{name: "{stepName}"}] }`
+	// without anyone transcribing a string. A fully qualified value is taken
+	// as-is, mirroring a transition's `require_permission`.
+	//
+	// When set, eligibility for the step accepts a caller holding this permission
+	// OR one holding the step's roles (Engine.CanApprove) — the role list is only
+	// removed once every workflow has migrated. Requires `name`: the duty has to
+	// be nameable for a grant to point at it.
+	// @schema {example: "approve-void"}
+	Permission string `yaml:"permission,omitempty" json:"permission,omitempty"`
 	// Title is the human label for this approval task (S15). Without it the
 	// ApprovalInbox can only say "a task is waiting" — the approver cannot tell
 	// WHAT they are approving. Mirrors WizardStep.title.
@@ -865,22 +848,47 @@ type WorkflowStep struct {
 	DisplayFields []string `yaml:"display_fields,omitempty" json:"display_fields,omitempty"`
 }
 
-// StepEscalation configures timeout and reassignment for one step.
+// StepEscalation configures the timeout and the takeover that follows it for one
+// step.
+//
+// Both fields are required together. The only escalation effect the engine
+// implements is REASSIGNMENT, so an `after` with nothing to reassign to — or a
+// reassign with no timeout to fire — would pass through silently and change
+// nothing at all. That is the same "declaration with no effect" shape this file
+// keeps refusing, and it is why `notify_roles` was removed: notification delivery
+// does not exist, so the field could never have done anything.
 type StepEscalation struct {
-	After         string   `yaml:"after" json:"after"` // duration e.g. "48h"
-	NotifyRoles   []string `yaml:"notify_roles,omitempty" json:"notify_roles,omitempty"`
-	ReassignRoles []string `yaml:"reassign_roles,omitempty" json:"reassign_roles,omitempty"`
+	// @schema {example: "48h"}
+	After string `yaml:"after" json:"after"` // duration e.g. "48h"
+	// Reassign names the DUTY that gains approval rights when the timeout fires.
+	//
+	// A short name is qualified to
+	// `workflow.{module}.{entity}.{transition}.{reassign}` — the same rule a
+	// step's `permission` follows — so a grant points at
+	// `{ page: "workflow:{entity}.{transition}", actions: [{name: {reassign}}] }`
+	// without anyone transcribing a permission string. A fully qualified value
+	// (three or more segments) is taken as written.
+	//
+	// It is a PERMISSION, not a role name: who may take over is decided by a GRANT
+	// (AGENTS.md rule 6), so the right can be revoked without touching this
+	// manifest. It must name a DIFFERENT duty than the step's own — escalating a
+	// step to the people who could already approve it changes nothing.
+	// @schema {example: "manager-check"}
+	Reassign string `yaml:"reassign" json:"reassign"`
 }
 
-// WorkflowReject declares the target state when the workflow is rejected.
-type WorkflowReject struct {
+// DutyRef is one grantable approval duty: the name a grant uses inside
+// `workflow:{gate}`, and the permission it materializes to.
+type DutyRef struct {
+	// @schema {example: "supervisor-check"}
+	Name string `json:"name"`
+	// @schema {example: "workflow.cafe-order.order.void-order.supervisor-check"}
+	Permission string `json:"permission"`
+}
+
+// ApprovalReject declares the target state when the workflow is rejected.
+type ApprovalReject struct {
 	To string `yaml:"to" json:"to"`
-}
-
-// WorkflowEscalation defines global escalation for the entire workflow.
-type WorkflowEscalation struct {
-	After       string   `yaml:"after" json:"after"`
-	NotifyRoles []string `yaml:"notify_roles,omitempty" json:"notify_roles,omitempty"`
 }
 
 // ─── 1.1.3 ApiSpec ───
@@ -1109,46 +1117,266 @@ var ModuleRuntimeNames = map[string]bool{
 	"rust":       true,
 }
 
-// ValidateWorkflowSpec checks the Workflow contract (02-core-extended.md §2).
+// StepPermission returns the duty permission for one step, or "" when the step
+// declares no duty (eligibility then rests on `roles` alone).
 //
-// The transition trigger must pick exactly one form. Accepting both would make
-// the runtime silently prefer one of them, and accepting neither would leave a
-// workflow that never intercepts anything — both are the "looks configured,
-// enforces nothing" failure the ledger keeps finding.
-func ValidateWorkflowSpec(wf *WorkflowSpec) error {
-	if wf == nil {
-		return nil
-	}
-	if wf.Entity == "" {
-		return fmt.Errorf("workflow requires `entity` (module.entity)")
-	}
-	if wf.On == nil || wf.On.Transition == nil {
-		return fmt.Errorf("workflow requires `on.transition`")
-	}
+// module and gateName are the OWNING declarations — the entity's `metadata.module`
+// and the gate's `{entity}.{transition}` name — so the derived string is fully
+// determined by the manifest tree rather than by a string someone transcribed
+// twice. A value that already has three or more segments is taken as written
+// (the same rule `QualifyPermission` applies to a transition's
+// `require_permission`).
+func StepPermission(module, gateName string, step ApprovalStep) string {
+	return qualifyDuty(module, gateName, step.Permission, step.Name)
+}
 
-	ref := wf.On.Transition
-	byName := ref.Name != ""
-	byPair := ref.From != "" || ref.To != ""
-
-	switch {
-	case byName && byPair:
-		return fmt.Errorf("workflow on.transition declares both `name` and `from`/`to` — pick one: `name` covers every origin state of the transition, `from`/`to` covers exactly one")
-	case byName:
-		if len(wf.Steps) == 0 {
-			return fmt.Errorf("workflow has no `steps` — an approval chain with no step can never reach quorum")
-		}
-		return nil
-	case byPair:
-		if ref.From == "" || ref.To == "" {
-			return fmt.Errorf("workflow on.transition needs both `from` and `to` (or use `name`)")
-		}
-		if len(wf.Steps) == 0 {
-			return fmt.Errorf("workflow has no `steps` — an approval chain with no step can never reach quorum")
-		}
-		return nil
-	default:
-		return fmt.Errorf("workflow on.transition must name the transition (`name:`) or its state pair (`from:`/`to:`)")
+// EscalationPermission returns the duty a step's escalation hands approval to,
+// or "" when the step declares no escalation.
+func EscalationPermission(module, gateName string, esc *StepEscalation) string {
+	if esc == nil {
+		return ""
 	}
+	return qualifyDuty(module, gateName, esc.Reassign, esc.Reassign)
+}
+
+// ApprovalDuties lists every grantable duty of an approval gate: each step that
+// declares a `permission`, plus each step's escalation target.
+//
+// The escalation duty is included because it is NOT a step: a grant must be able
+// to name it (`{ page: "workflow:{gate}", actions: [{name: {reassign}}] }`) or the
+// escalation would point at a permission nobody holds — an approval that stalls
+// with every gate green.
+func ApprovalDuties(module, gateName string, a *ApprovalSpec) []DutyRef {
+	if a == nil {
+		return nil
+	}
+	var out []DutyRef
+	seen := map[string]bool{}
+	add := func(name, perm string) {
+		name = strings.TrimSpace(name)
+		if name == "" || perm == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, DutyRef{Name: name, Permission: perm})
+	}
+	for _, step := range a.Steps {
+		if perm := StepPermission(module, gateName, step); perm != "" {
+			add(step.Name, perm)
+		}
+		if perm := EscalationPermission(module, gateName, step.Escalation); perm != "" {
+			add(step.Escalation.Reassign, perm)
+		}
+	}
+	return out
+}
+
+// qualifyDuty derives `workflow.{module}.{gateName}.{name}` from a short duty
+// name, or returns `raw` as written when it is already fully qualified.
+//
+// The `workflow.` prefix keeps a duty out of reach of a module wildcard like
+// `cafe-order.*`, and the segment count (5) is one deeper than an entity
+// permission ({module}.{plural}.{action}), so the two vocabularies cannot
+// collide.
+func qualifyDuty(module, gateName, raw, name string) string {
+	perm := strings.TrimSpace(raw)
+	if perm == "" {
+		return ""
+	}
+	if strings.Count(perm, ".") >= 2 {
+		return perm
+	}
+	short := strings.TrimSpace(name)
+	if short == "" {
+		// Unreachable from a validated manifest (a step with a duty must be named);
+		// refusing here keeps the builder honest rather than emitting a dangling
+		// segment.
+		return ""
+	}
+	return "workflow." + module + "." + gateName + "." + short
+}
+
+// ValidateApprovalSteps checks the two rules a step's identity obeys:
+// uniqueness within the approval chain, and a shape usable as an identifier.
+//
+// Uniqueness is what makes the name a reference worth having. Everything the
+// runtime remembers about an approval in flight — which step is active, which
+// step was escalated — is keyed by that name precisely so adding or reordering
+// steps cannot silently re-point it at another step; two steps sharing a name
+// would reintroduce exactly the ambiguity the name exists to remove.
+func ValidateApprovalSteps(a *ApprovalSpec) error {
+	if a == nil {
+		return nil
+	}
+	seen := map[string]int{}
+	for i, step := range a.Steps {
+		// A step that names NEITHER a role nor a duty is a step nobody can
+		// approve. `hasAnyRole` against an empty list is false for everyone, so
+		// the approval would wait until it escalated (if it ever does) — a
+		// manifest that looks configured and enforces nothing, which is the
+		// failure class this file keeps closing.
+		if len(step.Roles) == 0 && strings.TrimSpace(step.Permission) == "" {
+			return fmt.Errorf(
+				"workflow step %d is un-approvable: it declares neither `roles` nor `permission`, so no caller can ever satisfy it",
+				i)
+		}
+		if err := validateApprovalStepMode(i, step); err != nil {
+			return err
+		}
+		if err := validateStepEscalation(i, step); err != nil {
+			return err
+		}
+		name := strings.TrimSpace(step.Name)
+		if name == "" {
+			// A step that can time out MUST be nameable, because the escalation
+			// worker is the one consumer that cannot see the record: it has no
+			// way to evaluate `when`, so with an index alone it would read a
+			// different step than the one awaiting approval whenever a condition
+			// skipped one ahead of it. Requiring the name turns that silent
+			// mis-escalation into a validate error.
+			if step.Escalation != nil {
+				return fmt.Errorf(
+					"step %d declares `escalation` but has no `name` — the escalation worker resolves the active step by name (it cannot evaluate `when`), so an unnamed step could be escalated as another step",
+					i)
+			}
+			// A duty is granted BY NAME (`{ page: "workflow:{wf}", actions:
+			// [{name: "{step}"}] }`) and materialized from the same name, so an
+			// unnamed step's permission could be neither derived nor granted.
+			if strings.TrimSpace(step.Permission) != "" {
+				return fmt.Errorf(
+					"workflow step %d declares `permission` but has no `name` — the duty is derived from (module, workflow, step name) and a grant names the step, so it must be nameable",
+					i)
+			}
+			continue
+		}
+		if !validApprovalStepName(name) {
+			return fmt.Errorf(
+				"workflow step %d name %q is not a usable identifier — lowercase letters, digits and inner dashes only (it appears in permission strings and grant declarations)",
+				i, name)
+		}
+		if prev, dup := seen[name]; dup {
+			return fmt.Errorf(
+				"workflow steps %d and %d share the name %q — a step name identifies ONE step for the whole approval, so duplicates are ambiguous",
+				prev, i, name)
+		}
+		seen[name] = i
+	}
+	return nil
+}
+
+// validateStepEscalation checks that an escalation can actually DO something:
+// it needs a timeout, a reassign target, a target shaped like a duty, and a
+// target that is not the step's own duty.
+//
+// Each refusal closes a declaration that would otherwise pass validate and then
+// change nothing — reassignment is the only escalation effect the engine
+// implements, so anything less than "after + a different duty" is silent.
+func validateStepEscalation(i int, step ApprovalStep) error {
+	esc := step.Escalation
+	if esc == nil {
+		return nil
+	}
+	if strings.TrimSpace(esc.After) == "" {
+		return fmt.Errorf(
+			"step %d declares `escalation` without `after` — there is no timeout for the reassignment to fire on",
+			i)
+	}
+	target := strings.TrimSpace(esc.Reassign)
+	if target == "" {
+		return fmt.Errorf(
+			"step %d declares `escalation.after` without `reassign` — reassignment is the only escalation effect the engine implements, so the timeout would pass silently",
+			i)
+	}
+	// A fully qualified duty is taken as written; a short one must look like a duty
+	// name, since it appears in a permission string and in a grant declaration.
+	if strings.Count(target, ".") < 2 && !validApprovalStepName(target) {
+		return fmt.Errorf(
+			"step %d escalation.reassign %q is not a usable duty name — lowercase letters, digits and inner dashes only, or a fully qualified permission",
+			i, target)
+	}
+	// Escalating to the step's OWN duty changes nothing: those are exactly the
+	// people who could already approve it. The failure would be silent (the
+	// approval still stalls), so it is refused here.
+	if strings.TrimSpace(step.Permission) != "" && target == strings.TrimSpace(step.Name) {
+		return fmt.Errorf(
+			"step %d escalation.reassign %q is the step's own duty — escalating to the people who can already approve it changes nothing; name the duty that should TAKE OVER instead",
+			i, target)
+	}
+	return nil
+}
+
+// validateApprovalStepMode checks how a step collects its quorum.
+//
+// Two rules, both because the alternative is a number that is not true:
+//
+//   - `mode: all` promises "every eligible approver must sign". That count is
+//     not derivable from a manifest: a role list is not a list of people (one
+//     person may hold two roles, and one role may have many holders), and a
+//     duty's holders cannot be enumerated at all. The runtime used to answer
+//     `len(roles)`, which is a count of NAMES — it could demand two signatures
+//     from a single person, who can never supply them (a duplicate approval for
+//     one step is refused), leaving a step that is impossible to satisfy. A
+//     promise the engine cannot keep is refused here instead.
+//   - `mode: sequential` takes its count from the chain itself, so an explicit
+//     `approvers` would be a second, pointless answer to one question.
+func validateApprovalStepMode(i int, step ApprovalStep) error {
+	switch step.Mode {
+	case StepModeAll:
+		return fmt.Errorf(
+			"workflow step %d declares `mode: all`, whose quorum cannot be derived: a role list is not a list of people, and a duty's holders are not enumerable. Say the number instead — `mode: any` with `approvers: N` (N of the eligible pool), or `mode: sequential` (one signature per role, in order)",
+			i)
+	case StepModeSequential:
+		if len(step.Roles) == 0 {
+			return fmt.Errorf(
+				"workflow step %d declares `mode: sequential` without `roles` — the role list IS the chain, so there is no order to follow and no count to derive",
+				i)
+		}
+		if step.Approvers > 0 {
+			return fmt.Errorf(
+				"workflow step %d declares `mode: sequential` together with `approvers: %d` — a chain takes its count from `roles` (one signature per role), so the number has no effect and would drift",
+				i, step.Approvers)
+		}
+		if strings.TrimSpace(step.Permission) != "" {
+			// A chain is ordered BY ROLES; a duty is a flat permission with no
+			// position in it. Combining them leaves no answer to "may the duty
+			// holder take the turn that belongs to another role?" — and either
+			// answer bites: yes lets one person consume a turn meant for someone
+			// else, no makes the duty a second gate that the non-sequential modes
+			// do not have. Refused instead of chosen silently.
+			return fmt.Errorf(
+				"workflow step %d combines `mode: sequential` with `permission` — a chain is ordered by its `roles`, while a duty is a flat permission with no position in that order. Use `mode: sequential` with roles, or a duty with `mode: any`/`approvers`",
+				i)
+		}
+	}
+	return nil
+}
+
+// validApprovalStepName reports whether a step name can appear in a permission
+// string (`workflow.{module}.{workflow}.{step}`) and in a grant declaration.
+func validApprovalStepName(name string) bool {
+	for i, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '-' && i > 0 && i < len(name)-1:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateApprovalSpec checks the approval contract on a transition
+// (02-core-extended.md §2). An approval with no step can never reach quorum, so
+// it is refused rather than left as a gate that silently never opens.
+func ValidateApprovalSpec(a *ApprovalSpec) error {
+	if a == nil {
+		return nil
+	}
+	if len(a.Steps) == 0 {
+		return fmt.Errorf("transition `approval` has no `steps` — an approval chain with no step can never reach quorum")
+	}
+	return ValidateApprovalSteps(a)
 }
 
 // ValidateModuleSpec checks the Module contract. Enforces:
@@ -1200,63 +1428,6 @@ func ValidateAppSpec(a *AppSpec) error {
 	}
 	if a.Access != "" && a.Access != AppAccessPrivate && a.Access != AppAccessPublic {
 		return fmt.Errorf("access %q is invalid (enum: private, public)", a.Access)
-	}
-	// public_entities (S3): an anonymous allowlist. Validated here so a grant can
-	// never name a module the App does not mount, an unknown action, or an entry
-	// that grants nothing.
-	if a.PublicEntities != nil {
-		if a.Access != AppAccessPublic {
-			return fmt.Errorf("public_entities requires `access: public` (this App's access is %s)", accessLabel(a.Access))
-		}
-		mounted := make(map[string]bool, len(a.Modules))
-		for _, m := range a.Modules {
-			mounted[m] = true
-		}
-		seen := make(map[string]bool, len(*a.PublicEntities))
-		for i, pe := range *a.PublicEntities {
-			canonical, ok := NormalizeEntityRef(pe.Entity)
-			if !ok {
-				return fmt.Errorf("public_entities[%d]: entity %q must be \"<module>/<entity>\" (or \"<module>.<entity>\")", i, pe.Entity)
-			}
-			mod, _, _ := strings.Cut(canonical, "/")
-			if !mounted[mod] {
-				return fmt.Errorf("public_entities[%d]: module %q is not mounted by this App (spec.modules)", i, mod)
-			}
-			if seen[canonical] {
-				return fmt.Errorf("public_entities[%d]: %q is declared more than once", i, pe.Entity)
-			}
-			seen[canonical] = true
-			if len(pe.Actions) == 0 {
-				return fmt.Errorf("public_entities[%d] (%s): actions is required — use `public_entities: []` to grant nothing, or omit the entry", i, pe.Entity)
-			}
-			for _, act := range pe.Actions {
-				if !PublicEntityActions[act] {
-					return fmt.Errorf("public_entities[%d] (%s): unknown action %q (closed set: list, find, create, update, delete)", i, pe.Entity, act)
-				}
-			}
-			// Per-surface row scope (#45). Anonymous reads are the reason a
-			// grant needs one; and a grant that declares a scope while also
-			// granting `find` would look guarded while it is not — find
-			// resolves by id, which this mechanism cannot check.
-			for j := range pe.Scope {
-				sc := &pe.Scope[j]
-				if sc.Field == "" {
-					return fmt.Errorf("public_entities[%d] (%s): scope[%d]: field is required", i, pe.Entity, j)
-				}
-				if sc.From != "route" {
-					return fmt.Errorf(
-						"public_entities[%d] (%s): scope[%d] (%s) must use `from: route` — a public surface has no session identity, so a session-scoped grant would deny every read instead of filtering it",
-						i, pe.Entity, j, sc.Field)
-				}
-				for _, act := range pe.Actions {
-					if act == "find" {
-						return fmt.Errorf(
-							"public_entities[%d] (%s): cannot grant `find` together with `scope` — find resolves by id and the scope cannot guard it, so the grant would look filtered while returning any record by id",
-							i, pe.Entity)
-					}
-				}
-			}
-		}
 	}
 	// registered_views (S4): the App's extra surface beyond its menu. Each entry
 	// names exactly one of entity/view, must reference a module the App mounts,

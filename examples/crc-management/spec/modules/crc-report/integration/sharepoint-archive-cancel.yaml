@@ -1,0 +1,17 @@
+apiVersion: formspec.dev/v1
+kind: Integrator
+metadata:
+  name: sharepoint-archive-cancel
+  module: crc-report
+  description: "Pembalik arsip SharePoint: tarik PDF saat dokumen dibatalkan (pasangan simetris sharepoint-archiver, 7.7.2)"
+spec:
+  # Aturan 7.7.2: integrator yang membuat efek samping saat satu event WAJIB
+  # punya penangan pembatalan untuk resource yang sama — kalau tidak, dokumen
+  # yang sudah terarsip lalu dibatalkan akan meninggalkan arsip yang basi tanpa
+  # jalan menariknya.
+  listen:
+    resource: crc-field.checklist-document
+    event: on_cancel
+  call:
+    resource: crc-report.sharepoint-upload
+    action: remove

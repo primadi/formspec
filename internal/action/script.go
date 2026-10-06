@@ -191,6 +191,13 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 	// entity whose `maintained_by` names it (item 4.1). Set on the engine
 	// before Execute so the wiring layer can compare it.
 	e.engine.MaintainerRef = action.Impl.Ref
+	// Carry the explicit system-execution decision to the write handlers, which
+	// only see a context (see action.WithSystemCaller). Set here — where the
+	// dispatch layer's declaration is still known — and never derived from a
+	// missing identity.
+	if params.SystemCaller {
+		ctx = WithSystemCaller(ctx)
+	}
 	result, err := e.engine.Execute(
 		ctx,
 		scriptPath,

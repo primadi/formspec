@@ -2,8 +2,6 @@ package formspec
 
 import (
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -108,16 +106,5 @@ func TestReloadSpecKeepsFileStorage(t *testing.T) {
 		map[string]any{"key": "seed/menu/es-teh.jpg"})
 	if status == http.StatusInternalServerError {
 		t.Fatalf("upload after ReloadSpec: 500 — storage resolver missing\nbody=%v", body)
-	}
-}
-
-// writeSpecFile is a tiny helper for tests that need to mutate a spec file.
-func writeSpecFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
 	}
 }

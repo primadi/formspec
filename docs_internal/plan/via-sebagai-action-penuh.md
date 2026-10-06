@@ -190,6 +190,76 @@ key collision `key={t.action}`.
 `cmd/formspec/validate_workflow.go` `buildTransitionIndex`; tutup 10.47; item
 baru **10.48** (transisi tanpa `via` tidak bisa di-gate `kind: Workflow`).
 
+**L8 — validator UI membaca union** _(2026-10-02)_ ✅
+`actionExists` (`internal/ui/validate.go:426`) menelusuri `es.Actions` langsung.
+Akibatnya setiap `via` yang dipakai sebagai tombol di `kind: Form`/`Table`
+diperingatkan `action "…" not on entity …` saat boot, walaupun aksi itu ada —
+dan justru **karena** manifest tidak lagi menulisnya di `actions:` (yang sejak
+L4 ditolak). Terukur di `examples/kafe`: 8 warning dari `order-form-pos`
+(`start-preparing`, `mark-ready`, `mark-served`, `complete-order`) dan
+`order-table-pos` (keempatnya) — sementara `confirm-payment`/`void-order` yang
+masih punya entri `actions:` bersih, yang persis membuktikan sumbernya.
+
+Ini pembaca union kelima yang terlewat (L3 `registerRouteWithPattern` +
+`generatePrepareRoutes`; L5 `buildEntitySchema` + `authorizedActions`; 5.24.3
+`GenerateCustomActionRoutes`). **Pelajaran:** pola "satu registry, dua sumber"
+gagal dengan cara yang sama setiap kali — pembaca baru ditulis terhadap
+`es.Actions` karena itu yang tampak seperti daftar action. Kandidat audit
+lanjutan yang disebut di L4 (`internal/auth/materialize.go:242` dan
+`pkg/spec/entity.go:1597`) **ditutup di L9** (2026-10-02, changelog `-008`);
+celah kelas yang sama (`rate_limit` transisi via-only) **ditutup di L9 juga**
+(2026-10-02, changelog `-009`).
+
+Perbaikan: `ActionSources()`; pesan validator menyebut union secara eksplisit.
+Pengunci: `internal/ui/validate_transition_action_test.go` (Form + Table dari
+satu fixture, terkalibrasi gagal saat regresi disuntikkan). Changelog
+`2026-10-02-007`; kafe 10.59 ✅ — sisa audit dua pembaca lain (materialize
+`uses`, `ValidateHooks`) dibuka sebagai kafe **10.60 ⏸️**.
+
+**L9 — dua pembaca action terakhir membaca union** _(2026-10-02)_ ✅
+Menutup kafe 10.60. Dua situs yang tersisa dari L8, keduanya sebelumnya hanya
+"kandidat audit" (belum jadi bug terukur):
+
+1. **`ValidateHooks` (`pkg/spec/entity.go`).** `ValidateEntitySpec` memanggil
+   `ValidateHooks(d.Hooks, d.Actions)`, jadi `hooks.on: before|after|on_error`
+   yang menyebut `via` transisi ditolak `hook action %q does not match any
+declared action` — menolak persis bentuk yang L4 wajibkan.
+   → `ValidateHooks(d.Hooks, d.ActionSources())`.
+2. **`entityFootprint` (`internal/auth/materialize.go`).** Peta `disabled`
+   membaca `es.Actions` langsung. Sinerginya: `ActionSources()` dihitung **satu
+   kali** dan dipakai baik untuk `disabled` maupun loop action kustom (yang
+   sejak L5 sudah union). Ini migrasi **netral-perilaku** — action sintetis
+   tidak pernah `disabled` — jadi tidak ada test yang bisa membuktikannya gagal;
+   yang dijaga adalah pembacaan union yang **load-bearing** di fungsi itu
+   (kemasukan action kustom), lihat guard di bawah.
+
+**Yang sengaja TIDAK disentuh (dan alasannya).** `resolveAction`
+(`internal/api/handler.go`) tetap membaca `es.Actions`; ia dipakai `create`/
+`update` dan — menurut plan ini §Further Considerations #1 — justru
+**melindungi** dari tabrakan `via: update/delete` yang belum diputuskan.
+Satu celah kelas yang sama **ditemukan saat audit ini** dan dibuka sebagai
+kafe **10.60a**: `checkRateLimit` memakai `resolveAction`, sehingga `rate_limit`
+yang dideklarasikan pada transisi via-only tidak ditegakkan — terikat pada
+keputusan §Further Considerations #1, jadi tidak diputuskan sendiri.
+
+✅ **10.60a DITUTUP 2026-10-02** (changelog `2026-10-02-009`) — dan ternyata
+**tidak** butuh keputusan itu. `HandleCustomAction` sudah **memegang** spec
+hasil union; yang salah adalah pemeriksaan rate limit me-resolve **ulang** lewat
+`resolveAction` alih-alih memakai spec yang ada. Perbaikan sempit tanpa
+menyentuh `resolveAction`: `checkRateLimitAction` (menerima action hasil
+resolve; `checkRateLimit` lama jadi pembungkus agar pemanggil lama netral) +
+`rateLimitForAction`. **Terukur lewat handler nyata:** entity dengan
+`rate_limit {max:1, per:1s}` hanya pada `via: confirm` → panggilan ke-2 **200**
+sebelum, **429** sesudah; guard terkalibrasi gagal saat wiring di-revert.
+Pelajaran bentuk: versi pertama test memanggil helper langsung dan tetap hijau
+saat wiring di-revert — **guard yang tidak menjaga**; test harus melewati
+handler sungguhan.
+
+Pengunci: `pkg/spec/entity_hooks_union_test.go` (ValidateEntitySpec) dan
+`internal/auth/materialize_union_test.go` (footprint + Materialize), keduanya
+dengan kalibrasi (nama tak dikenal tetap ditolak/tidak termaterialisasi).
+Changelog `2026-10-02-008`.
+
 **D2 — bug terpisah, prioritas tinggi** _(parallel)_
 `authorizedActions` **tidak memasukkan action kustom** → `canDoEntityAction`
 mengabaikan permission → **tombol transisi kustom tak pernah tampil**. Server

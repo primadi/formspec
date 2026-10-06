@@ -124,36 +124,36 @@ ditandai tertutup. Tidak ada gap #1–#53/S1–S16 yang berubah status.
 or "route", got "cookie"`) + schema (`/spec/scope/0/from: validation failed`).
       Bukti runtime (binary SUDAH di-rebuild, raw JSON, spec uji dengan dua baris A/B):
 
-                                                                    | Permintaan | Hasil |
-                                                                    | --- | --- |
-                                                                    | (tanpa param) | `403 row scope on branch_id: missing "branch" request parameter` |
-                                                                    | `?branch=A` | `total: 1`, hanya `branch_id":"A"` |
-                                                                    | `?branch=A&branch_id[eq]=B` | **`total: 1`, hanya A** — klien tidak bisa melebarkan |
-                                                                    | `?branch=B` | `total: 1`, hanya B |
-                                                                    | `?branch_id[notnull]=1` (op lain) | `403` — tidak bisa dilewati |
+                                                                                | Permintaan | Hasil |
+                                                                                | --- | --- |
+                                                                                | (tanpa param) | `403 row scope on branch_id: missing "branch" request parameter` |
+                                                                                | `?branch=A` | `total: 1`, hanya `branch_id":"A"` |
+                                                                                | `?branch=A&branch_id[eq]=B` | **`total: 1`, hanya A** — klien tidak bisa melebarkan |
+                                                                                | `?branch=B` | `total: 1`, hanya B |
+                                                                                | `?branch_id[notnull]=1` (op lain) | `403` — tidak bisa dilewati |
 
-                                                                    Test: 7 case `internal/api/scope_test.go` + `TestValidateEntitySpec_Scope`.
-                                                                    (e) **Gerbang adopsi (temuan baru):** `formspec validate` tanpa `--schema`
-                                                                    memakai **schema registry cache**, yang menolak properti baru →
-                                                                    `additional properties 'scope' not allowed`. Schema lokal sudah diregenerasi
-                                                                    (`make generate-schema`), tetapi **schema yang dipublikasikan di registry harus
-                                                                    di-refresh lebih dulu** sebelum aplikasi mana pun memakai `scope:`.
-                                                                    **Catatan 2026-09-15:** gerbang yang sama kini menghadang `1.2` —
-                                                                    `formspec validate` (tanpa `--schema`) pada spec kafe melaporkan
-                                                                    `additional properties 'public_entities' not allowed` karena schema **App**
-                                                                    di registry masih versi sebelum `public_entities`; dengan schema lokal
-                                                                    (`--schema ../../schemas`) hasilnya **0 problem**. Jadi ini murni staleness
-                                                                    registry, bukan regresi spec. Satu tiket refresh menutup `scope` +
-                                                                    `public_entities` sekaligus.
-                                                                    **Kenapa kafe belum memakai `scope:`** (keputusan sadar, bukan lupa):
-                                                                    - `from: session, attr: branch_id` butuh **atribut sesi yang terisi** — mekanisme
-                                                                      penugasan (employee → cabang) baru ada di **1.8/3.5 (S5 `assignments`)**.
-                                                                      Kalau dipasang sekarang, seluruh list kasir akan **403** (fail-closed benar,
-                                                                      tapi aplikasi tak terpakai).
-                                                                    - `from: route` pada `table-session` akan menuntut `?token=` pada **semua** surface,
-                                                                      termasuk POS kasir yang tidak punya token → merusak surface POS. Scope
-                                                                      per-permukaan adalah **S3 (1.2)**, bukan scope entitas menyeluruh.
-                                                                    Jadi adopsi di spec kafe menunggu **1.8** (session) dan **1.2** (per-surface).
+                                                                                Test: 7 case `internal/api/scope_test.go` + `TestValidateEntitySpec_Scope`.
+                                                                                (e) **Gerbang adopsi (temuan baru):** `formspec validate` tanpa `--schema`
+                                                                                memakai **schema registry cache**, yang menolak properti baru →
+                                                                                `additional properties 'scope' not allowed`. Schema lokal sudah diregenerasi
+                                                                                (`make generate-schema`), tetapi **schema yang dipublikasikan di registry harus
+                                                                                di-refresh lebih dulu** sebelum aplikasi mana pun memakai `scope:`.
+                                                                                **Catatan 2026-09-15:** gerbang yang sama kini menghadang `1.2` —
+                                                                                `formspec validate` (tanpa `--schema`) pada spec kafe melaporkan
+                                                                                `additional properties 'public_entities' not allowed` karena schema **App**
+                                                                                di registry masih versi sebelum `public_entities`; dengan schema lokal
+                                                                                (`--schema ../../schemas`) hasilnya **0 problem**. Jadi ini murni staleness
+                                                                                registry, bukan regresi spec. Satu tiket refresh menutup `scope` +
+                                                                                `public_entities` sekaligus.
+                                                                                **Kenapa kafe belum memakai `scope:`** (keputusan sadar, bukan lupa):
+                                                                                - `from: session, attr: branch_id` butuh **atribut sesi yang terisi** — mekanisme
+                                                                                  penugasan (employee → cabang) baru ada di **1.8/3.5 (S5 `assignments`)**.
+                                                                                  Kalau dipasang sekarang, seluruh list kasir akan **403** (fail-closed benar,
+                                                                                  tapi aplikasi tak terpakai).
+                                                                                - `from: route` pada `table-session` akan menuntut `?token=` pada **semua** surface,
+                                                                                  termasuk POS kasir yang tidak punya token → merusak surface POS. Scope
+                                                                                  per-permukaan adalah **S3 (1.2)**, bukan scope entitas menyeluruh.
+                                                                                Jadi adopsi di spec kafe menunggu **1.8** (session) dan **1.2** (per-surface).
 
 - [x] **1.2 — S3: akses publik per-entity** (prioritas §F #2).
       Konstruksi: `spec.public_entities: [{entity, actions}]` pada App.
@@ -358,50 +358,50 @@ price_field, quantity_field, note_field, max_quantity}`. Aturan: `ref_field`
       **Bukti runtime** (dev server, spec kafe, satu DB segar — lihat catatan
       nomor pesanan di bawah):
 
-                                                                | Langkah | Hasil |
-                                                                | --- | --- |
-                                                                | Anonim baca katalog (`is_available=true`) | `['Kopi Susu','Roti Bakar']` |
-                                                                | Anonim baca baris harga cabang | 2 baris `{amount,currency}` |
-                                                                | Context halaman (sesi dari route) | `session.id`, `branch_id`, `table_id` |
-                                                                | POST payload hasil `buildSubmitPayload` | **201** — `number=ORD-2026-00001`, `channel=qr_table`, `guest_note` terbawa, `note` per baris terbawa, `line_total` **{50000,12500}** dan `subtotal` **{62500}** dihitung server (S7) |
+                                                                            | Langkah | Hasil |
+                                                                            | --- | --- |
+                                                                            | Anonim baca katalog (`is_available=true`) | `['Kopi Susu','Roti Bakar']` |
+                                                                            | Anonim baca baris harga cabang | 2 baris `{amount,currency}` |
+                                                                            | Context halaman (sesi dari route) | `session.id`, `branch_id`, `table_id` |
+                                                                            | POST payload hasil `buildSubmitPayload` | **201** — `number=ORD-2026-00001`, `channel=qr_table`, `guest_note` terbawa, `note` per baris terbawa, `line_total` **{50000,12500}** dan `subtotal` **{62500}** dihitung server (S7) |
 
-                                                                Halaman `cafe-order/pages/menu-catalog.yaml` (route `/menu/:session_id`,
-                                                                `public: true`). Adopsi: `line_total` + `subtotal` kini `computed` di
-                                                                entity order (komentar GAP-02 yang kedaluwarsa dihapus);
-                                                                `total_amount` **belum** diturunkan karena rantai diskon/pajak butuh nilai
-                                                                Config cabang — dicatat di entity, bukan dikira-kira.
-                                                                _Sisa (dicatat, bukan disembunyikan):_
-                                                                - **Token QR → sesi** masih dua langkah (aplikasi membuat/menemukan sesi
-                                                                  dulu, halaman mengambil ID-nya): `GET /entity/{id}` me-resolve ID dan
-                                                                  natural key, sedangkan `guest_token` bukan keduanya. Menjadikan token
-                                                                  kunci milik tamu = **2.2** (sisa #45). Halaman **tidak** berpura-pura
-                                                                  sudah bisa.
-                                                                - **Sisi kasir belum tersentuh**: numpad uang & kembalian menunggu widget
-                                                                  uang (**2.14**), layar POS sebagai kind tersendiri menunggu `kind: Pos`.
-                                                                  Marker GAP-05 di `pos-workbench.yaml` diperbarui: pelanggan tertutup,
-                                                                  kasir masih terbuka.
-                                                                - **3 bug engine ditemukan & diperbaiki** selama mengerjakan ini (kelas
-                                                                  "diam-diam salah", jadi bagian dari pekerjaan, bukan deferred):
-                                                                  (a) filter boolean `?flag=true` **mencocokkan nol baris** (nilai string
-                                                                  "true" dibandingkan dengan kolom hasil cast numerik) → katalog QR akan
-                                                                  kosong tanpa gejala; kini `true/false/1/0/yes/no` diterima untuk field
-                                                                  boolean (`coerceFilterValue`, dipakai List/Aggregate/Window);
-                                                                  (b) `created_by`/`updated_by` NULL (baris hasil seed/migrasi/operator)
-                                                                  membuat **setiap** pembacaan entity 500 (`converting NULL to string is
-                                                                  unsupported`) → `scanEntityRecord` memakai `sql.NullString`;
-                                                                  (c) gerbang permission `source: entity` di render context memakai nama
-                                                                  **singular** (`{module}.{entity}.view`) padahal permission terdaftar
-                                                                  `{module}.{plural}.view` → deklarasi `context` entity **tidak pernah**
-                                                                  resolve kecuali pemanggil punya `*` (seed dev), dan permukaan publik
-                                                                  mustahil; kini plural dari metadata + permukaan `public: true`
-                                                                  melewati pra-cek (server tetap otoritas).
-                                                                - **Dua gap lama tetap terbuka** (bukan bagian 1.5): menulis harga lewat
-                                                                  API gagal karena `guard_menu_item_price_unique.star` memakai SQL mentah
-                                                                  dengan nama kolom yang tidak ada (#30/#31, item 4.5) — seed harga di
-                                                                  verifikasi memakai SQL langsung; dan nomor pesanan `ORD-2026-00001`
-                                                                  bertabrakan saat cabang kedua membuat pesanan di DB yang sama
-                                                                  (`scope_field` per cabang + index unik global) → item **1.6**/#9/3.6,
-                                                                  verifikasi memakai DB segar.
+                                                                            Halaman `cafe-order/pages/menu-catalog.yaml` (route `/menu/:session_id`,
+                                                                            `public: true`). Adopsi: `line_total` + `subtotal` kini `computed` di
+                                                                            entity order (komentar GAP-02 yang kedaluwarsa dihapus);
+                                                                            `total_amount` **belum** diturunkan karena rantai diskon/pajak butuh nilai
+                                                                            Config cabang — dicatat di entity, bukan dikira-kira.
+                                                                            _Sisa (dicatat, bukan disembunyikan):_
+                                                                            - **Token QR → sesi** masih dua langkah (aplikasi membuat/menemukan sesi
+                                                                              dulu, halaman mengambil ID-nya): `GET /entity/{id}` me-resolve ID dan
+                                                                              natural key, sedangkan `guest_token` bukan keduanya. Menjadikan token
+                                                                              kunci milik tamu = **2.2** (sisa #45). Halaman **tidak** berpura-pura
+                                                                              sudah bisa.
+                                                                            - **Sisi kasir belum tersentuh**: numpad uang & kembalian menunggu widget
+                                                                              uang (**2.14**), layar POS sebagai kind tersendiri menunggu `kind: Pos`.
+                                                                              Marker GAP-05 di `pos-workbench.yaml` diperbarui: pelanggan tertutup,
+                                                                              kasir masih terbuka.
+                                                                            - **3 bug engine ditemukan & diperbaiki** selama mengerjakan ini (kelas
+                                                                              "diam-diam salah", jadi bagian dari pekerjaan, bukan deferred):
+                                                                              (a) filter boolean `?flag=true` **mencocokkan nol baris** (nilai string
+                                                                              "true" dibandingkan dengan kolom hasil cast numerik) → katalog QR akan
+                                                                              kosong tanpa gejala; kini `true/false/1/0/yes/no` diterima untuk field
+                                                                              boolean (`coerceFilterValue`, dipakai List/Aggregate/Window);
+                                                                              (b) `created_by`/`updated_by` NULL (baris hasil seed/migrasi/operator)
+                                                                              membuat **setiap** pembacaan entity 500 (`converting NULL to string is
+                                                                              unsupported`) → `scanEntityRecord` memakai `sql.NullString`;
+                                                                              (c) gerbang permission `source: entity` di render context memakai nama
+                                                                              **singular** (`{module}.{entity}.view`) padahal permission terdaftar
+                                                                              `{module}.{plural}.view` → deklarasi `context` entity **tidak pernah**
+                                                                              resolve kecuali pemanggil punya `*` (seed dev), dan permukaan publik
+                                                                              mustahil; kini plural dari metadata + permukaan `public: true`
+                                                                              melewati pra-cek (server tetap otoritas).
+                                                                            - **Dua gap lama tetap terbuka** (bukan bagian 1.5): menulis harga lewat
+                                                                              API gagal karena `guard_menu_item_price_unique.star` memakai SQL mentah
+                                                                              dengan nama kolom yang tidak ada (#30/#31, item 4.5) — seed harga di
+                                                                              verifikasi memakai SQL langsung; dan nomor pesanan `ORD-2026-00001`
+                                                                              bertabrakan saat cabang kedua membuat pesanan di DB yang sama
+                                                                              (`scope_field` per cabang + index unik global) → item **1.6**/#9/3.6,
+                                                                              verifikasi memakai DB segar.
 
 - [x] **1.6 — S8: unique parsial + index atas relasi** (prioritas §F #6).
       Target: `pkg/spec/entity.go` (`IndexDecl.where`), `renderers/jsonb-persist/ddl.go`
@@ -1059,30 +1059,30 @@ route}` — sebelumnya daftar harga anonim terbuka tanpa syarat, sehingga satu
       **Bukti runtime** (dev server, DB segar, dua pesanan B1/B2, token dev
       ditandatangani dengan secret dev sehingga klaim sesi nyata):
 
-                                                | Permintaan | Hasil |
-                                                | --- | --- |
-                                                | kasir B1 (`attrs.branch_id=B1`, perm `.list`) | `200`, `total: 1`, hanya `B1-1` |
-                                                | kasir B1 + `?branch_id[eq]=B2` | `200`, **tetap hanya `B1-1`** — klien tidak bisa melebarkan |
-                                                | kasir B2 | `200`, hanya `B2-1` |
-                                                | pemilik (`.list` + `.read_all`, **tanpa** atribut cabang) | `200`, `total: 2` — kedua cabang |
-                                                | identitas `.list` tanpa atribut cabang | **403** `row scope on branch_id: caller has no "branch_id" session attribute` |
-                                                | anonim `list order` | **401** (allowlist; `order` butuh token tamu) |
-                                                | anonim `list menu-item-price` tanpa `?branch_id` | **403** |
-                                                | anonim `list menu-item-price?branch_id=B1` | `200` |
+                                                            | Permintaan | Hasil |
+                                                            | --- | --- |
+                                                            | kasir B1 (`attrs.branch_id=B1`, perm `.list`) | `200`, `total: 1`, hanya `B1-1` |
+                                                            | kasir B1 + `?branch_id[eq]=B2` | `200`, **tetap hanya `B1-1`** — klien tidak bisa melebarkan |
+                                                            | kasir B2 | `200`, hanya `B2-1` |
+                                                            | pemilik (`.list` + `.read_all`, **tanpa** atribut cabang) | `200`, `total: 2` — kedua cabang |
+                                                            | identitas `.list` tanpa atribut cabang | **403** `row scope on branch_id: caller has no "branch_id" session attribute` |
+                                                            | anonim `list order` | **401** (allowlist; `order` butuh token tamu) |
+                                                            | anonim `list menu-item-price` tanpa `?branch_id` | **403** |
+                                                            | anonim `list menu-item-price?branch_id=B1` | `200` |
 
-                                                **Nuansa yang tercatat:** pemilik yang **hanya** memegang `read_all` (tanpa
-                                                `.list`) mendapat **404** — itu gerbang permission UI-surface, bukan scope:
-                                                `read_all` mengecualikan penyaringan, bukan memberikan hak baca.
-                                                Test: `TestKafeRowScopeSpec_ScopeAndSource`, `TestKafeAssignmentSources_EmployeeMapsUsernameToBranch`,
-                                                `TestKafePublicGrants_ScopedWhereRowsMatter`. `go test ./...` hijau · kafe
-                                                `validate` **0 problem**.
-                                                **Sisa (dicatat):** ~~supervisor pemegang **dua** cabang belum bisa dinyatakan
-                                                (`assignments` masih satu nilai per dimensi; butuh daftar nilai + `op: in`)~~
-                                                — **digantikan oleh 3.8**: bukan daftar nilai, melainkan pilihan konteks
-                                                sesi `(role, cabang)` yang **selalu tunggal**. Yang tetap tersisa:
-                                                `dining-table`/`table-session` sengaja belum di-scope sesi karena masih
-                                                dibaca permukaan tamu (`find` by id) → **10.5(a) ⏸️** (satu paket dengan
-                                                **2.15 ⏸️**).
+                                                            **Nuansa yang tercatat:** pemilik yang **hanya** memegang `read_all` (tanpa
+                                                            `.list`) mendapat **404** — itu gerbang permission UI-surface, bukan scope:
+                                                            `read_all` mengecualikan penyaringan, bukan memberikan hak baca.
+                                                            Test: `TestKafeRowScopeSpec_ScopeAndSource`, `TestKafeAssignmentSources_EmployeeMapsUsernameToBranch`,
+                                                            `TestKafePublicGrants_ScopedWhereRowsMatter`. `go test ./...` hijau · kafe
+                                                            `validate` **0 problem**.
+                                                            **Sisa (dicatat):** ~~supervisor pemegang **dua** cabang belum bisa dinyatakan
+                                                            (`assignments` masih satu nilai per dimensi; butuh daftar nilai + `op: in`)~~
+                                                            — **digantikan oleh 3.8**: bukan daftar nilai, melainkan pilihan konteks
+                                                            sesi `(role, cabang)` yang **selalu tunggal**. Yang tetap tersisa:
+                                                            `dining-table`/`table-session` sengaja belum di-scope sesi karena masih
+                                                            dibaca permukaan tamu (`find` by id) → **10.5(a) ⏸️** (satu paket dengan
+                                                            **2.15 ⏸️**).
 
 - [x] **3.8 — Konteks sesi: (principal, role, cabang).** ✅ **2026-09-20 — SELESAI (inti + API; UI pemilih menyusul)**
       Usulan pemilik proyek 2026-09-16: sesi selalu spesifik — siapa, sebagai
@@ -1626,12 +1626,17 @@ cashier_id], unique: true, where: "status = 'open'"}]`, dan
       diterima; `void_reason` yang tidak ada → ditolak dengan menyebut namanya) ·
       kafe `validate` 0 problem · `go test ./...` hijau. Normatif:
       `docs/spec/backend/02-core-extended.md` §2.
-      **Sisa (dicatat):** `ApprovalInbox` zero-config mengambil dari langkah
+      **Sisa (dulu dicatat):** `ApprovalInbox` zero-config mengambil dari langkah
       workflow yang menunggu, tetapi **wiring runtime** yang mengisi `title`/
       `display_fields` ke item inbox belum ada — renderer sudah menampilkan
       `item.title` bila ada, jadi sisanya adalah pekerjaan engine (mengisi item
       dari step). Itu di luar cakupan spec-level item ini → item **5.13.6 ⏸️**
       di master todo.
+      ✅ **DITUTUP 2026-10-04:** sumbernya bukan entity sama sekali (baris di
+      `formspec_workflow_approval`), jadi penyelesaiannya endpoint khusus
+      `GET /_ui/workflow/approvals` + `POST …/approvals/{id}` — 5.13.6 selesai,
+      changelog `2026-10-04-004`. Yang masih terbuka hanya `realtime`
+      (**5.13.7 ⏸️**).
 - [x] **5.4 — #37: shorthand `render: drawer` diterima** (selaraskan loader & schema).
       ✅ **2026-09-20.** Akarnya divergensi loader↔schema: `FormRenderDecl`
       punya `UnmarshalYAML` yang menerima **kedua** bentuk (`render: drawer`
@@ -1951,15 +1956,37 @@ migrate plan` → `apply` → DB sungguhan → `formspec validate` pada manifest
 
       | # | Skenario | Status | Bukti / penghalang |
       | --- | --- | --- | --- |
-      | 1 | Pesan dari QR | ✅ API | rantai anonim penuh: katalog `menu-item` + `menu-item-price` 200 → `table-session` create 201 → `order create` 201 (`ORD-2026-00005`, scope_field per cabang) — 2026-09-20; keranjang & halaman = UI browser (belum) |
-      | 2 | Bayar → KDS | ✅ API | payment 201 → `PATCH` order `awaiting_payment → paid` 200; KDS = list `status[in]=paid,…` |
+      | 1 | Pesan dari QR | ✅ API | rantai anonim penuh: katalog `menu-item` + `menu-item-price` 200 → `table-session` create 201 → `order create` 201 (`ORD-2026-00005`, scope_field per cabang) — 2026-09-20; keranjang & halaman = UI browser (belum) · **Diuji ulang 2026-10-03 sebagai ANONIM murni** (changelog `2026-10-03-002`): resolve meja dari token QR **200** (`JKT-A01-DEMO`, natural key 10.34b terbukti) · katalog 200 (9 menu, 4 kategori) · `menu-item-price` **tanpa** `branch_id` → **403** (scope, bukan kebocoran) · `table-session` **201** · sesi kedua di meja sama → **409** (10.34c) · `order` **201** tanpa satu pun angka uang dari klien (`subtotal` 50000 & `line_total` dihitung server; `total_amount` **null** → 10.65) · `list` anonim: tanpa token **403**, token sendiri **1 baris**, token orang lain **0 baris** · `PATCH` status oleh tamu **401**. Entity di luar allowlist (`shift`, `cash-movement`, `payment`, `member`, `employee`) → **401**. |
+      | 2 | Bayar → KDS | ✅ API | payment 201 → `PATCH` order `awaiting_payment → paid` 200; KDS = list `status[in]=paid,…` · **Diuji ulang 2026-10-03** (changelog `2026-10-03-002`): payment QRIS `settled` **201** → `PATCH paid` **200** → meja `available → occupied` dalam **~2 s** lewat subscription `table-occupancy` (10.40b). Filter KDS terbukti bekerja (`status[in]=paid,in_kitchen,ready` → 2 baris; `status[in]=ready` → 1). **Aturan bisnis #1 ✅ kini ditegakkan API** (2026-10-03, changelog `2026-10-03-011`): barista `list` tidak lagi memuat `draft` (3 → 2 baris), `GET`/`PATCH` atas order `draft` → **404** dengan status DB tak berubah, cabang ditegakkan sesi, dan **kasir tetap melihat draft-nya** — `10.67 ⏸️` **ditutup** bersama GAP-08. |
       | 3 | Bayar kasir (tunai) | ✅ API | `method: cash`, `status: settled` → `change` terhitung `{85000 IDR}` (100000−15000) |
       | 4 | Kanban barista | ✅ API | rantai `paid → in_kitchen → ready → served → completed` semua 200 |
-      | 5 | Shift & kas | ✅ API | employee 201 → shift buka 201 → kas in/out 201 → tutup shift 200 dengan **`difference = {-12500 IDR}`** (computed `counted_cash - expected_cash`). Aturan bisnis #10 kini **ditegakkan DB** — duplikat shift `open` (cabang, kasir) sama **ditolak** `UNIQUE constraint failed` setelah perbaikan 3.11 (2026-09-20) |
+      | 5 | Shift & kas | ✅ API | employee 201 → shift buka 201 → kas in/out 201 → tutup shift 200 dengan **`difference = {-12500 IDR}`** (computed `counted_cash - expected_cash`). Aturan bisnis #10 kini **ditegakkan DB** — duplikat shift `open` (cabang, kasir) sama **ditolak** `UNIQUE constraint failed` setelah perbaikan 3.11 (2026-09-20) · **Diuji ulang 2026-10-02 pada DB seed baru** (changelog `2026-10-02-011`): shift buka **201** → shift #2 (cabang+kasir sama) **409 `CONFLICT`** (pesan kini menyebut field, bukan 500 — perbaikan 2026-09-28-001 berlaku) → 2 `cash-movement` **201** → `PATCH status=closed` **200** dengan `counted_cash 640000` & `expected_cash 650000` → **`difference {-10000 IDR}`**; index parsial terbukti: setelah shift ditutup kasir **boleh** buka shift baru (201), dan kasir LAIN boleh punya shift `open` di cabang yang sama (201). **Dua sisa bernomor dari run ini:** `opened_at`/`closed_at` tetap `null` (10.62) dan `expected_cash` harus **disuplai manual** — wizard memamerkannya `read_only` tanpa penulis (10.63). |
       | 6 | Void via approval | ✅ API (⚠️ temuan) | kasir ajukan void → **202 `approval_required`** (workflow `order-void-approval`, `paid → cancelled`) → non-holder **403** `WORKFLOW_DENIED` → supervisor `{"decision":"approve"}` → **`transition_completed`**, order → `cancelled` + `void_reason` tersimpan. **⚠️ Bug engine ditemukan & diperbaiki (2026-09-21):** interception approval TIDAK ADA di jalur PATCH — `RequiresApproval` hanya dipanggil di jalur custom action, sedangkan transisi `void-order` (tanpa `impl`) hanya bisa dicapai lewat PATCH → workflow-nya **bypass total** (void langsung `cancelled` tanpa approval). Fix: reverse lookup `FindTransitionByStates` (PATCH membawa state TUJUAN, bukan nama transisi; transisi multi-asal tak bisa diidentifikasi dari state saja) + cek di `HandleUpdate`, dengan state asal diambil **sebelum** merge (`merged := current.Data` bukan salinan — merge mengubah current.Data, jadi from==to selamanya jika dibaca sesudahnya) dan `decision` dibuang dari payload record. Test pengunci: `TestFindTransitionByStates` |
       | 7 | Stok/HPP | ✅ API | `ingredient` 201 · dua `stock-movement` in 201 · `stock-level` **1 baris**: `quantity_on_hand 1500`, `moving_avg_cost 60 IDR` (= (1000×50+500×80)÷1500). Akar kegagalan awal (script memakai `float()` pada nilai money) ditutup di **3.12**; sisa `stock_value`/`last_movement_at`/`is_below_min` kini diisi script (2026-09-20): `stock_value 54300` (= 905×60), `is_below_min True` saat qty 905 < min 1000 |
       | 8 | Jurnal GL | ✅ API | **Desain event-driven (keputusan pemilik, 2026-09-21):** order hanya memancarkan event durable `on_paid`; module `gl` (pemilik jurnal, bagan akun, **dan setting pemetaan akun**) mendengarkannya lewat `kind: Subscription` lalu membangun + mem-posting jurnal. Tidak ada integrator, tidak ada panggilan lintas-app — item 6.3 jadi tidak relevan. Bukti E2E: `ORD-2026-00021` → `outbox: completed` → **1 jurnal** `JRN-2026-000055` (`source_id` terisi, idempoten per sumber) · 4 baris di tabel child · **Kas debit 143750 = Omzet 125000 + Pajak 12500 + Service charge 6250** (seimbang) · `status = posted` otomatis · event `journal-posted` terbit. Jurnal tidak seimbang = setting akun GL belum lengkap → error `FORMSPEC.GL.*` (tanggung jawab `gl`), bukan error module pemesanan. **11 bug mesin** ditemukan & diperbaiki di jalurnya (terparah: `fail()` tidak menghentikan script — setiap guard `if bad: fail(...)` di seluruh ekosistem jadi no-op; dan `valuesEqual` panic pada slice → outbox worker mati). Changelog: `docs_internal/changelog/2026-09-21-003-jurnal-gl-dari-event-on-paid.md`. **Ditutup 2026-09-21 (changelog 2026-09-21-004):** `deliver: target` kini benar-benar memanggil action target, dan proyeksi `gl-balance` hidup — POST → 4 saldo benar (Kas 143750, Omzet 125000, Pajak 12500, Service charge 6250), REVERSE → kembali 0, 0 deliver failure. 5 bug lagi di jalur consequence ikut diperbaiki (target action `reverse` yang tidak ada + validate hijau; `payload.fields: [id]` null; closing saldo salah tanda untuk akun kredit-normal; `condition: resource.status` gagal dievaluasi), ditambah validator cross-manifest baru untuk deliver target |
       | 9 | Report + cetak | ✅ API | struk thermal ESC/POS nyata (init `ESC @`, bold, cut `GS V 0`, 348 byte) dirender dari data order live `ORD-2026-00005` (2026-09-20); report & tampilan = UI browser (belum) |
+
+      ⚠️ **Diperbarui 2026-10-03 (changelog `2026-10-03-002`) — skenario 8 GAGAL
+      pada jalur QR yang sebenarnya.** Diuji ulang dengan pesanan yang dibuat
+      lewat **form QR anonim** (yang memang tidak mengirim angka uang):
+      `total_amount` = **null** → `gl/journalize` menolak
+      `FORMSPEC.GL.NO_AMOUNT: pesanan ORD-2026-00001 lunas tanpa nilai` → outbox
+      retry **6×** → `failed` → **tidak ada jurnal, tidak ada `gl-balance`,
+      tidak ada `journal-posted`**. **Kausal dibuktikan dengan kontrol:** pesanan
+      kedua dari sesi yang sama, kali ini `total_amount` **disuplai** →
+      `JRN-2026-000001` **posted**, `reference ORD-2026-00002`, 2 baris
+      (Kas debit 25000 = Omzet kredit 25000, seimbang), 2 `gl-balance` terisi,
+      `on_paid`+`journal-posted` `completed`.
+      **Catatan jujur soal verifikasi lama:** "skenario 8 ✅" (2026-09-21) benar
+      untuk ORDER YANG DIUJI, tetapi order itu dibuat **test** yang menulis
+      `total_amount` dengan tangan (`o2c_e2e_test.go:170`,
+      `kafe_table_lifecycle_e2e_test.go` `createOrder`) — sedangkan form QR
+      nyata tidak pernah mengirimnya. Jadi cakupan yang diuji ≠ cakupan yang
+      diklaim. → **10.65 ⏸️** (major).
+
+      **Temuan lain dari run 2026-10-03:** `lines[].line_status` (entity
+      mendeklarasikan `default: queued`) **absen** di baris tersimpan →
+      **10.66 ⏸️**; aturan bisnis #1 hanya UI → **10.67 ⏸️** (kini ✅).
 
       **Catatan metode:** transisi state machine yang **tanpa `impl`** diterapkan
       lewat `PATCH /_ui/entity/{module}/{entity}/{id}` dengan `{"status": …}`
@@ -1980,6 +2007,13 @@ migrate plan` → `apply` → DB sungguhan → `formspec validate` pada manifest
       data lama berasal dari input manual verifikasi sebelumnya; ini dicatat
       sebagai keputusan produk, bukan gap engine (`difference` sendiri
       computed-nya benar).
+      ⚠️ **Diperbarui 2026-10-02 (changelog `2026-10-02-011`):** catatan prosa
+      ini kini punya nomor — **10.63 ⏸️**. Alasannya konkret: `close-shift-wizard`
+      memamerkannya `read_only: true` (jadi pengguna tidak bisa mengisi), dan
+      `difference` = `counted_cash - expected_cash` dihitung terhadap `null` bila
+      tidak ada yang menyuplai — terukur pada shift nyata. "Keputusan produk"
+      tidak menjelaskan mengapa wizard meminta konfirmasi selisih terhadap angka
+      kosong.
 
 - [x] **9.5 — Hapus marker `# GAP-nn`** dari `examples/kafe/spec/**` untuk gap yang sudah
       tertutup; update `README.md` status.
@@ -2724,17 +2758,17 @@ skipped` pada DB dev kafe) — tanpa itu memperbaiki nilai di seed tidak
       `skip` (akun bukan data seed). Terverifikasi: 0 user dengan key `password`.
       **Bukti terukur sesudah perbaikan:**
 
-                                        | Uji | Hasil |
-                                        | --- | --- |
-                                        | `make seed-kafe` pada DB dev lama | `0 inserted, 25 updated, 49 skipped`; rerun → `0 inserted, 0 updated, 74 skipped` |
-                                        | 9/9 foto via `GET .../{id}/photo` | **200, image/jpeg**, sha256 **byte-for-byte sama** dengan file di `assets/menu/` |
-                                        | DB **baru** (`formspec seed` ke `/tmp`) | `74 inserted`, 9 key kanonik `kafe/cafe-master/menu-item/<id>/photo/<uuid>-<nama>.jpg` |
-                                        | `rm -rf` storage lalu seed ulang | **9 objek dipulihkan** (= menggantikan `seed-kafe-assets`), rerun `0 updated` |
-                                        | `es-jeruk.jpg` diganti | terkirim ke record yang sudah ada (`update ... code=MNM-002 ([photo])`) — perbandingan **byte**, bukan sekadar "objek ada" |
-                                        | `go test ./...` | hijau; 6 test baru (`TestSeedAssetUploadsThroughStorage`, `TestSeedReconcilesExistingRecord`, `TestSeedReconcileIsIdempotent`, `TestSeedRestoresMissingObjects`, `TestSeedReconcileSkipsMaskedFields`, `TestSeedAssetRejectedOnNonFileField`) |
-                                        | `formspec validate --spec examples/kafe/spec --schema schemas` | **85 manifest, 0 problem** |
-                                        Plan `docs_internal/plan/seed-assets-and-reconcile.md` · changelog
-                                        `2026-09-23-002`.
+                                                    | Uji | Hasil |
+                                                    | --- | --- |
+                                                    | `make seed-kafe` pada DB dev lama | `0 inserted, 25 updated, 49 skipped`; rerun → `0 inserted, 0 updated, 74 skipped` |
+                                                    | 9/9 foto via `GET .../{id}/photo` | **200, image/jpeg**, sha256 **byte-for-byte sama** dengan file di `assets/menu/` |
+                                                    | DB **baru** (`formspec seed` ke `/tmp`) | `74 inserted`, 9 key kanonik `kafe/cafe-master/menu-item/<id>/photo/<uuid>-<nama>.jpg` |
+                                                    | `rm -rf` storage lalu seed ulang | **9 objek dipulihkan** (= menggantikan `seed-kafe-assets`), rerun `0 updated` |
+                                                    | `es-jeruk.jpg` diganti | terkirim ke record yang sudah ada (`update ... code=MNM-002 ([photo])`) — perbandingan **byte**, bukan sekadar "objek ada" |
+                                                    | `go test ./...` | hijau; 6 test baru (`TestSeedAssetUploadsThroughStorage`, `TestSeedReconcilesExistingRecord`, `TestSeedReconcileIsIdempotent`, `TestSeedRestoresMissingObjects`, `TestSeedReconcileSkipsMaskedFields`, `TestSeedAssetRejectedOnNonFileField`) |
+                                                    | `formspec validate --spec examples/kafe/spec --schema schemas` | **85 manifest, 0 problem** |
+                                                    Plan `docs_internal/plan/seed-assets-and-reconcile.md` · changelog
+                                                    `2026-09-23-002`.
 
 - [x] **10.15 — ✅ 2026-09-24 — `docs/kind/` belum punya halaman `Seed`.**
       `kind: Seed` sudah terdaftar (`pkg/spec/seed.go`) tetapi tidak ada di
@@ -2914,37 +2948,37 @@ options[0] — a duplicate choice can never be selected twice` (probe spec,
       menelusuri pembaca `widget:`) + **5.10.18 ⏸️** (filter `select` belum
       membaca `options`).
 
-                    **Lanjutan 2026-09-25 — ✅ cardinality dipindah ke Entity.** Laporan
-                    pengguna lanjutan: "`options` tidak jelas single-select atau multi-select;
-                    `promo-form.yaml` memakai `widget: select-multi-tag` — seharusnya penentuan
-                    single/multi ada di level Entity, level Form hanya mengikutinya." Benar:
-                    atribut 10.33 hanya menyatakan **nilai mana yang sah**, bukan **berapa
-                    banyak** — sehingga Form yang menentukannya, dan spec kafe **wajib**
-                    menulis `widget:` (jalur authored hanya memetakan `money`/`time`).
-                    Ditutup dengan **`Field.multiple`** (`days_of_week` kini `multiple: true`)
-                    dan `options` yang sah juga di field skalar (single-select ber-caption):
-                    kafe mendapat field baru **`promo.channel`** (`type: string`,
-                    `multiple: false`, options `pos/qris/online`). `widget: select-multi-tag`
-                    **dihapus** dari `promo-form.yaml` — Form kini benar-benar mengikuti Entity,
-                    dan `formspec check` menolak kalau tidak.
-                    **Terukur (browser `:8099`, App `kafe-pos`, form promo tanpa `widget:`):**
-                    chip hari urut deklarasi (`Senin, Jumat` walau klik `Jumat` lebih dulu);
-                    DB `days_of_week=[5, 1]` bertipe **int** (urutan isian — tampilan tidak
-                    menulis ulang data); `channel='qris'` skalar (bukan caption `QRIS`);
-                    halaman detail menampilkan chip hari + caption `QRIS`, bukan `qris`.
-                    Filter `select` kini juga ber-caption (menutup 5.10.18). Test: vitest
-                    **454**, `tsc -b` bersih, `go test ./...` 39 paket hijau, kafe `validate`
-                    85 manifest 0 problem, `check` 0/0. Plan
-                    `docs_internal/plan/options-cardinality-entity.md`, changelog
-                    `2026-09-25-007`. Sisa → master todo **5.10.20 ⏸️** (penegakan server),
-                    **5.10.21 ⏸️** (paritas lintas-shell), **5.10.22 ⏸️** (`generate` belum
-                    emit union `options`), **5.10.23 ⏸️** (caption `enum`), plus **5.10.17 ⏸️**
-                    (Wizard) yang tetap terbuka.
-                    Catatan verifikasi: `go test ./resource/` ternyata **flaky pra-eksisting**
-                    (`TestKafe_OnPaidCreatesBalancedJournal`: `journal status = "draft", want
-                    posted`; HEAD bersih 2/8 run, working tree 1/8 — setara, jadi bukan regresi
-                    perubahan ini) → master todo **5.10.24 ⏸️**. Atribusi lama ke item kafe
-                    10.7 (`gl/config/gl.yaml`) **salah**: `git diff HEAD -- examples/kafe/spec/
+                                **Lanjutan 2026-09-25 — ✅ cardinality dipindah ke Entity.** Laporan
+                                pengguna lanjutan: "`options` tidak jelas single-select atau multi-select;
+                                `promo-form.yaml` memakai `widget: select-multi-tag` — seharusnya penentuan
+                                single/multi ada di level Entity, level Form hanya mengikutinya." Benar:
+                                atribut 10.33 hanya menyatakan **nilai mana yang sah**, bukan **berapa
+                                banyak** — sehingga Form yang menentukannya, dan spec kafe **wajib**
+                                menulis `widget:` (jalur authored hanya memetakan `money`/`time`).
+                                Ditutup dengan **`Field.multiple`** (`days_of_week` kini `multiple: true`)
+                                dan `options` yang sah juga di field skalar (single-select ber-caption):
+                                kafe mendapat field baru **`promo.channel`** (`type: string`,
+                                `multiple: false`, options `pos/qris/online`). `widget: select-multi-tag`
+                                **dihapus** dari `promo-form.yaml` — Form kini benar-benar mengikuti Entity,
+                                dan `formspec check` menolak kalau tidak.
+                                **Terukur (browser `:8099`, App `kafe-pos`, form promo tanpa `widget:`):**
+                                chip hari urut deklarasi (`Senin, Jumat` walau klik `Jumat` lebih dulu);
+                                DB `days_of_week=[5, 1]` bertipe **int** (urutan isian — tampilan tidak
+                                menulis ulang data); `channel='qris'` skalar (bukan caption `QRIS`);
+                                halaman detail menampilkan chip hari + caption `QRIS`, bukan `qris`.
+                                Filter `select` kini juga ber-caption (menutup 5.10.18). Test: vitest
+                                **454**, `tsc -b` bersih, `go test ./...` 39 paket hijau, kafe `validate`
+                                85 manifest 0 problem, `check` 0/0. Plan
+                                `docs_internal/plan/options-cardinality-entity.md`, changelog
+                                `2026-09-25-007`. Sisa → master todo **5.10.20 ⏸️** (penegakan server),
+                                **5.10.21 ⏸️** (paritas lintas-shell), **5.10.22 ⏸️** (`generate` belum
+                                emit union `options`), **5.10.23 ⏸️** (caption `enum`), plus **5.10.17 ⏸️**
+                                (Wizard) yang tetap terbuka.
+                                Catatan verifikasi: `go test ./resource/` ternyata **flaky pra-eksisting**
+                                (`TestKafe_OnPaidCreatesBalancedJournal`: `journal status = "draft", want
+                                posted`; HEAD bersih 2/8 run, working tree 1/8 — setara, jadi bukan regresi
+                                perubahan ini) → master todo **5.10.24 ⏸️**. Atribusi lama ke item kafe
+                                10.7 (`gl/config/gl.yaml`) **salah**: `git diff HEAD -- examples/kafe/spec/
 
   modules/gl/` kosong.
 
@@ -3551,6 +3585,714 @@ dining_table_id`, bukan **500 UNIQUE constraint failed**. Sebelumnya pelanggaran
   juga berhenti bergantung pada `can(decl.call)` yang selalu gagal untuk aksi
   publik. Effort: small–medium.
 
+- [x] **10.59 — ✅ 2026-10-02 — Validator UI melaporkan `via` sebagai action
+      yang tidak ada, sehingga `formspec dev` kafe mencetak 8 warning palsu.**
+      Ditemukan dengan menjalankan `examples/kafe`: `Form "order-form-pos":
+action "start-preparing" not on entity "cafe-order.order"`, dan empat nama
+      yang sama untuk `order-table-pos`.
+      **Mekanismenya (terverifikasi baca kode + probe, bukan dugaan):**
+      `actionExists` (`internal/ui/validate.go:426`) menelusuri `es.Actions`
+      langsung, sementara keempat nama (`start-preparing`, `mark-ready`,
+      `mark-served`, `complete-order`) hidup hanya sebagai `via:` transisi —
+      bentuk yang sejak L4 justru **diwajibkan** (menulisnya ulang di
+      `actions:` ditolak `ValidateActionTransitionDuplication`).
+      **Bukti bentuk — dan ini yang menutup perkara:** `confirm-payment` dan
+      `void-order`, satu-satunya dua nama di form/table yang SAMA yang masih
+      punya entri `actions:` (load-bearing: membawa `params`/`conditions`),
+      dilaporkan bersih. Jadi yang diperingatkan justru manifest yang mengikuti
+      kontrak baru.
+      **Penutup:** `actionExists` memakai `ActionSources()`; probe yang meniru
+      jalur `resource/formspec.go` atas spec kafe → 8 masalah `not on entity`
+      menjadi **0**. Pengunci `internal/ui/validate_transition_action_test.go`
+      (Form + Table dari satu fixture; terkalibrasi gagal dengan pesan identik
+      saat regresi disuntikkan). Changelog `2026-10-02-007`, plan
+      `via-sebagai-action-penuh.md` L8.
+      Effort: small.
+
+- [x] **✅ 2026-10-02 — 10.60 — Dua pembaca action lain masih menelusuri `es.Actions` langsung
+      (union belum merata).** Sisa yang **diakui** saat menutup 10.59: pola "satu
+      registry, dua sumber" sudah menjatuhkan lima pembaca (L3 dua situs, L5 dua
+      situs, 5.24.3 `GenerateCustomActionRoutes`, 10.59 validator UI). Dua yang
+      tersisa: `internal/auth/materialize.go:242` (footprint `uses` per action) dan
+      `pkg/spec/entity.go:1597` (validasi `hooks.on:*` / `on_error`).
+      **Kenapa belum jadi bug:** keduanya hanya menyala bila nama yang diuji memang
+      ditulis di `actions:`, jadi belum ada manifest kafe yang salah lapor —
+      berbeda dari 10.59 yang memperingatkan bentuk kontrak baru. Kalau nanti ada
+      yang memindahkan `impl`/`uses`/`hooks` sebuah action ke transisi saja, keduanya
+      akan gagal senyap.
+      **Penutup:** samakan keduanya ke `ActionSources()` saat menyentuh file itu,
+      plus guard kelas (pola yang sama dengan test 10.59). Effort: small.
+      ✅ **2026-10-02 — DITUTUP.** Kedua situs dimigrasikan:
+      (a) `ValidateEntitySpec` kini memanggil `ValidateHooks(d.Hooks,
+d.ActionSources())` (`pkg/spec/entity.go`) — sebelumnya hook yang menyebut
+      `via` transisi ditolak `hook action "…" does not match any declared action`;
+      (b) `entityFootprint` (`internal/auth/materialize.go`) menghitung
+      `sources := es.ActionSources()` **sekali** dan memakainya untuk peta `disabled`
+      maupun loop action kustom, sehingga pembaca `es.Actions` hilang dari fungsi itu.
+      **Koreksi atas teks item:** label "footprint `uses` per action" tidak akurat —
+      pembaca yang tersisa di `materialize.go` adalah peta `disabled` (loop action
+      kustom sudah union sejak L5). Migrasi `disabled` **netral-perilaku** (action
+      sintetis tak pernah `disabled`); yang dijaga test adalah pembacaan union yang
+      load-bearing di fungsi yang sama.
+      **Bukti + kalibrasi:** `TestValidateEntitySpec_HookMayTargetTransitionVia` dan
+      `TestEntityFootprint_TransitionViaIsGrantable` — keduanya **gagal** saat
+      regresi disuntikkan kembali, hijau setelah dipulihkan; kalibrasi (nama tak
+      dikenal tetap ditolak / tak termaterialisasi) lulus. `go test ./...` 39 paket
+      `ok`; `formspec validate` kafe 89 manifest 0 problem; `formspec check` 0/0.
+      Changelog `2026-10-02-008`, plan `via-sebagai-action-penuh.md` L9.
+      Effort: small.
+
+- [x] **10.60a — ✅ 2026-10-02 — `rate_limit` yang dideklarasikan pada transisi
+      via-only tidak ditegakkan pada route action kustom.**
+      Ditemukan 2026-10-02 saat audit 10.60 (bukti baca kode: `resolveAction`
+      `internal/api/handler.go:385` menelusuri `es.Actions`; `checkRateLimit`
+      `internal/api/resource_ratelimit.go:176` memanggilnya; `HandleCustomAction`
+      `handler.go:2091` memanggil `rateLimitFor(..., actionName)`). Sejak L3
+      transisi ber-`impl` punya route di `HandleCustomAction` — dan `actionSpec`
+      yang sudah di-resolve (union) tersedia di handler itu, tetapi rate limit
+      **tidak** memakainya, jadi override `rate_limit` pada transisi diabaikan;
+      hanya `es.RateLimit` (level resource) yang berlaku.
+      **Penutup (tanpa menyentuh `resolveAction`):** `checkRateLimitAction`
+      menerima action yang sudah di-resolve (`checkRateLimit` lama menjadi
+      pembungkusnya, jadi pemanggil lama tidak berubah perilaku);
+      `rateLimitForAction` meneruskannya; `HandleCustomAction` memakainya.
+      `resolveAction` dibiarkan — dipakai `create`/`update` dan tabrakan
+      `via: update/delete` sengaja belum diputuskan (§Further Considerations #1).
+      **Bukti terukur (handler nyata, bukan helper):** entity dengan
+      `rate_limit {max: 1, per: 1s}` **hanya** pada transisi `via: confirm`,
+      route action dipanggil 2×:
+      wiring `rateLimitFor` → panggilan ke-2 **200** (limit diabaikan);
+      wiring `rateLimitForAction` → **429 `RATE_LIMITED`**. Guard terkalibrasi
+      gagal saat wiring di-revert. **Catatan jujur:** versi pertama test
+      memanggil helper langsung dan tetap hijau saat wiring di-revert — guard
+      yang tidak menjaga; diperbaiki dengan menjalankan handler sungguhan.
+      Changelog `2026-10-02-009`, plan `via-sebagai-action-penuh.md` L9.
+      Effort: small.
+
+- [x] **10.61 — ✅ 2026-10-02 (changelog `2026-10-02-012`) — Tiga kelas kesalahan
+      input dijawab `500 INTERNAL_ERROR`; kini `422 VALIDATION_ERROR` + nama field.**
+      Ditemukan 2026-10-02 saat walkthrough 9.4 skenario 5 pada DB seed baru
+      (changelog `2026-10-02-011`). Perbaikan `2026-09-28-001` memetakan **pelanggaran
+      constraint unik** ke 409, tetapi tiga kelas lain masih jatuh ke 500 — dan
+      ketiganya adalah **masukan pemanggil**, bukan kerusakan server.
+      **Terukur pada `POST /_ui/entity/cafe-order/shift`** (dev `:8080`, terautentikasi
+      kasir):
+
+  | Masukan                               | Sebelum                                                                 | Sesudah                                     |
+  | ------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------- |
+  | field wajib hilang                    | 422 ✅                                                                  | 422                                         |
+  | relasi menunjuk id tak ada            | 422 ✅                                                                  | 422                                         |
+  | duplikat (`shift` open cabang+kasir)  | 409 ✅ (fix 2026-09-28-001)                                             | 409                                         |
+  | field tak dikenal (`zzz`)             | **500** `shift insert: unknown field: "zzz"`                            | **422**, `details[].field=zzz`              |
+  | tanggal tak bisa diurai (`"kemarin"`) | **500** `cannot parse … as date`                                        | **422**, `details[].field=transaction_date` |
+  | nilai enum di luar `enum_values`      | **500** `CHECK constraint failed: json_extract(data,'$.status') IN (…)` | **422**, `details[].field=status`           |
+
+  **Kelas yang sama beda jalur:** `PATCH` nilai status di luar state machine
+  sudah menjawab **422** — jadi yang bocor memang jalur `insert`/`update` biasa,
+  bukan jalur state machine. Kedua kelas baru itu juga melanggar **kontrak
+  tertulis**: `01-core-basic.md` §"Unknown field = rejection (normatif)"
+  mewajibkan `VALIDATION_ERROR` (422), dan `05-field-types.md` §`enum` mewajibkan
+  422 untuk nilai di luar himpunan.
+  ⚠️ **Koreksi klaim saya sendiri (2026-10-02):** entri ini semula menulis SPA
+  menampilkan toast "Internal server error". Itu **salah** — `FormRenderer`
+  mem-`toast.error(err.message)`, dan `message` datang dari server, jadi yang
+  benar-benar dilihat pengguna untuk enum adalah teks driver mentah
+  (`insert row: constraint failed: CHECK constraint failed: json_extract(data,
+'$.status') IN (…) (275)`). Lebih buruk daripada satu kalimat generik, dan
+  itulah alasan tambahan kelas ini harus dipetakan di server (klien tidak punya
+  tabel pemetaan 5xx).
+  **Perbaikan:** klasifikasi pindah ke **batas penyimpanan** (sama argumennya
+  dengan uniqueness 2026-09-28-001) sehingga seed/script/operator mendapat kelas
+  yang sama, bukan hanya jalur HTTP:
+  `renderers/jsonb-persist/constraint.go` mengenali `CHECK constraint failed:`
+  sebagai `EnumViolationError` (field + `allowed` diekstrak dari ekspresi;
+  bentuk PostgreSQL tanpa ekspresi tetap terklasifikasi tanpa field);
+  `ErrUnknownField`/`ErrInvalidFieldValue` kini bertipe dan membawa nama field.
+  `internal/api/handler.go` memetakan ketiganya ke 422 lewat `writeInvalidFieldError`.
+  **Determinisme ikut diperbaiki:** `validateKnownFields` dulu mengembalikan key
+  pertama hasil iterasi map Go — dengan dua field tak dikenal, field yang
+  dilaporkan **berubah antar-panggilan** (teramati saat memverifikasi fix ini).
+  Kini seluruh key tak dikenal dikumpulkan, **diurutkan**, dan dilaporkan
+  semuanya (satu entri `details[]` per field).
+  **Bukti:**
+  - Unit `renderers/jsonb-persist/constraint_enum_test.go` (7 test: bentuk SQLite
+    dengan/tanpa extended code, bentuk PostgreSQL, uniqueness ≠ enum, FK bukan
+    keduanya, pesan menyebut field+allowed tanpa kebocoran teks driver,
+    idempoten, pass-through tak berubah).
+  - e2e `resource/validation_status_e2e_test.go` (4 test lewat HTTP nyata:
+    tiga kelas → 422 + `details[].field` benar; permintaan **valid tetap 201**;
+    **determinisme** 8 percobaan dengan dua typo → himpunan sama terurut;
+    relasi rusak tetap 422 `VALIDATION_ERROR`).
+  - **Guard terkalibrasi:** braket pemetaan baru dihapus dari `writeStoreError`
+    → ketiga subtest gagal **500** (pesan sudah benar tetapi kelasnya salah),
+    lalu hijau setelah dipulihkan dari backup `/tmp` (bukan `git checkout`).
+  - `go test ./...` hijau · `gofmt`/`go vet` bersih · verifikasi ulang di dev
+    server yang di-restart: `zzz`→422/`zzz`, `area: kolong`→422/`area`,
+    `kemarin`→422 · valid→201 · duplikat tetap 409.
+    **Sisa kecil (bukan blocker):** bentuk PostgreSQL untuk enum hanya membawa
+    nama constraint, jadi pesannya tidak menyebut field — kelasnya tetap 422,
+    tetapi `details[].field` kosong. Effort sisa: small (baca nama constraint ↔
+    deklarasi DDL). Lihat **10.64 ⏸️** untuk cacat kontrak klien yang ikut terlihat.
+    Effort selesai: small–medium.
+
+- [⏸️] **10.62 — `opened_at`/`closed_at` pada `shift` adalah field mati.**
+  Ditemukan 2026-10-02 saat walkthrough 9.4 skenario 5 (changelog
+  `2026-10-02-011`). Keduanya dideklarasikan (`shift/entity.yaml:33,36`) tetapi
+  **tidak ada penulis**: `grep -rn "opened_at\|closed_at" examples/kafe/spec/`
+  menemukan penulis hanya untuk `table-session` (`close_session_on_clear.star`
+  menulis `closed_at`) — untuk `shift` tidak ada script/hook/computed.
+  **Terukur:** setelah `PATCH status=closed` → **200**, record memuat
+  `closed_at: null` (dan `opened_at: null` sejak dibuat).
+  **Akibat:** laporan **"Rekap kas & shift"** (`report/shift-recap`) tidak bisa
+  menampilkan lama shift atau jam tutup; `transaction_date` (tanggal saja) jadi
+  satu-satunya sumbu waktu, sehingga dua shift pada hari yang sama tidak bisa
+  dibedakan kapan dibuka/ditutup.
+  **Kandidat penutup:** isi dari wizard/transisi (`close-shift`) dan dari jalur
+  buka shift — atau jadikan `computed` bila `now()` tersedia di konteks tulis;
+  kalau tidak, eksplisitkan sebagai tanggung jawab script.
+  Effort: small.
+- [⏸️] **10.63 — `expected_cash` tidak punya penulis, sehingga `difference`
+  dihitung terhadap `null`.** Ditemukan 2026-10-02 saat walkthrough 9.4
+  skenario 5 (changelog `2026-10-02-011`); sebelumnya hanya hidup sebagai prosa
+  di dalam item 9.4 dan catatan 5.25.5.
+  **Mekanismenya:** `difference` = `computed: counted_cash - expected_cash`,
+  sedangkan `expected_cash` adalah field `money` biasa yang deskripsinya berbunyi
+  _"Kas yang seharusnya ada di laci menurut sistem."_ — tidak ada `computed:`,
+  hook, script, maupun projection yang mengisinya. `close-shift-wizard`
+  memamerkannya di langkah 1 sebagai **`read_only: true`** (pengguna tidak bisa
+  mengisi), lalu langkah 3 menampilkan `difference` sebagai bahan konfirmasi.
+  **Terukur:** `PATCH status=closed` dengan `expected_cash` **disuplai manual**
+  (650000) → `difference {-10000 IDR}` benar; bila `expected_cash` **tidak**
+  disuplai — inilah yang terjadi di jalur wizard — record menyimpan
+  `expected_cash: null` sehingga `difference` = `counted_cash − null`.
+  **Kenapa bukan sekadar `computed`:** formulanya butuh Σ `cash-movement` shift
+  itu + tunai dari `payment` shift itu; `computed` bekerja pada **record itu
+  sendiri** dan tidak bisa menjumlahkan record entity lain (bandingkan
+  `stock-level`/`gl-balance`, yang memakai entity **summary** + projection).
+  Jadi penutupnya salah satu dari: entity summary `shift-recap` + subscription,
+  action `open-shift`/`close-shift` ber-`impl` yang menghitung, atau
+  `computed` yang menerima agregat. Effort: medium.
+
+- [x] **10.64 — ✅ 2026-10-03 (changelog `2026-10-03-001`) — Tipe detail error
+      klien disamakan dengan wire.** Ditemukan 2026-10-02 saat mengerjakan 10.61
+      (changelog `2026-10-02-012`).
+      **Ketidakcocokannya:** server mengirim `{level, field?, message}`
+      (`internal/api.ErrorDetailItem`, dicerminkan `pkg/spec.ErrorDetail`; normatif
+      di `docs/spec/backend/05-field-types.md` §4 + `02-core-extended.md` §14),
+      sedangkan SATU tipe klien melayani dua peran sekaligus dan menyatakan
+      `{field?, code: string, message}` — `code` **wajib** (padahal server tidak
+      pernah mengirimnya di entri) dan `level` **tidak ada** (padahal selalu
+      dikirim).
+      **Perbaikan:** tipe dipisah sesuai perannya — `ErrorDetail` = **envelope**
+      (`{code, message, details?, choices?}`, = `internal/api.ErrorDetail`) dan
+      `ErrorDetailItem` = **entri** (`{level?, field?, message}`, = SDK browser
+      field demi field). `ErrorResponse` kini menunjuk `ErrorDetail` (dulu bentuk
+      inline yang menduplikasi definisinya); `FormaApiError.details` bertipe
+      `ErrorDetailItem[]`.
+      **Bukti:** `tsc -b` bersih · `npm run lint` (oxlint) **0 error** · `vitest`
+      **616 lulus** (49 berkas, +5 test baru). Test
+      `src/lib/api/errorDetailContract.test.ts` memakai literal ber-`satisfies` yang
+      menyalin respons 422 **terukur** dari 10.61, sehingga drift tipe gagal saat
+      `tsc -b` (terkalibrasi: bentuk lama → **6 error** TS), plus paritas
+      sumber-teks terhadap `sdk/browser` yang dibuktikan **tidak vakum**.
+      **Catatan koreksi:** klaim awal saya "SDK mengharuskan `code`" **salah** —
+      `sdk/browser/src/types.ts` sudah `{level?, field?, message}`. Perbaikan ini
+      membuat SPA **sepakat** dengan SDK.
+      Effort selesai: small.
+
+- [x] **10.65 — ✅ 2026-10-03 (opsi (a), changelog `2026-10-03-003`, plan
+      `total-amount-computed.md`) — `order.total_amount` tidak punya penulis;
+      kini diturunkan sebagai `computed` dan jurnal QR hidup kembali.**
+      (MAJOR) Ditemukan 2026-10-03 saat walkthrough 9.4 skenario 1–2 dijalankan
+      **sebagai tamu anonim** (changelog `2026-10-03-002`); dijalur QR ia langsung
+      terlihat sebagai kegagalan jurnal.
+      **Rantai kegagalannya:** form QR (`order-form-qr.yaml`) **tidak mengirim satu
+      pun angka uang** — memang begitu desainnya ("`subtotal`/`line_total` dihitung
+      server-side, form tidak mengirim angka uang sama sekali"). Server menghitung
+      `subtotal` (✅ 50000) tetapi **tidak** menghitung `total_amount` (rantai
+      diskon/pajak/service-charge belum diturunkan — tercatat sebagai catatan di
+      entity). Kasir mencatat `payment.amount` di entity **payment**, dan
+      `order.total_amount` tetap `null`. `gl/scripts/journalize.star:82` membaca
+      `params.get("total_amount")` → 0 → menolak.
+      **Terukur:** ORD-2026-00001 (QR, tanpa `total_amount`) → outbox
+      `on_paid … deliver failed … FORMSPEC.GL.NO_AMOUNT: pesanan ORD-2026-00001 lunas
+tanpa nilai` → retry **6×** → status **`failed`** (menuju dead-letter) →
+      **nol jurnal, nol `gl-balance`, nol `journal-posted`**.
+      **Kausal dibuktikan dengan kontrol** (bukan disimpulkan): pesanan KEDUA dari
+      sesi yang sama, satu-satunya bedanya `total_amount` disuplai → `JRN-2026-000001`
+      **posted**, `reference ORD-2026-00002`, 2 baris (`Kas` debit 25000 =
+      `Omzet penjualan` kredit 25000), 2 `gl-balance` terisi (25000/25000),
+      `on_paid` + `journal-posted` `completed`.
+      **Kenapa ini sempat lolos:** verifikasi 2026-09-21 ("skenario 8 ✅ API")
+      memakai order yang dibuat **test**, dan test itu menulis `total_amount`
+      dengan tangan (`resource/o2c_e2e_test.go:170`,
+      `resource/kafe_table_lifecycle_e2e_test.go` `createOrder`). Jadi klaimnya
+      benar untuk order yang diuji tetapi **tidak mencakup order yang benar-benar
+      dibuat pelanggan** — kelas kegagalan yang sama dengan "test mem-pin bug":
+      cakupan uji ≠ cakupan klaim.
+      **Dampak nyata jauh lebih luas daripada GL — `total_amount` tidak punya
+      PENULIS di mana pun, sementara seluruh lapisan laporan/laporan-keuangan
+      MEMBACANYA** (dihitung dari `grep -rn total_amount examples/kafe/spec/`):
+
+  | Konsumen                                                               | Yang terjadi                                           |
+  | ---------------------------------------------------------------------- | ------------------------------------------------------ |
+  | `gl/scripts/journalize.star`                                           | `NO_AMOUNT` → **tidak ada jurnal** (bukti di atas)     |
+  | report `sales-by-period` (`Total Omzet`, `fn: sum`)                    | **0 / kosong**                                         |
+  | widget `omzet-hari-ini` (`sum`), `omzet-per-hari` (`y: total_amount`)  | dashboard omzet **kosong**                             |
+  | `prints/receipt-digital` + `receipt-thermal` (`totals: total_amount`)  | struk tercetak **tanpa total**                         |
+  | `tables/order-table-pos` + `order-table-customer` (kolom "Total")      | kolom **kosong**                                       |
+  | `workflows/order-void-approval` (`display_fields: [… total_amount …]`) | approver melihat **total kosong** saat memutuskan void |
+
+  **Penulisnya nol, dan itu terverifikasi:** form QR memang **sengaja** tidak
+  mengirim angka uang; form POS menyatakan field ini
+  **`read_only: true`** (`order-form-pos.yaml:52`) sehingga kasir **tidak bisa**
+  mengisinya; tidak ada `computed:`, hook, maupun script di `cafe-order` yang
+  menulisnya (dua script yang menyebutnya ada di module `gl`, dan keduanya
+  **membaca**). Artinya **setiap** order yang lahir lewat aplikasi — QR maupun
+  POS — menyimpan `total_amount: null`, dan hanya pemanggil API mentah (atau
+  test) yang bisa mengisinya. Inilah sebabnya angka "Total" yang selama ini
+  terlihat di verifikasi berasal dari payload test, bukan dari aplikasi.
+  **Penutup (pilih satu, perlu keputusan):** (a) turunkan `total_amount` sebagai
+  `computed` di entity order (rantai diskon/pajak/service-charge dari
+  `branch.*_percent` + `points_value` — operand opsional harus ditangani dulu);
+  (b) buat `confirm-payment`/`payment settle` ber-`impl` yang menghitung dan
+  menulis total sebelum `emit: on_paid`; (c) `journalize.star` jatuh ke
+  `sum(lines[].line_total)` + komponen pajak bila `total_amount` kosong —
+  paling murah, tetapi menaruh aritmetika bisnis di module akuntansi, bukan di
+  pemilik datanya, **dan tidak menutup** kolom Total/struk/report.
+  Effort: medium (keputusan + satu jalur tulis + test yang memakai **payload
+  form QR/POS nyata**, bukan payload yang disuplai tangan).
+
+  ✅ **PENUTUP 2026-10-03 — opsi (a) dipilih pemilik.**
+  **Yang dikerjakan:** `branch_id` mendapat `snapshot:` (`tax_percent`,
+  `service_charge_percent`, `apply_service_charge`), ketiganya jadi field pesanan,
+  dan `service_charge_amount`/`tax_amount`/`total_amount` kini **`computed`**
+  (`subtotal → service charge → pajak → total − diskon opsional`).
+  **Kenapa snapshot:** `computed` **tidak bisa** membaca entity lain —
+  `hydrateAndCompute` memanggil `evaluateComputed` **sebelum**
+  `resolveRelations`, jadi `branch.tax_percent` mustahil dijangkau formula.
+  **Dua celah engine yang ikut ditutup** (keduanya penyebab senyap):
+  (i) `evaluateComputed` kini menyuntikkan `resource`/`data` sebagai **FieldMap**
+  (persis `EvaluateGuard`) — tanpa itu, field **opsional** yang absen adalah
+  _identifier tak terdefinisi_ = error compile yang lalu **ditelan** `continue`,
+  sehingga hasilnya absen tanpa sinyal; **itulah akar 10.65**, terbukti di test
+  kalibrasi. (ii) builtin **`money_zero(x)`** — cabang "tidak ada diskon"/"service
+  charge tidak berlaku" butuh nol **bermata uang**, sebab aritmetika money
+  menolak campuran `money ± number`.
+  **Bukti:** e2e `resource/kafe_order_total_computed_e2e_test.go` memakai
+  **bentuk payload form QR yang sebenarnya** (tanpa satu pun angka uang) →
+  `subtotal 45000`, `service 2250`, `tax 4725`, **`total 51975`**, lalu `paid` →
+  **jurnal `posted`, debit = kredit = 51975**; cabang tanpa service charge →
+  `tax 4500`, `total 49500` (menguji cabang `money_zero`). Unit di
+  `internal/starlark/money_zero_test.go` + `renderers/jsonb-persist/
+  computed_optional_test.go` (operand opsional absen → `total 131250`; hadir →
+  `106250`; varian identifier telanjang tetap **absen** — mode gagal lama dipin).
+  **Guard terkalibrasi:** blok `computed` dihapus → gagal
+  `total_amount is absent — the exact 10.65 failure`. **Verifikasi dev server:**
+  `ORD-2026-00004` → `TOTAL 28875`; `on_paid` **completed** (0 retry) → jurnal
+  `JRN-2026-000002` **posted** (Omzet 25000 · Pajak 2625 · Service 1250 ·
+  Kas 28875) — sebelumnya event itu `failed` setelah 6 retry, **nol jurnal**.
+  ⚠️ **Perubahan yang perlu keputusan pemilik:** basis pajak mengikuti komentar
+  field (`tax_percent × (subtotal + service charge)`), sedangkan verifikasi lama
+  9.4/`o2c_e2e_test.go` memakai pajak atas **subtotal** (143750 = 125000+12500+
+  6250). Angka lama itu **disuplai tangan** oleh test dan event-nya di-enqueue
+  langsung, jadi tidak berubah oleh perbaikan ini — konsekuensinya repo memuat
+  **dua basis pajak**; satu baris formula mengubahnya bila maksudnya subtotal.
+  **Sisa bernomor:** 10.68 ⏸️ (computed tidak dipersist → kolom `_total_amount`
+  NULL → sortir), 10.69 ⏸️ (baris lama tidak di-backfill).
+
+- [x] **10.66 — ✅ 2026-10-03 (changelog `2026-10-03-004`) — `default` kini
+      diterapkan pada field CHILD, bukan hanya field induk.**
+      Ditemukan 2026-10-03 saat walkthrough 9.4 skenario 1 (changelog
+      `2026-10-03-002`).
+      **Gejala (terukur):** `order.lines[].line_status` dideklarasikan
+      `default: queued`, tetapi baris yang tersimpan **tidak memuat key itu sama
+      sekali** — bukan `null`, benar-benar absen.
+      **Sebabnya:** `EntityStore.applyDefaults` (`renderers/jsonb-persist/crud.go`)
+      mengiterasi `s.fields` — field **induk** saja; tidak ada satu pun loop yang
+      turun ke `Child.Fields`, dan tidak ada helper `applyChildDefaults`. Jadi sebuah
+      `default` pada field child **tidak pernah diterapkan di jalur mana pun**.
+      **Koreksi diagnosis awal saya (penting):** entri ini semula menulis
+      "`computed` diterapkan [saat tulis] — asimetri di mesin". Itu **tidak akurat**;
+      `evaluateComputed` juga berjalan pada jalur **BACA** untuk keduanya. Yang
+      membuat `line_total` tampak "diterapkan" adalah efek samping PATCH:
+      `HandleUpdate` membaca record (`GetByID` → `evaluateComputed` memutasi peta
+      child di memori) lalu menyimpan kembali hasil merge — sehingga nilai turunan
+      **ikut tertulis** tanpa ada yang memintanya. Diverifikasi pada payload
+      tersimpan: order yang **belum pernah** di-PATCH tidak punya `line_total`,
+      order yang sudah punya memilikinya. Jadi asimetrinya nyata, tetapi mekanismenya
+      beda dari yang saya tulis semula — efek samping itu kini punya nomor sendiri,
+      **10.70 ⏸️**.
+      **Perbaikan:** helper `applyChildDefaults` (kembar `applyDefaults`) yang
+      mengunjungi `Child.Fields` tiap baris, dipanggil di **Insert**, **Update**
+      (baris child diganti utuh, jadi tiap baris yang dikirim adalah baris lengkap),
+      dan **UpsertProjection**. Nilai yang dikirim pemanggil menang; `nil` dihitung
+      "tidak dikirim" (body JSON rutin membawa `null` eksplisit).
+      **Bukti:** `renderers/jsonb-persist/child_defaults_test.go` — dua subtest
+      (**jsonb** dan **table**, karena jalur ekstraksinya berbeda) membaca **baris
+      MENTAH yang tersimpan**, bukan hasil baca, sehingga perbaikan yang hanya
+      menyentuh salinan hasil tidak bisa lulus; test **gagal lebih dulu**
+      (`row 1 line_status = <nil>, want "queued"`), dan menegaskan default **tidak**
+      menimpa nilai yang dikirim. **Verifikasi dev server:** order baru tanpa PATCH →
+      `line_status = queued` di payload tersimpan; `line_total` tetap absen
+      (membuktikan computed memang bukan nilai tulis). `go test ./...` hijau.
+      Effort selesai: small.
+
+- [x] **10.67 — ✅ 2026-10-03 (changelog `2026-10-03-011`) — Aturan bisnis #1
+      ("Hanya pesanan LUNAS yang masuk dapur") kini batas OTORISASI, bukan kolom
+      Kanban; GAP-08 ditutup di paket yang sama.**
+      Ditemukan 2026-10-03 saat walkthrough 9.4 skenario 2 (changelog
+      `2026-10-03-002`).
+      **Terukur sebelum perbaikan:** `POST order` anonim yang **dibiarkan `draft`**
+      (`ORD-2026-00003`) lalu dibaca sebagai **barista** (`kafe-kds`, grant
+      `list`+`view` saja): `GET order/{id}` → **200, `status: draft`**; `GET order`
+      tanpa filter juga memuatnya. Ikut terbaca: `guest_token` (kunci akses pesanan
+      milik tamu), `dining_table_id`, `guest_note`, isi keranjang. Pembatasan itu
+      berlaku hanya karena `kanbans/order-board-kds.yaml` mendeklarasikan tiga kolom
+      — `list`/`find` ke API memuat daftar yang sama.
+      **Penutup:** `row_scope` **per action pada grant** (konstruk baru,
+      `internal/auth/grant.go`) + `value` literal pada `FilterSpec`, di-AND di SQL
+      dan ditegakkan di store untuk baca **dan** tulis. `roles.yaml`: barista &
+      dapur → `status in paid,in_kitchen,ready,served` + `branch_id from session`
+      (sekaligus **GAP-08**: penyaring cabang KDS kini server-side, bukan
+      `fixed_filters` klien); pelayan → `in ready,served,completed`;
+      kasir/supervisor/manajer **tanpa** batas status.
+      **Bukti (E2E kafe in-process, HTTP nyata, spec nyata):**
+
+  | Uji                                            | Sebelum                  | Sesudah                                           |
+  | ---------------------------------------------- | ------------------------ | ------------------------------------------------- |
+  | barista `list order`                           | 3 baris (termasuk draft) | **2** — draft tidak muncul                        |
+  | barista `list?status[in]=draft` (query ledger) | draft muncul             | **tetap tidak muncul**                            |
+  | barista `GET order/{draft}`                    | **200** + `guest_token`  | **404**                                           |
+  | barista `PATCH {status:in_kitchen}` draft      | **200**                  | **404**, status DB tetap `draft`                  |
+  | barista cabang A → order cabang B              | terlihat                 | tidak terlihat; `?branch_id[eq]=B` tetap cabang A |
+  | pelayan `list`                                 | 3 baris                  | hanya `ready`                                     |
+  | **kasir** `list`                               | —                        | draft **+** paid terlihat (POS tidak dibutakan)   |
+  | role ter-scope tanpa assignment                | —                        | **403** (fail closed)                             |
+
+  **Kalibrasi:** `SetGrantScopeLookup` → `nil` ⇒ test e2e gagal dengan pesan
+  _"a DRAFT order reached the kitchen: [ORD-…01 …02 …03]"_ — reproduksi 10.67.
+  Kunci seed yang salah ketik (`row_scopes:`) ⇒ _"carries NO row scope — the
+  kitchen would read drafts again"_.
+  **Test:** `internal/api/scope_literal_test.go`, `internal/api/grant_scope_test.go`,
+  `renderers/jsonb-persist/row_predicate_test.go`,
+  `internal/auth/grant_row_scope_test.go`,
+  `internal/auth/kafe_seed_grants_test.go` (mematerialisasi seed kafe
+  sebenarnya), `resource/row_scope_grant_e2e_test.go`. Suite: `go test ./...`
+  39 paket ok · `golangci-lint` 0 issues · `vitest` 626 · `tsc -b` bersih ·
+  kafe `validate` 89 manifest 0 problem · `check` 0/0.
+  **Sisa bernomor:** (a) pemeriksaan bentuk grant saat `formspec check` belum ada
+  (`grants` = JSON bebas; yang ada baru test materialisasi atas seed) →
+  **10.73 ✅ (ditutup 2026-10-04)**; (b) predikat baca pada `find` via natural key
+  ikut berlaku (sudah, karena predikat masuk ke query) tetapi **`resource.find`
+  di Starlark tidak mengoper predikat grant** → **10.74 ✅ (ditutup 2026-10-04)**.
+
+  _(catatan lama, dipertahankan sebagai jejak analisis)_
+  **Kelas yang sama:** GAP-08 (penyaring cabang KDS "UI-level, BUKAN
+  otorisasi") — dua batas yang sama-sama dinyatakan sebagai aturan tetapi hanya
+  ada di deklarasi tampilan. Perbedaan pentingnya: aturan #1 ditulis di
+  `docs/overview.md` sebagai **tanpa pengecualian** ("Pesanan masuk dapur hanya
+  setelah lunas. Tidak ada pengecualian."), jadi jarak antara klaim dan
+  penegakannya perlu dicatat, bukan diasumsikan.
+  **Penutup (perlu keputusan, karena ada dua jawaban yang sah):** (a) batasi
+  peran KDS pada baris `status ∈ {paid, in_kitchen, ready, served}` — mis.
+  `row_scope` yang membaca status, atau permission terpisah untuk pesanan
+  pra-bayar; atau (b) nyatakan eksplisit di spec bahwa aturan #1 adalah aturan
+  **alur** (ditegakkan view), bukan batas keamanan — lalu pastikan `guest_token`
+  tidak ikut terkirim pada proyeksi yang boleh dibaca dapur (mis. field
+  `masked`/tidak ada di form KDS). Memilih (b) tanpa menutup `guest_token`
+  tetap menyisakan kunci tamu terbaca di perangkat semi-publik.
+  Effort: small–medium.
+
+- [x] **10.73 — Bentuk `grants` kini punya gerbang statis: `formspec check` DAN
+      `formspec validate` menolaknya sebelum deploy. ✅ 2026-10-04**
+      Ditemukan 2026-10-03 saat menutup 10.67 (changelog `2026-10-03-011`).
+      `grants` adalah JSON bebas pada entity `role` — tidak ada schema yang bisa
+      memeriksanya, dan `formspec validate` tidak membacanya.
+      **Penutup.** Satu pembaca bentuk mentah, `auth.ValidateGrantListShape`, dipakai
+      **dua** konsumen sekaligus: gerbang deploy (`cmd/formspec/validate_seed_grants.go`,
+      dipanggil dari `validate.go` **dan** `check.go`) dan loader role saat runtime
+      (`roleFromRecord`). Satu aturan, dua pemakai — pola yang sama dengan
+      `spec.QualifyPermission` (10.46), karena dua salinan aturan keamanan pasti
+      melenceng dan salinan yang melenceng adalah yang berhenti menegakkan.
+
+  **Yang diperiksa** (tanpa registry): page wajib, tiap grup punya `actions`
+  atau `tabs`, tiap action punya `name`, `tabs[].tab` wajib, dan untuk
+  `row_scope`: field wajib, `op` di closed set, dan **tepat satu** sumber nilai
+  (`value` literal, `from: session` dengan `attr`, `from: route` dengan `param`),
+  kecuali operator tanpa nilai (`null`/`notnull`/`root`). Yang **tidak** bisa
+  diperiksa di sini — page resolve, action ada di footprint, field ada di entity
+  target — diperiksa Materializer saat materialisasi, memakai validator
+  `spec.ValidateRowScopeFilters` yang sama.
+
+  **Kunci yang salah ketik kini fail-CLOSED, bukan fail-open.** Ini perbedaan
+  yang penting: `row_scopes:` (atau entri `row_scope` tanpa sumber nilai) tidak
+  menghilangkan **permission**-nya — permission tetap resolve, **batasnya** yang
+  hilang. Resolver karena itu **menolak** (`GrantScope` mengembalikan error →
+  403), bukan menyajikan hasil tanpa batas. Cacat yang hanya menghilangkan grant
+  (page tidak dikenal) tetap dilaporkan sebagai log tanpa menolak apa pun,
+  karena ia sudah fail-closed dengan sendirinya.
+
+  **Bukti:** unit `cmd/formspec/seed_grants_validation_test.go` (menolak
+  `row_scopes`, menerima bentuk sah, membedakan cacat grant vs cacat batas baris),
+  `internal/auth/grantshape_test.go` (7 kasus termasuk operator tak dikenal,
+  `from`+`value` bersamaan, operator tanpa nilai), `internal/auth/grant_scope_failclosed_test.go`
+  (resolver menolak; grant yang cuma hilang tidak).
+  **Kalibrasi:** `sed 's/row_scope:/row_scopes:/g'` pada `examples/kafe/spec/modules/formspec.core/seeds/roles.yaml`
+  (9 kunci) → `formspec check` **1 error** _"seed role \"barista\":
+  grants[1].actions[0].row_scopes — unknown key `row_scopes` … the action is
+  granted on EVERY row [row restriction]"_ dan `formspec validate` **89
+  manifest, 1 problem**. Dikembalikan → kafe `check` **0/0**, `validate`
+  **89/0**.
+
+- [x] **10.74 — `resource.find`/`resource.fetch` di Starlark kini mengoper
+      predikat baris pemanggil. ✅ 2026-10-04**
+      Ditemukan saat menutup 10.67.
+      **Teramati (dulu):** jalur **HTTP** (`list`/`view`/`update`/`delete`) sudah
+      menegakkan `row_scope` entity **dan** batas grant, tetapi `EntityStore.FindByFields`
+      — yang dipakai `resource.find(entity, {field: value})` — tidak menerima daftar
+      predikat, dan `resource.fetch` memanggil `GetByID` tanpa predikat. Script yang
+      membaca lewat lapisan entity karena itu melihat baris yang batas HTTP-nya
+      sembunyikan. Bukan versi kecil dari batas itu — **batasnya hilang**, dan tidak
+      terlihat karena script tetap membalas 200.
+      **Penutup.** `scriptRowPredicates` (`resource/formspec.go`) meresolusi batas
+      baris untuk satu **baca** script dari sumber yang sama dengan HTTP: `row_scope`
+      entity (session/route/literal, plus fallback `assignments`) **di-AND** dengan
+      `row_scope` grant pemanggil untuk permission `view`. Nilai diselesaikan dari
+      identitas pemanggil, tidak pernah dari script. Store mendapat
+      `FindByFieldsScoped` (predikat masuk query, sehingga baris di luar batas
+      **tidak match** — sama seperti `GetByID` ber-predikat: 404, bukan oracle
+      keberadaan).
+      **Fail closed:** batas grant yang tidak bisa dibaca → ditolak; `from: session`
+      tanpa atribut → ditolak; `from: route` dari script (tidak ada query string) →
+      ditolak, bukan dilewati; predikat yang tak bisa diekspresikan → ditolak.
+      **SystemCaller** (subscription/worker) tidak disaring: ia sistem, bukan peran —
+      dan itu diputuskan lapisan dispatch, tidak disimpulkan dari "tidak ada
+      identitas" (pemanggil **anonim** juga tanpa identitas; menyimpulkannya akan
+      memberinya seluruh baris).
+      **Resolver yang sama** dipakai kedua lapisan (`appGrantScope.fn = authSvc.GrantRowScope`,
+      holder yang dibuat sebelum dispatcher karena auth service lahir setelahnya).
+      **Bukti:** `resource/script_row_scope_e2e_test.go` — kontrol dulu (HTTP
+      `GET` baris draft = **404**), lalu script `resource.find` atas baris yang sama
+      → `found: false`, baris dalam batas → terbaca lengkap, `resource.fetch`
+      mengambil keputusan yang sama, dan admin `*` tetap membaca keduanya.
+      **Kalibrasi:** `scriptRowPredicates` dibuat mengembalikan `nil` → test gagal
+      dengan _"resource.find() matched a row the same caller cannot GET:
+      map[found:true secret:draft-secret]"_ — reproduksi 10.74, termasuk kebocoran
+      nilainya.
+
+- [x] **10.75 — Sumber atribut sesi diperiksa untuk GRANT juga, dan `formspec
+check` kini menjalankan lapisan scope. ✅ 2026-10-04**
+      Ditemukan saat menutup 10.73/10.74, dari pertanyaan "apakah validator Fase 4
+      benar-benar menangkap risiko yang ditulis di plan": plan menyebut
+      _"`from: session` pada grant KDS gagal-closed bila role tak punya assignment →
+      validator Fase 4 harus menangkapnya sebelum seed"_. Diukur: **belum.**
+
+  **Dua cacat, keduanya terukur pada pohon kafe sungguhan.**
+  (a) `validateScopeSources` hanya berjalan atas manifest **Entity**, jadi grant
+  `from: session` tidak diperiksa gate mana pun. Menghapus satu-satunya
+  `assignments` di `cafe-master.employee` → `formspec validate` melaporkan 10
+  penolakan (semua entity ber-`row_scope` yang kehilangan sumbernya) dan **nol**
+  tentang tiga grant barista/dapur/pelayan yang kini akan membalas **403** untuk
+  setiap `list`.
+  (b) `formspec check` **tidak menjalankan** lapisan scope sama sekali — pada
+  pohon yang sama ia melaporkan **0 error / 0 warning**, padahal `validate`
+  melaporkan 10 problem. Dua perintah yang keduanya berperan sebagai gerbang
+  tidak boleh berbeda pendapat tentang pohon yang sama.
+
+  **Penutup.** `validateGrantScopeSources` (baru) menegakkan aturan yang **sama**
+  dengan sisi entity: hanya bentuk **implisit** (tanpa `attr`) yang dinilai;
+  sumber yang sah = atribut identitas bawaan (`principal_id`, `user_id`,
+  `username`, `workspace`, `workspace_id`) atau nama apa pun yang disebut
+  `assignments` — **`dimension` maupun `field`**, karena engine meresolusi
+  keduanya (`dimension: branch` + `field: branch_id`). `attr` eksplisit
+  dibiarkan: nilainya bisa datang dari IdP lewat klaim `attrs`, yang tak bisa
+  dienumerasi spec. `check.go` kini menjalankan `validateScopeSources` **dan**
+  `validateGrantScopeSources`.
+
+  **Bukti:** `cmd/formspec/validate_grant_scope_test.go` (8 kasus: tanpa sumber →
+  ditolak; `assignments` → diterima; nama **dimension** → diterima; atribut
+  bawaan → diterima; `attr` eksplisit → dibiarkan; predikat literal → tidak
+  terpengaruh; grant ber-**tab** ikut diperiksa; Seed non-role diabaikan).
+  **Kalibrasi:** pohon kafe dengan `assignments` dihapus → `check`
+  **11 error** (10 entity + 1 grant: _"seed role \"barista\": grant row_scope on
+  order-page/list bounds \"branch_id\" from the session, but nothing in the spec
+  can supply that attribute — every read would fail closed (403)"_), `validate`
+  10 problem. Dikembalikan → kafe `check` **0/0**, `validate` **89/0**.
+  Effort: small.
+
+- [⏸️] **10.76 — Grant anonim turunan kehilangan scope `branch_id` pada
+  `menu-item-price`, sehingga anonim membaca harga SEMUA cabang.** Ditemukan
+  2026-10-04 saat mengganti `public_entities` dengan turunan dari permukaan view
+  (plan `implicit-public-grants.md`, changelog `2026-10-04-002`).
+  Manifest lama mendeklarasikan
+  `{field: branch_id, op: eq, from: route}` pada harga; turunan **tidak bisa**
+  mereproduksinya karena `picker.display.price_filter` bernilai
+  `{session.branch_id}` — cabang datang dari **record sesi** (di-resolve lewat
+  `session_id`), bukan dari parameter route pada entity harga, dan
+  `from: session` memang ditolak untuk permukaan publik (tidak ada identitas
+  sesi bagi anonim). **Terbukti:** `TestDerivePublicGrants_KafeQR` mengunci
+  `menu-item-price` = `[list]` **tanpa** scope; dump turunan menunjukkan
+  `scope=[]` untuk entity itu sementara `order` tetap ber-scope `guest_token`.
+  Tidak ada PII di harga (cabang + angka), tetapi ini pelemahan nyata dibanding
+  manifest lama. **Dua opsi penutup:** (a) deklarasikan ulang scope-nya di
+  **Table/Page publik** yang membaca harga (bila ada halaman yang melakukannya),
+  memakai `param` route — tetapi jalur hari ini adalah picker di dalam form, bukan
+  Table block, jadi ini perlu surface baru; (b) tambah mekanisme scope turunan
+  dari `price_filter` bila sumbernya dapat di-`route`-kan (mis. filter mengambil
+  cabang dari `session.branch_id` yang di-resolve dari `session_id` **di route**
+  — perlu mengubah bentuk filter menjadi route-addressable). Effort: medium.
+
+- [x] **10.77 — ✅ 2026-10-04 — bundle dan endpoint kini sepakat secara
+      struktural; 10.13 ditutup.**
+      Sebelumnya kelengkapan (bundle) dan penegakan (endpoint) menghitung allowlist
+      anonim dari **dua jalur berbeda** (`internal/ui/publicEntityChecker` vs
+      `internal/api/publicGrants`) atas satu field manifest, sehingga keduanya bisa
+      berbeda tanpa ada yang menangkapnya — persis insiden 2026-09-22 (bundle **13**
+      entity vs endpoint **4**, `members`/`employees`/`shifts`/`cash-movements`
+      terkirim ke anonim).
+      Setelah `public_entities` dihapus dan keduanya memanggil
+      `ui.Registry.DerivePublicGrants`, kesamaan itu **struktural**. Dikunci dengan
+      test: `internal/api/kafe_public_agreement_test.go::
+TestKafeQR_BundleAndEndpointAgree` — himpunan entity bundle **=** himpunan
+      entity bergrant (**5 = 5**), kedua arah (bundle-tanpa-grant = kebocoran skema;
+      grant-tanpa-bundle = grant mati), plus himpunan aktualnya dipin agar regresi
+      yang melebarkan **kedua** sisi sekaligus tetap gagal. Pemenuhan 10.13
+      (yang meminta "tidak ada test yang mengunci kesamaan itu"): sekarang ada.
+      Effort: small.
+
+- [⏸️] **10.68 — sisa: baris lama dan nilai basi (keluhan utamanya sudah
+  selesai lewat 10.70).** Ditemukan 2026-10-03 saat mengerjakan 10.65
+  (changelog `2026-10-03-003`); diperbarui `2026-10-03-004` dan
+  `2026-10-03-005`.
+  ⚠️ **Dua klaim saya sendiri dikoreksi di sini.** (i) Entri ini semula menulis
+  kolom turunan "tetap NULL" — **salah**; nilainya tertulis lewat **efek
+  samping PATCH**, dan efek samping itu kini punya nomornya sendiri
+  (**10.70 ✅**, diperbaiki dengan menegakkan kontrak §5.1). (ii) Setelah 10.70
+  diperbaiki, `evaluateComputed` dijalankan di jalur tulis, jadi kolom turunan
+  terisi **sejak create** — bagian utama keluhan ini **selesai**. Terukur pada
+  DB bersih: tiga order baru semuanya terisi (`_total_amount` = payload =
+  `34650` / `11550` / `57750`), dan `?sort=-total_amount` **monoton**
+  (57750 → 34650 → 11550), konsisten dengan angka yang ditampilkan API.
+  **Sisa yang tetap terbuka:**
+  (a) **baris lama belum di-backfill** — nilai turunannya kosong sampai baris itu
+  ditulis ulang; itu **10.69 ⏸️**, bukan item ini;
+  (b) **nilai bisa basi** bila formula berubah tanpa menulis ulang baris: storage
+  menyimpan hasil formula **saat baris ditulis**, sedangkan tampilan selalu
+  menghitung ulang, sehingga sortir/filter SQL bisa berbeda sampai ada penulisan
+  ulang. Belum ada jalur recompute/backfill massal; tidak ada perubahan formula
+  yang tertunda, jadi ini dicatat sebagai sisa, bukan bug aktif.
+  Effort sisa: small–medium (mekanisme recompute) bila (b) dipakai.
+
+- [⏸️] **10.69 — Baris pesanan lama tidak di-backfill, sehingga `tax_amount` dan
+  `total_amount` tetap kosong untuk mereka.** Ditemukan 2026-10-03 saat
+  memverifikasi 10.65 di dev server (changelog `2026-10-03-003`).
+  **Terukur:** dari 4 pesanan di DB dev, **2 masih kosong** —
+  `ORD-2026-00001` (`sub 50000`) dan `ORD-2026-00003` (`sub 75000`) menyimpan
+  `svc 0`, `tax -`, `TOTAL -`; keduanya dibuat **sebelum** field snapshot
+  (`tax_percent` dll) ada. Formula pajak membaca `resource.tax_percent` yang
+  absen → error → `tax_amount` absen → `total_amount` ikut absen. Dua baris yang
+  lahir setelah perubahan (atau yang pernah ditulis dengan `total_amount`) benar:
+  `ORD-2026-00004` → 28875, `ORD-2026-00002` → 25000 (nilai tersimpan, karena
+  `computed` yang gagal tidak menimpa nilai lama).
+  **Kenapa sengaja dibiarkan:** mengikuti preseden **10.42** (field baru tidak
+  di-backfill; record menyembuhkan diri saat ditulis ulang). Alternatif yang
+  ditolak: membuat formula menebak pajak `0` saat `tax_percent` absen — itu
+  menghasilkan **angka salah yang senyap** pada laporan, lebih buruk daripada
+  nilai yang jelas kosong.
+  **Penutup:** migration/repair yang mengisi snapshot dari cabang untuk baris
+  lama (pola `formspec repl --no-sync -f repair.star` + `migrate apply`,
+  changelog `2026-09-28-*`), atau biarkan bila data lama memang tidak perlu
+  dilaporkan. Effort: small–medium.
+
+- [x] **10.70 — ✅ 2026-10-03 (changelog `2026-10-03-005`) — kontrak §5.1
+      `computed` ditegakkan: tidak bisa ditulis klien, dihitung ulang saat simpan.**
+      Ditemukan 2026-10-03 saat mengerjakan 10.66 (changelog `2026-10-03-004`).
+      ⚠️ **Kerangkanya berubah saat dikerjakan.** Entri ini semula saya tulis sebagai
+      _pilihan desain_ ("persist derivasi sengaja, atau tandai kolom turunan
+      tidak-sortable"). Setelah membaca ulang spec, **tidak ada yang perlu
+      diputuskan**: `docs/spec/backend/05-field-types.md` **§5.1** sudah normatif —
+      _"Never client-writable — nilai `computed` di payload klien **diabaikan**"_ dan
+      _"Recomputed on save — formula dievaluasi ulang pada tiap `create`/`update`
+      **sebelum persist**"_. Implementasinya melanggar ketiganya, jadi ini
+      **menegakkan kontrak**, bukan memilih desain baru.
+      **Pelanggaran yang terukur (dev server, `order.total_amount`):**
+      (1) CREATE membawa `total_amount: 999999` → **tersimpan 999999** padahal
+      respons API menjawab `1155` — storage **berbeda dari API**, dan kolom turunan
+      `_total_amount` (dasar sortir/filter/report SQL) memuat angka palsu itu;
+      (2) PATCH membawa `777777` → tersimpan `777777`; (3) CREATE **tidak pernah**
+      menulis nilai computed — ia hanya muncul sebagai **efek samping**
+      read-modify-write PATCH, mekanisme yang entri ini semula keluhkan.
+      **Perbaikan:** `stripComputedValues` (induk **dan** baris child; nilai kiriman
+      dihapus sebelum validasi di Insert/Update/UpsertProjection) +
+      `evaluateComputed` **dipanggil di jalur tulis** sebelum persist — di Insert
+      **setelah `applyFinancialSnapshot`** (wajib: `tax_amount` membaca `tax_percent`
+      hasil snapshot), dan sebelum child diekstrak agar baris `table` ikut terisi.
+      Sekaligus: `resource`/`data` (FieldMap) kini disuntikkan ke env formula
+      **child** juga, bukan hanya induk — ditemukan karena test child saya gagal
+      (`resource.qty` undefined → computed child absen).
+      **Bukti:** `renderers/jsonb-persist/computed_write_contract_test.go` (baru, 4
+      subtest, membaca **payload MENTAH dari tabel** sehingga perbaikan yang hanya
+      membetulkan salinan hasil tidak bisa lulus) — semuanya **gagal lebih dulu**
+      dengan pesan yang menyebut §5.1. Dev server pada **DB bersih**: create dengan
+      total palsu → `34650` (payload = kolom turunan = hasil formula); create **tanpa
+      angka uang** → `11550` **tersimpan** (tanpa PATCH); PATCH dengan `777777` →
+      dihitung ulang `34650`; `?sort=-total_amount` monoton (57750 → 34650 → 11550).
+      Diperiksa juga: **tidak ada script kafe yang menulis field `computed`**
+      (`grep 'set("(difference|change|subtotal|total_amount|line_total|…)"'` → nol),
+      jadi menghapus nilai kiriman tidak menghilangkan tulisan script mana pun.
+      **Batas yang tercatat:** `validateFieldRules` berjalan sebelum
+      `evaluateComputed` pada Insert (snapshot baru ada di dalam transaksi), jadi
+      `rules` pada field _computed_ akan melihat nilai kosong — tidak ada manifest
+      yang begitu.
+      Effort selesai: medium.
+
+- [x] **10.71 — ✅ 2026-10-03 (changelog `2026-10-03-007`) — guard field-level
+      §5.3 kini berlaku di jalur script juga; penegakan pindah ke store.**
+      Ditemukan 2026-10-03 saat memperbaiki arah tulis field-level
+      `required_permission` (changelog `2026-10-03-006`).
+      **Keputusan yang diambil pemilik:** **store = lapisan penegakan otoritatif,
+      HTTP tetap sebagai lapisan gagal-cepat** (plan
+      `docs_internal/plan/lapisan-otorisasi.md`). Pipa ternyata **sudah ada**:
+      `InsertParams/UpdateParams.Permissions` sudah dioper oleh **kedua** jalur
+      ber-identitas (HTTP dan `resource/formspec.go`), dan store bahkan sudah
+      membacanya untuk override kebijakan tanggal — yang hilang hanya penegakan.
+      **Yang dikerjakan:**
+      (i) **`SystemCaller bool`** pada kedua param tulis — **eksplisit, tidak pernah
+      disimpulkan**. Menyimpulkannya dari "Permissions kosong" akan menjadikan setiap
+      situs yang lupa mengisi sebagai bypass istimewa tanpa suara; dengan penanda ini
+      `grep SystemCaller` menjawab "siapa menulis tanpa pengguna?". Seluruh penulis
+      produksi kini menyatakan identitasnya (seed, backup, archive, registry, auth
+      internals, `setActive`) — diverifikasi dengan skrip yang membandingkan jumlah
+      literal param terhadap jumlah penanda (hasil: nol situs tak bertanda).
+      (ii) **`checkFieldWritePermissions` + `ErrForbidden`** di `Insert`/`Update`,
+      diperiksa **sebelum** default (default menambahkan field yang tidak dikirim
+      pemanggil — itu nilai framework, bukan niat mereka). Hanya **niat** yang
+      dinilai, sehingga PATCH yang tidak menyebut field bergerbang tetap lolos.
+      **Dua cacat nyata yang ikut terangkat:**
+      (a) **`resource.create` adalah satu-satunya jalur tulis script TANPA
+      identitas** (`SetCreateHandler` tidak mengoper permissions, tidak seperti
+      `SetSaveHandler`) → field bergerbang akan ditolak **salah** bagi pemanggil yang
+      memegang permission. Kini diperbaiki; ditemukan lewat skrip audit, bukan lewat
+      pembacaan.
+      (b) **Sentinel tidak selamat melintasi batas script** — script gagal dikirim
+      sebagai string (`result.Error`), jadi `errors.Is(ErrForbidden)` false dan
+      penolakan dijawab **500 `ACTION_ERROR`**, bukan 403. Terukur:
+      `500 ACTION_ERROR … resource.save: permission required to set field(s):
+secret`. Perbaikan: marker pesan yang **dibagi kedua lapisan**
+      (`db.ForbiddenMarker`) + `isStoreForbidden`. Bila klasifikasi meleset,
+      tulisannya **tetap ditolak** (hanya salah kelas) — fail-closed.
+      **Bukti:** unit store 7 subtest (`field_write_permission_test.go`, termasuk
+      "SystemCaller bypass **dan** payload tanpa penanda tetap ditolak"); e2e script
+      (`field_permission_script_e2e_test.go`, aksi Starlark nyata atas
+      `resource.save` **dan** `resource.create` → 403 tanpa permission, sukses
+      dengan); e2e HTTP (`2026-10-03-006`) tetap hijau. **Kalibrasi:** guard Insert
+      dihapus → test store gagal; guard Update dihapus → kedua subtest script gagal
+      dengan **200** (tulisan benar-benar lolos). `go test -count=1 ./...` hijau.
+      **Dampak ke kafe nol** (semua `required_permission` kafe ada di action, bukan
+      field) — diverifikasi ulang di dev server.
+      Effort selesai: medium.
+
 - [⏸️] **10.47 — Nama permission transisi tidak punya relasi struktural dengan
   nama action, sehingga gate bisa mustahil dibuka.** Ditemukan 2026-09-27 saat
   koreksi "gate hidup di transisi".
@@ -3571,43 +4313,161 @@ dining_table_id`, bukan **500 UNIQUE constraint failed**. Sebelumnya pelanggaran
   **Catatan:** gate yang tidak dapat dibuka hanya berbahaya bila tidak ada yang
   mengamati 403-nya; karena itu ini ⏸️, bukan blocker.
 
-- [⏸️] **10.46 — Jalur script (`resource.save()`) TIDAK menegakkan
-  `require_permission` transisi.** Ditemukan 2026-09-27 saat menjawab
-  "mengapa ada transisi bergerbang dan tanpa gerbang?".
-  **Bukti kode (bukan dugaan):** gate hidup di **jalur HTTP** (`internal/api`;
-  `PATCH` → `spec.TransitionPermission`) sementara `resource.save()` menulis
-  lewat `resource/formspec.go` `SetSaveHandler` → `store.Update(...)` →
-  `jsonb-persist` `validateStateTransition`. Handler itu memanggil
-  `runBeforeWriteHooks` (jadi hook tetap jalan) **tetapi tidak pernah membaca
-  `require_permission`** — `grep TransitionPermission resource/formspec.go` →
-  **0 hasil**. Artinya `store.Update` memvalidasi **legalitas** transisi
-  (dari/to terdaftar) tetapi **bukan siapa** yang menjalankannya.
-  **Akibat nyata di kafe:** `gl/scripts/journal_post.star` (dan
-  `order.void-order`) melakukan `resource.set("status", …)` + `save()`. Gate
-  pada transisi kafe (`dining-tables.not-available`) tidak akan menahan script
-  yang menempuh jalur ini. Untuk **meja** tidak ada script seperti itu hari ini,
-  jadi belum eksploitatif — tetapi **10.40b** (subscription `on_paid` →
-  `occupied`) adalah penulis script pada entity yang sama, jadi batasnya
-  menyempit.
-  ⚠️ **Diperkuat 2026-09-27:** penulis itu sekarang **ada** —
-  `cafe-master/table_status_from_order.star` menulis `dining-table.table_status`
-  lewat `set()`+`save()` pada **tiga** transisi (`available→occupied`,
-  `occupied→served`, `occupied→available`). Ia memang **sengaja** tidak
-  ditegakkan gate-nya (subscription berjalan sebagai system di luar HTTP —
-  tidak ada identitas yang bisa diperiksa), dan sampai hari ini itu satu-satunya
-  cara meja bisa terisi dari pembayaran. Tetapi konsekuensinya harus jujur:
-  jalur ini **melewati** `require_permission` transisi, jadi siapa pun yang bisa
-  memicu `confirm-payment` memindahkan meja tanpa memegang
-  `dining-tables.*` sama sekali.
-  **Itu bukan alasan untuk menutup gate-nya** — justru sebaliknya, ia
-  memperlihatkan mengapa "gate di lapisan store" perlu diputuskan sebelum ada
-  script kedua yang menulis field status entity lain.
-  **Juga belum ditutup:** tampilan **UI** tidak menghormati gate — `PATCH` dari
-  dasbor mengirim seluruh field, sehingga field status yang dikendalikan state
-  machine bisa ikut ter-PATCH tanpa maksud pengguna.
-  Effort: medium (putuskan: gate dievaluasi di lapisan store/handler script, atau
-  field yang dikendalikan state machine hanya bisa diubah lewat aksi
-  transisi eksplisit).
+- [x] **10.46 — ✅ 2026-10-03 (changelog `2026-10-03-008`) — gerbang transisi
+      kini ditegakkan di STORE; jalur script tidak lagi menerobosnya.**
+      Jalur script (`resource.save()`) TIDAK menegakkan
+      `require_permission` transisi.** Ditemukan 2026-09-27 saat menjawab
+      "mengapa ada transisi bergerbang dan tanpa gerbang?".
+      **Bukti kode (bukan dugaan):** gate hidup di **jalur HTTP** (`internal/api`;
+      `PATCH` → `spec.TransitionPermission`) sementara `resource.save()` menulis
+      lewat `resource/formspec.go` `SetSaveHandler` → `store.Update(...)` →
+      `jsonb-persist` `validateStateTransition`. Handler itu memanggil
+      `runBeforeWriteHooks` (jadi hook tetap jalan) **tetapi tidak pernah membaca
+      `require_permission`** — `grep TransitionPermission resource/formspec.go` →
+      **0 hasil**. Artinya `store.Update` memvalidasi **legalitas** transisi
+      (dari/to terdaftar) tetapi **bukan siapa** yang menjalankannya.
+      **Akibat nyata di kafe:** `gl/scripts/journal_post.star` (dan
+      `order.void-order`) melakukan `resource.set("status", …)` + `save()`. Gate
+      pada transisi kafe (`dining-tables.not-available`) tidak akan menahan script
+      yang menempuh jalur ini. Untuk **meja** tidak ada script seperti itu hari ini,
+      jadi belum eksploitatif — tetapi **10.40b** (subscription `on_paid` →
+      `occupied`) adalah penulis script pada entity yang sama, jadi batasnya
+      menyempit.
+      ⚠️ **Diperkuat 2026-09-27:** penulis itu sekarang **ada** —
+      `cafe-master/table_status_from_order.star` menulis `dining-table.table_status`
+      lewat `set()`+`save()` pada **tiga** transisi (`available→occupied`,
+      `occupied→served`, `occupied→available`). Ia memang **sengaja** tidak
+      ditegakkan gate-nya (subscription berjalan sebagai system di luar HTTP —
+      tidak ada identitas yang bisa diperiksa), dan sampai hari ini itu satu-satunya
+      cara meja bisa terisi dari pembayaran. Tetapi konsekuensinya harus jujur:
+      jalur ini **melewati** `require_permission` transisi, jadi siapa pun yang bisa
+      memicu `confirm-payment` memindahkan meja tanpa memegang
+      `dining-tables.*` sama sekali.
+      **Itu bukan alasan untuk menutup gate-nya** — justru sebaliknya, ia
+      memperlihatkan mengapa "gate di lapisan store" perlu diputuskan sebelum ada
+      script kedua yang menulis field status entity lain.
+      **Juga belum ditutup:** tampilan **UI\*\* tidak menghormati gate — `PATCH` dari
+      dasbor mengirim seluruh field, sehingga field status yang dikendalikan state
+      machine bisa ikut ter-PATCH tanpa maksud pengguna.
+      Effort: medium (putuskan: gate dievaluasi di lapisan store/handler script, atau
+      field yang dikendalikan state machine hanya bisa diubah lewat aksi
+      transisi eksplisit).
+
+  ⚠️ **Diperbarui 2026-10-03 (changelog `2026-10-03-007`) — keputusan sudah
+  diambil, dan penghalangnya kini spesifik.**
+  **Keputusan pemilik:** penegakan otoritatif **di store** (plan
+  `docs_internal/plan/lapisan-otorisasi.md`); HTTP tetap sebagai lapisan
+  gagal-cepat. Mekanismenya **sudah terbukti** untuk field-level (10.71 ✅):
+  principal eksplisit (`SystemCaller`) + guard di `Insert`/`Update`, dengan
+  marker pesan yang dibagi kedua lapisan supaya penolakan dari jalur script tetap
+  dijawab 403, bukan 500.
+  **Penghalang yang tersisa jadi jelas, dan ia bukan "di lapisan mana":**
+  `SetSaveHandler` (`resource/formspec.go`) dipakai **bersama** oleh (a) script
+  aksi yang dipicu HTTP dan (b) script yang dijalankan subscription/worker.
+  Untuk (b) menandai `SystemCaller` benar — eksekutor `table_status_from_order`
+  memang berjalan sebagai sistem — tetapi untuk (a) salah: di sana identitas
+  pemanggil harus diperiksa. Jadi gerbang transisi baru bisa pindah setelah
+  **konteks eksekutor dapat dibedakan** (jalur aksi vs jalur worker), bukan
+  sekadar menambah satu pemeriksaan di store.
+  **Yang TIDAK berubah:** `resource.save()` masih melewati `require_permission`
+  transisi; janji item ini tetap terbuka.
+  Effort: medium (membedakan konteks eksekutor + gerbang di `validateStateTransition`).
+
+  ✅ **PENUTUP 2026-10-03 (changelog `2026-10-03-008`).**
+  **Cara memecahkan penghalang di atas:** konteks eksekutor dibedakan **secara
+  eksplisit**, bukan ditebak. `action.ExecuteParams.SystemCaller` menyatakan asal
+  eksekusi; **hanya** `subscription.Dispatcher` yang menyetelnya (event terjadi
+  tanpa pengguna). Marker itu ikut ke dalam **context**
+  (`action.WithSystemCaller`) lewat `ScriptExecutor` — sebab handler tulis hanya
+  menerima context — lalu diteruskan sebagai `SystemCaller:` beserta permissions
+  pemanggil.
+  **Kenapa tidak boleh disimpulkan dari "tidak ada identitas":** pemanggil
+  **anonim** juga tidak punya identitas; menyimpulkan sistem dari ketiadaan
+  identitas akan **menaikkan** request anonim ke hak istimewa sistem. Karena itu
+  penanda wajib eksplisit, dan **absen penanda = bukan sistem** (fail-closed).
+  **Yang juga diperbaiki:** `spec.QualifyPermission` — aturan auto-prefix dipindah
+  ke **satu tempat bersama** (`internal/permission.AutoPrefixPermission` kini
+  mendelegasikan). Store harus mengkualifikasi persis seperti handler HTTP; kalau
+  tidak, gerbangnya **tak pernah bisa dibuka** (`orders.confirm-payment` tidak
+  cocok dengan `cafe-order.orders.confirm-payment` yang termaterialisasi) — mode
+  kegagalan kafe 10.47.
+  **Bukti:** unit store 5 subtest (`transition_permission_test.go`, termasuk
+  "SystemCaller bypass **dan** payload tanpa penanda tetap ditolak"); e2e script
+  (`transition_permission_script_e2e_test.go`) → **403** tanpa permission, sukses
+  dengan, transisi tak bergerbang tak terpengaruh; kafe in-process
+  (`TestKafe_TableLifecycle_*`) tetap hijau — subscription melewati transisi
+  bergerbang sebagai sistem. **Dev server (live):** `in_kitchen` oleh **kasir →
+  403**, oleh **barista → 200**; `served` oleh pelayan → 200; **meja berakhir
+  `served`** (subscription menyeberangi transisi bergerbang). **Kalibrasi:**
+  gerbang store dimatikan → test store gagal **dan** e2e script mengembalikan
+  **200** (transisi bergerbang tertembus) — tepat bug ini.
+  **Sisa yang dicatat:** apakah **Insert** boleh lahir di luar state awal →
+  **10.72 ⏸️** (terukur; bukan bagian item ini).
+  Effort selesai: medium.
+
+- [x] **10.72 — ✅ 2026-10-03 (changelog `2026-10-03-009`) — create wajib lahir
+      di state awal; `POST {status:"paid"}` kini ditolak.**
+      `POST` (create) boleh lahir langsung di state NON-AWAL,
+      melewati gerbang transisi DAN event transisi.** Ditemukan 2026-10-03 saat
+      menutup 10.46 (changelog `2026-10-03-008`).
+      **Terukur pada dev server (kasir, entity `order`, state awal `draft`):\*\*
+
+  | Payload create     | Hasil                                                   |
+  | ------------------ | ------------------------------------------------------- |
+  | tanpa `status`     | **dibuat**, `status=draft`                              |
+  | `status: "paid"`   | **dibuat**, `status=paid`                               |
+  | `status: "ready"`  | **dibuat**, `status=ready`                              |
+  | `status: "ngawur"` | 422 — tetapi karena **CHECK enum**, bukan state machine |
+
+  **Kenapa ini penting, bukan sekadar kerapian.** `applyDefaults` hanya mengisi
+  state awal **bila field-nya kosong**, dan `validateStateTransition` hanya
+  dipanggil di `Update` — jadi `Insert` tidak pernah memeriksa transisi. Padahal
+  transisi `emit:` adalah pemicu integrasi: order yang lahir langsung `paid`
+  **tidak melewati `awaiting_payment → paid`**, sehingga **`on_paid` tidak
+  pernah terbit** → **tidak ada jurnal GL**, tidak ada pembaruan meja, tidak ada
+  apa pun yang mendengarkan event itu. Jadi ia menembus **dua** hal sekaligus:
+  gerbang permission transisi (10.46, kini ditutup untuk jalur update) dan
+  kaitan transisi→event (S13).
+  Untuk kafe, kasir memegang `orders.create`, jadi jalur ini **bisa ditempuh**
+  oleh peran yang memang ada.
+  **Catatan:** `ngawur` ditolak 422 oleh CHECK enum — jadi bunyi spec yang
+  benar-benar berlaku di sini adalah _"nilai harus salah satu `enum_values`"_,
+  bukan _"state harus state awal"_. Dua hal berbeda yang mudah tertukar saat
+  membaca hasilnya.
+  **Penutup (perlu keputusan):** (a) `Insert` menolak state ≠ `Initial` kecuali
+  `SystemCaller` (seed/migrasi boleh, karena mereproduksi data apa adanya);
+  (b) izinkan bila ada transisi terdaftar dari state awal — tetapi itu **tidak**
+  menyalakan `emit` (event transisi hanya dipancarkan jalur update), jadi
+  pilihannya menyesatkan; (c) biarkan, dan nyatakan di spec bahwa "create selalu
+  di state awal" adalah tanggung jawab pemanggil. (a) paling sesuai dengan
+  kontrak state machine; risikonya: seed/test yang menulis state akhir harus
+  ditandai sistem — dan itu memang yang diinginkan (terlihat, bukan implisit).
+  Effort: small–medium.
+
+  ✅ **PENUTUP 2026-10-03 (changelog `2026-10-03-009`) — opsi (a) dipilih.**
+  `Insert` menolak state ≠ `state_machine.initial` kecuali `SystemCaller`,
+  diperiksa **setelah `applyDefaults`** (yang membuat "field absen" berarti
+  "state awal", bukan "entah"). Pesannya menyebut **kedua** state
+  (`create must start in the initial state "draft", got "paid"`).
+  **Bukti:** unit store 6 subtest (`create_initial_state_test.go`) · e2e kafe
+  (`create_initial_state_e2e_test.go`) — `paid` ditolak **dan dibuktikan tidak
+  ada** order ber-status bukan-draft tertulis (penolakan terjadi sebelum tulis) ·
+  **kalibrasi:** aturan di-`if false`-kan → test store gagal **dan** e2e
+  mengembalikan **201** dengan record lengkap ber-`status:paid` ·
+  **dev server DB bersih:** `paid`/`ready`/`ngawur` → **422** dengan pesan state,
+  tanpa status → `draft`; rantai nilai/jurnal/sortir dan `make seed-kafe` tidak
+  terganggu.
+  **Catatan yang diperbaiki:** `ngawur` kini ditolak oleh aturan **state**, bukan
+  oleh CHECK enum — pesannya jadi jujur menyebut sebabnya (sebelumnya pengguna
+  melihat error constraint, bukan aturan).
+  **Dampak test yang diinginkan:** 5 fixture di `internal/api` yang menyemai
+  `{"status": "posted"}` ditandai `SystemCaller: true` — "menulis state akhir saat
+  seeding" berubah dari kebetulan tak terlihat menjadi pernyataan.
+  **Dokumen:** aturan ini **ditambahkan ke `docs/spec/backend/01-core-basic.md`
+  §1.6** — spec mendefinisikan `state_machine` tetapi belum pernah menyatakan
+  bahwa create harus mulai dari `initial`; penegakan baru tanpa kalimat kontrak
+  akan jadi aturan yang hanya bisa ditemukan dengan membaca kode.
+  Effort selesai: small–medium.
 
 - [⏸️] **10.45 — Gerbang transisi belum dianggap sebagai batas keamanan
   (castellan fallacy).** `require_permission` pada transisi **tidak** mencegah

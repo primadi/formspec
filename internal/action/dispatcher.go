@@ -56,6 +56,17 @@ type ExecuteParams struct {
 	// the right job.
 	JobID string
 
+	// SystemCaller marks an execution with no user behind it — a
+	// subscription, a worker, or a scheduled job. Such an execution may
+	// legitimately perform transitions a user would need a permission for
+	// (kafe's `table_status_from_order` is the canonical case).
+	//
+	// It is EXPLICIT and never inferred from a missing Identity: an ANONYMOUS
+	// HTTP caller also carries no identity, so inferring would hand an
+	// anonymous request the system's privileges. The dispatch layer that knows
+	// the execution's origin is the only thing that may set this.
+	SystemCaller bool
+
 	// SpecDir is the directory of the entity's YAML spec file.
 	// Used by ScriptExecutor to resolve script refs relative to the
 	// entity's own directory rather than the spec root — no fixed

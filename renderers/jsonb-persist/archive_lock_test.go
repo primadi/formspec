@@ -39,7 +39,7 @@ func TestSoftDelete_ArchiveLocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	if err := store.SoftDelete(ctx, "demo", id); err != nil {
+	if err := store.SoftDelete(ctx, DeleteParams{WorkspaceID: "demo", ID: id, SystemCaller: true}); err != nil {
 		t.Fatalf("expected delete allowed for unlocked record, got %v", err)
 	}
 
@@ -48,7 +48,7 @@ func TestSoftDelete_ArchiveLocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("insert locked: %v", err)
 	}
-	err = store.SoftDelete(ctx, "demo", id2)
+	err = store.SoftDelete(ctx, DeleteParams{WorkspaceID: "demo", ID: id2, SystemCaller: true})
 	if err == nil {
 		t.Fatal("expected delete blocked for locked_for_deletion record")
 	}

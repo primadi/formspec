@@ -217,6 +217,92 @@ func (s *EntityStore) qualifiedTable() string {
 // It modifies the data map in place. Only applies defaults when:
 //   - field.Default is not nil
 //   - the field is not already present in data
+//
+// stripComputedValues removes any client-supplied value for a computed field —
+// at the parent level and inside every child row.
+//
+// `docs/spec/backend/05-field-types.md` §5.1 is normative: "Never
+// client-writable — nilai `computed` di payload klien **diabaikan**". Ignoring
+// the value is not enough on its own: the field must be removed BEFORE
+// validation and defaults so that nothing downstream can persist it, and so the
+// formula is the only author of the value.
+//
+// Measured before this existed (kafe dev server, `order.total_amount`): a forged
+// `total_amount: 999999` on create was STORED as 999999 while the API response
+// showed the computed 1155 — so storage and the numeric derived column that
+// sort/range-filter/report SQL reads disagreed with the API. A silently wrong
+// number in an indexed money column is the failure class §2.2 calls out.
+func (s *EntityStore) stripComputedValues(data map[string]any) {
+	for _, f := range s.computedFields {
+		delete(data, f.Name)
+	}
+	for name, cs := range s.children {
+		if cs.field.Child == nil {
+			continue
+		}
+		rows, ok := asSlice(data[name])
+		if !ok {
+			continue
+		}
+		for _, item := range rows {
+			row, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			for _, cf := range cs.field.Child.Fields {
+				if cf.Computed != nil {
+					delete(row, cf.Name)
+				}
+			}
+		}
+	}
+}
+
+// applyChildDefaults applies declared `default` values to the fields of every
+// row in each child collection — the child-level counterpart of applyDefaults.
+//
+// It exists because applyDefaults iterates `s.fields`, which are the PARENT
+// fields only, so a `default` on a child field was never applied anywhere: the
+// key was simply absent from the stored row (kafe 10.66, `order.lines[].
+// line_status` with `default: queued`). The asymmetry is with `computed`, which
+// the engine DOES evaluate for child rows (evaluateComputed, step 1) — both are
+// declared on the same `Child.Fields` list, so treating them differently has no
+// justification.
+//
+// A value the caller supplied always wins, matching applyDefaults. `nil` counts
+// as not supplied: JSON bodies routinely carry an explicit `null` for an
+// untouched field, and leaving that `null` in place would defeat the default.
+func (s *EntityStore) applyChildDefaults(data map[string]any) {
+	for name, cs := range s.children {
+		if cs.field.Child == nil {
+			continue
+		}
+		raw, ok := data[name]
+		if !ok {
+			continue
+		}
+		rows, ok := asSlice(raw)
+		if !ok {
+			continue
+		}
+		for _, item := range rows {
+			row, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			for _, cf := range cs.field.Child.Fields {
+				if cf.Default == nil {
+					continue
+				}
+				if v, exists := row[cf.Name]; exists && v != nil {
+					continue
+				}
+				row[cf.Name] = cf.Default
+			}
+		}
+	}
+}
+
 func (s *EntityStore) applyDefaults(data map[string]any) {
 	for _, f := range s.fields {
 		if f.Default == nil {
@@ -355,18 +441,30 @@ func (s *EntityStore) validateKnownFields(data map[string]any) error {
 		known[ns] = true
 	}
 
+	// Collect EVERY unknown key, sorted. Returning the first key reached by map
+	// iteration would make the reported field depend on Go's randomized map
+	// order: a payload with two unknown fields could name either one on the same
+	// input, so a client assertion (or a user's bug report) could not be
+	// reproduced. Sorting makes the answer stable, and reporting all of them
+	// saves the caller a round-trip per typo.
+	var unknown []string
 	for key := range data {
-		if !known[key] {
-			// A retired field is known, just dead: `stripRetired` removes it from
-			// the payload, so reaching here means a caller built its own map. It is
-			// still not an unknown field, and reporting it as one would be a lie.
-			if s.retired[key] {
-				continue
-			}
-			return fmt.Errorf("%w: %q", ErrUnknownField, key)
+		if known[key] {
+			continue
 		}
+		// A retired field is known, just dead: `stripRetired` removes it from
+		// the payload, so reaching here means a caller built its own map. It is
+		// still not an unknown field, and reporting it as one would be a lie.
+		if s.retired[key] {
+			continue
+		}
+		unknown = append(unknown, key)
 	}
-	return nil
+	if len(unknown) == 0 {
+		return nil
+	}
+	sort.Strings(unknown)
+	return &UnknownFieldError{Fields: unknown}
 }
 
 // sanitizeRichText strips dangerous HTML from richtext fields before persist
@@ -464,12 +562,100 @@ func (s *EntityStore) stripRetired(data map[string]any) {
 	}
 }
 
+// ErrForbidden is returned when a caller lacks a permission a write requires —
+// currently the field-level `required_permission` of 05-field-types.md §5.3.
+// The HTTP layer maps it to 403; it is a sentinel so the script path
+// (`resource.save()`) reports the same class instead of a generic failure.
+var ErrForbidden = fmt.Errorf("forbidden")
+
+// ForbiddenMarker is the stable, machine-recognizable part of a
+// ForbiddenError's message.
+//
+// It exists because a store error does NOT survive a trip through Starlark: the
+// script executor carries a failed script as a plain string
+// (`internal/action/script.go` — `result.Error`), so `errors.Is(err,
+// ErrForbidden)` is false by the time the API layer sees it, and a refusal
+// raised by `resource.save()` was reported as a 500 ACTION_ERROR instead of a
+// 403. Both layers classify on this ONE string, so the marker and the human
+// message cannot drift apart.
+const ForbiddenMarker = "permission required to set field(s):"
+
+// ForbiddenError names the fields a caller may not set, so the caller is told
+// WHICH input was refused rather than that "something" was forbidden.
+type ForbiddenError struct {
+	// Fields are the payload keys the caller lacks permission to set, sorted
+	// (the payload is a map; an unsorted message would differ between identical
+	// requests).
+	Fields []string
+}
+
+func (e *ForbiddenError) Error() string {
+	return ForbiddenMarker + " " + strings.Join(e.Fields, ", ")
+}
+
+// Unwrap makes errors.Is(err, ErrForbidden) work.
+func (e *ForbiddenError) Unwrap() error { return ErrForbidden }
+
+// checkFieldWritePermissions rejects a payload that sets a field the caller is
+// not allowed to set (05-field-types.md §5.3: "tidak boleh melihat ATAU
+// menyetel … penyetelannya di payload ditolak").
+//
+// It lives in the STORE rather than only in the HTTP handler because the store
+// is the one choke point every write passes through: HTTP and `resource.save()`
+// from a script both end up here, while a guard placed on one of those paths
+// leaves the other open (that is exactly how 10.46 and 10.71 existed). The HTTP
+// layer keeps its own early check for a friendlier, earlier failure — the
+// DECLARATION (field.RequiredPermission) is read by both, so there is still a
+// single source of truth.
+//
+// Only the caller's INTENT is judged: a field present in the payload is a field
+// they are trying to set. Values already stored are not the caller's doing, so
+// an update that does not mention the field passes.
+func (s *EntityStore) checkFieldWritePermissions(data map[string]any, permissions []string, systemCaller bool) error {
+	if systemCaller || len(data) == 0 {
+		return nil
+	}
+	var denied []string
+	for _, f := range s.fields {
+		if f.RequiredPermission == "" {
+			continue
+		}
+		if _, sent := data[f.Name]; !sent {
+			continue
+		}
+		if hasPermission(permissions, f.RequiredPermission) {
+			continue
+		}
+		denied = append(denied, f.Name)
+	}
+	if len(denied) == 0 {
+		return nil
+	}
+	sort.Strings(denied)
+	return &ForbiddenError{Fields: denied}
+}
+
 // InsertParams holds the data for creating a new entity record.
 type InsertParams struct {
-	WorkspaceID   string
-	CreatedBy     string
-	Data          map[string]any
-	Permissions   []string       // caller's effective permissions — used for backdate/forward-date override_permission
+	WorkspaceID string
+	CreatedBy   string
+	Data        map[string]any
+	// Permissions are the caller's effective permissions, honoured by the
+	// store-level guards: the backdate/forward-date override_permission and the
+	// field-level `required_permission` (05-field-types.md §5.3).
+	Permissions []string
+	// SystemCaller marks a write made by the FRAMEWORK rather than by a caller
+	// whose permissions are known: seed, migration/repair, backup restore,
+	// auth internals, background workers (outbox, escalation, job tracker).
+	// Those writes have no user behind them, so permission guards cannot be
+	// evaluated for them.
+	//
+	// It is EXPLICIT on purpose. Inferring `SystemCaller` from "Permissions is
+	// empty" would make every forgotten site a silent privilege bypass — the
+	// exact shape of bug that let 10.46/10.71 exist. A site that means to run
+	// as the system now says so, and `grep SystemCaller` answers "who writes
+	// without a user?" — which is what an audit needs to be able to ask.
+	SystemCaller  bool
 	PendingEvents []PendingEvent // durable events to enqueue atomically with this insert (see PendingEvent)
 	RequestID     string         // originating request id, recorded in the audit trail (4.7.2)
 }
@@ -490,8 +676,54 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 			ErrValidationRule, s.module, s.entity)
 	}
 
+	// Field-level write guard (05-field-types.md §5.3). Checked FIRST, on the
+	// caller's own payload: applyDefaults below adds fields the caller never
+	// sent, and those are the framework's values, not their intent.
+	if err := s.checkFieldWritePermissions(params.Data, params.Permissions, params.SystemCaller); err != nil {
+		return "", err
+	}
+
 	// Apply default values for fields not present in data
 	s.applyDefaults(params.Data)
+	// …and for the fields of every child row (10.66). Kept next to the parent
+	// call because the two are one concept: a declared default that the caller
+	// did not supply. Child rows are whole rows (the collection is replaced
+	// wholesale), so they get defaults on every write, not only on create.
+	s.applyChildDefaults(params.Data)
+
+	// A computed value is never the caller's to set: drop any they sent before
+	// anything downstream can persist it (05-field-types.md §5.1, "Never
+	// client-writable"). The formula re-authors it below.
+	s.stripComputedValues(params.Data)
+
+	// A record is BORN in the state machine's initial state (kafe 10.72).
+	//
+	// `applyDefaults` above fills the initial state when the caller omits the
+	// field, but it does not stop a caller from SENDING a different one — so
+	// `POST {status: "paid"}` landed directly in `paid`. That skips two things
+	// at once, and both silently:
+	//
+	//   - the per-transition permission gate, which only runs on Update;
+	//   - the transition's `emit:`, because emissions are resolved from a state
+	//     CHANGE on the update path — so an order created as `paid` publishes no
+	//     `on_paid`, and the GL journal, the table-occupancy bridge, and every
+	//     other listener never hear about it while the record looks valid.
+	//
+	// Checked after applyDefaults, which is what makes an ABSENT field mean
+	// "initial" rather than "unknown". A SYSTEM caller (seed, restore, migration)
+	// may set any state: it reproduces a stored row as-is, a different operation
+	// from a caller creating a record.
+	if s.stateMachine != nil && !params.SystemCaller {
+		state := ""
+		if v, ok := params.Data[s.stateMachine.Field]; ok && v != nil {
+			state = fmt.Sprintf("%v", v)
+		}
+		if state != "" && state != s.stateMachine.Initial {
+			return "", fmt.Errorf("%w: %s: create must start in the initial state %q, got %q "+
+				"(a record created mid-lifecycle skips the transition gate and its `emit`)",
+				ErrValidationRule, s.stateMachine.Field, s.stateMachine.Initial, state)
+		}
+	}
 
 	// Strip read-side relation enrichment (nested objects injected by
 	// resolveRelations) before validation — a script resource.create() may
@@ -566,6 +798,16 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 		if err := s.validateTransactionDatePolicy(params.Data, params.Permissions); err != nil {
 			return err
 		}
+
+		// Recompute computed fields before persisting — "Recomputed on save"
+		// (05-field-types.md §5.1). Placement is deliberate: INSIDE the
+		// transaction and AFTER the financial snapshot, because a formula may
+		// depend on a snapshotted field (`tax_amount` reads the `tax_percent`
+		// copied from the branch a few lines above). Doing it here is what makes
+		// the stored value — and the numeric derived column sort/filter/report
+		// SQL reads — agree with the API response, instead of staying NULL until
+		// some later update happened to touch the row (kafe 10.68/10.70).
+		s.evaluateComputed(params.Data)
 
 		// Extract children from data (table storage only)
 		parentData := params.Data
@@ -710,6 +952,13 @@ func withRecordID(payloadJSON, recordID string) string {
 type GetByIDParams struct {
 	WorkspaceID string
 	ID          string
+	// RowPredicates are server-resolved row constraints that must hold for the
+	// caller to see this record (entity `row_scope` + role-grant row scope).
+	// They are applied INSIDE the lookup, so a row outside the caller's scope is
+	// indistinguishable from a row that does not exist — the caller is not told
+	// which records exist beyond their boundary. Evaluated server-side; a client
+	// cannot omit or widen them.
+	RowPredicates []RowPredicate
 }
 
 // hydrateAndCompute hydrates child-table data into the record, evaluates
@@ -830,21 +1079,46 @@ func (s *EntityStore) getByIDRaw(ctx context.Context, params GetByIDParams) (*En
 	query := fmt.Sprintf(
 		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, doc_status, data FROM %s WHERE id = ? AND tenant_id = ?`,
 		tbl)
+	args := []any{params.ID, params.WorkspaceID}
 	if s.softDelete {
 		query += " AND deleted_at IS NULL"
 	}
 
-	return s.scanRecord(ctx, txReadDB(ctx, s.db), query, params.ID, params.WorkspaceID)
+	// Row predicates ride along with the lookup: a record outside the caller's
+	// scope simply does not match, so it is reported as absent (404) instead of
+	// forbidden (403). That keeps the boundary from doubling as an existence
+	// oracle, and matches how `list` already hides those rows.
+	clauses, pargs, err := s.predicateClauses(params.RowPredicates)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range clauses {
+		query += " AND " + c
+	}
+	args = append(args, pargs...)
+
+	return s.scanRecord(ctx, txReadDB(ctx, s.db), query, args...)
 }
 
 // UpdateParams holds the data for updating an entity record.
 type UpdateParams struct {
-	WorkspaceID   string
-	ID            string
-	Version       int // optimistic concurrency: update only if version matches
-	UpdatedBy     string
-	Data          map[string]any
-	Permissions   []string       // caller's effective permissions — used for backdate/forward-date override_permission
+	WorkspaceID string
+	ID          string
+	Version     int // optimistic concurrency: update only if version matches
+	UpdatedBy   string
+	Data        map[string]any
+	// Permissions are the caller's effective permissions — see InsertParams.
+	Permissions []string
+	// SystemCaller marks a framework write (no user behind it). See
+	// InsertParams.SystemCaller: explicit, never inferred.
+	SystemCaller bool
+	// RowPredicates are server-resolved row constraints the target record must
+	// satisfy for this caller to modify it (entity `row_scope` + role-grant row
+	// scope). Enforced against the row as it exists BEFORE the update — a caller
+	// cannot widen their own boundary by writing into a row they may not see.
+	// A record outside the scope is reported as not found (404), the same answer
+	// a read gives, so the write path is not an existence oracle either.
+	RowPredicates []RowPredicate
 	PendingEvents []PendingEvent // durable events to enqueue atomically with this update (see PendingEvent)
 	RequestID     string         // originating request id, recorded in the audit trail (4.7.2)
 }
@@ -862,6 +1136,13 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 			ErrValidationRule, s.module, s.entity)
 	}
 
+	// Field-level write guard (05-field-types.md §5.3) — first, on the caller's
+	// payload. `params.Data` here IS their body (PATCH merges happen in the
+	// handler, not here), so a stored value they never sent is not judged.
+	if err := s.checkFieldWritePermissions(params.Data, params.Permissions, params.SystemCaller); err != nil {
+		return 0, err
+	}
+
 	// Strip read-side relation enrichment (nested objects injected by
 	// resolveRelations) before validation — PATCH merges onto the fetched
 	// Data and script resource.save() re-persists the whole loaded record,
@@ -877,10 +1158,24 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	// never trusted raw.
 	s.sanitizeRichText(params.Data)
 
+	// A computed field is the formula's to author, not the caller's: drop any
+	// value they sent before validation, so it can never reach storage.
+	// NOTE this also removes the values the read-modify-write in the HTTP
+	// handler copied in from the fetched record — they are re-derived below,
+	// which is exactly the point (05-field-types.md §5.1).
+	s.stripComputedValues(params.Data)
+
 	// Reject unknown fields early
 	if err := s.validateKnownFields(params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
+	// Child rows are replaced wholesale, so every submitted row is a COMPLETE
+	// row and gets its declared defaults — a caller that sends `lines` without
+	// `line_status` must not end up with a row that has no status (10.66).
+	// Parent-level defaults are deliberately NOT re-applied on update: a PATCH
+	// is partial, and re-seeding a parent field the caller never mentioned would
+	// undo their earlier value.
+	s.applyChildDefaults(params.Data)
 	// Validate required fields that are present in the update data
 	if err := s.validateRequired(params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
@@ -910,6 +1205,18 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
+	// Recompute computed fields before persisting (05-field-types.md §5.1,
+	// "Recomputed on save"). `params.Data` is the caller's merged payload, and
+	// the caller's values for computed fields were already dropped by
+	// stripComputedValues — so the formula is the only author. This also stops
+	// the value from depending on the read-modify-write side effect that used
+	// to be the only thing populating it (kafe 10.70).
+	//
+	// Runs after the period guard so a rejected write does no work, and before
+	// children are extracted so table-storage rows are written with their
+	// computed values too.
+	s.evaluateComputed(params.Data)
+
 	// Extract children from data (table storage only)
 	parentData := params.Data
 	childrenData := make(map[string][]map[string]any)
@@ -935,7 +1242,15 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	var resolvedID string
 	var existingDocStatus spec.DocStatus
 	{
-		rec, err := s.GetByID(ctx, GetByIDParams{WorkspaceID: params.WorkspaceID, ID: params.ID})
+		// Row predicates ride along with the fetch: a record outside the caller's
+		// row scope is absent from this caller's point of view, so the update
+		// fails as not-found before any work is done (kafe 10.67 — a barista
+		// must not be able to touch an unpaid order they cannot read).
+		rec, err := s.GetByID(ctx, GetByIDParams{
+			WorkspaceID:   params.WorkspaceID,
+			ID:            params.ID,
+			RowPredicates: params.RowPredicates,
+		})
 		if err != nil {
 			return 0, fmt.Errorf("%s update: fetch existing: %w", s.entity, err)
 		}
@@ -965,7 +1280,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 
 	// Validate state machine transition if the state field is changing
 	if s.stateMachine != nil {
-		if err := s.validateStateTransition(existingData, parentData); err != nil {
+		if err := s.validateStateTransition(existingData, parentData, params.Permissions, params.SystemCaller); err != nil {
 			return 0, fmt.Errorf("%s update: %w", s.entity, err)
 		}
 	}
@@ -1056,20 +1371,47 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	return newVersion, nil
 }
 
+// DeleteParams carries the identity of the caller deleting a record, so the
+// delete path enforces the same authorization as every other write.
+//
+// It replaces the previous bare `(ctx, workspaceID, id)` signature: without a
+// params struct there was nowhere to put a principal, which is exactly why
+// `delete` was the one write path with no identity attached (kafe 10.45).
+type DeleteParams struct {
+	WorkspaceID string
+	ID          string
+	// Permissions are the caller's effective permissions.
+	Permissions []string
+	// SystemCaller marks a framework write (no user behind it). Explicit, never
+	// inferred — see InsertParams.SystemCaller.
+	SystemCaller bool
+	// DeletedBy is recorded in the audit trail.
+	DeletedBy string
+	// RowPredicates must hold for the record being deleted (see UpdateParams).
+	RowPredicates []RowPredicate
+}
+
 // SoftDelete marks an entity record as deleted. Child-row removal, the
 // delete/deactivate write, and the audit log entry all run inside one
 // transaction (see Insert's doc comment for the atomicity contract).
 // Children in child tables are cascade-deleted (ON DELETE CASCADE from DDL handles this
 // for hard deletes; for soft deletes we explicitly remove child rows).
-func (s *EntityStore) SoftDelete(ctx context.Context, workspaceID, id string) error {
+func (s *EntityStore) SoftDelete(ctx context.Context, params DeleteParams) error {
+	workspaceID, id := params.WorkspaceID, params.ID
 	// Summary entities are permanently read-only via API (§4.1.1)
 	if s.characteristic == spec.CharSummary {
 		return fmt.Errorf("%w: summary entity %s/%s is read-only (create/update/delete disabled)",
 			ErrValidationRule, s.module, s.entity)
 	}
 
-	// Fetch existing record to check lifecycle guard
-	rec, err := s.GetByID(ctx, GetByIDParams{WorkspaceID: workspaceID, ID: id})
+	// Fetch existing record to check lifecycle guard. Row predicates ride along
+	// with the fetch so a record outside the caller's row scope is absent from
+	// their point of view (404) rather than deletable.
+	rec, err := s.GetByID(ctx, GetByIDParams{
+		WorkspaceID:   workspaceID,
+		ID:            id,
+		RowPredicates: params.RowPredicates,
+	})
 	if err != nil {
 		return fmt.Errorf("%s delete: fetch existing: %w", s.entity, err)
 	}
@@ -1500,6 +1842,11 @@ func (s *EntityStore) setActive(ctx context.Context, workspaceID, id, userID str
 		Version:     rec.Version,
 		UpdatedBy:   userID,
 		Data:        data,
+		// set_active is a framework operation (deactivate/reactivate actions
+		// wired by the engine), not a caller-authored payload: it writes a
+		// single engine-owned field and must not be blocked by a field guard on
+		// some other field the record happens to carry.
+		SystemCaller: true,
 	})
 	if err != nil {
 		return fmt.Errorf("%s set_active: %w", s.entity, err)
@@ -1767,6 +2114,130 @@ func toAnySlice(v any) []any {
 	}
 }
 
+// RowPredicate is one server-resolved row constraint: `field op value`.
+//
+// It is deliberately NOT a FilterOp, because a predicate has to name its field
+// (a map key cannot carry it) and because its provenance differs: every
+// FilterOp in a list request came from the client and may be dropped by the
+// client, whereas a RowPredicate is produced from the manifest — an entity's
+// `row_scope` or a role grant's `row_scope` — and must hold no matter what the
+// request says (kafe 10.67: only paid orders reach the kitchen; GAP-08: the
+// kitchen sees its own branch).
+type RowPredicate struct {
+	Field string
+	Op    string // closed set; empty = "eq"
+	Value any
+}
+
+// FilterOpFrom converts a predicate to the FilterOp the SQL builder takes, so
+// predicates and client filters share ONE operator implementation.
+func (p RowPredicate) FilterOpFrom() FilterOp {
+	op := p.Op
+	if op == "" {
+		op = "eq"
+	}
+	return FilterOp{Op: op, Value: p.Value}
+}
+
+// filterSQL renders one `field op value` predicate as a SQL fragment plus its
+// bind args.
+//
+// This is the single implementation behind three callers that must not disagree
+// on semantics: client list filters, entity `row_scope`, and grant row
+// predicates. Sharing it is what keeps a grant predicate and an entity scope
+// comparable — the kafe ledger has already been bitten once by two copies of the
+// auto-prefix rule drifting apart (10.46).
+//
+// A degenerate predicate (an operator that cannot be expressed for the given
+// value) returns ok=false rather than a half-formed clause. Client filters skip
+// it; the authorization callers treat it as fail-closed, because a row
+// restriction that quietly disappears is worse than a rejected request.
+func (s *EntityStore) filterSQL(field string, f FilterOp) (clause string, args []any, err error) {
+	col := s.columnRefExpr(field)
+	value := s.coerceFilterValue(field, f.Value)
+
+	switch f.Op {
+	case "eq":
+		return fmt.Sprintf("%s = ?", col), []any{value}, nil
+	case "neq":
+		return fmt.Sprintf("%s != ?", col), []any{value}, nil
+	case "gt":
+		return fmt.Sprintf("%s > ?", col), []any{value}, nil
+	case "gte":
+		return fmt.Sprintf("%s >= ?", col), []any{value}, nil
+	case "lt":
+		return fmt.Sprintf("%s < ?", col), []any{value}, nil
+	case "lte":
+		return fmt.Sprintf("%s <= ?", col), []any{value}, nil
+	case "like":
+		return fmt.Sprintf("%s LIKE ?", col), []any{value}, nil
+	case "ilike":
+		if s.driver == DriverPostgres {
+			return fmt.Sprintf("%s ILIKE ?", col), []any{value}, nil
+		}
+		return fmt.Sprintf("LOWER(%s) LIKE LOWER(?)", col), []any{value}, nil
+	case "null":
+		return fmt.Sprintf("%s IS NULL", col), nil, nil
+	case "notnull":
+		return fmt.Sprintf("%s IS NOT NULL", col), nil, nil
+	case "between":
+		values := toAnySlice(value)
+		if len(values) != 2 {
+			return "", nil, nil
+		}
+		return fmt.Sprintf("%s BETWEEN ? AND ?", col), []any{values[0], values[1]}, nil
+	case "in", "nin":
+		values := toAnySlice(value)
+		if len(values) == 0 {
+			return "", nil, nil
+		}
+		placeholders := strings.Repeat("?,", len(values))
+		placeholders = placeholders[:len(placeholders)-1]
+		op := "IN"
+		if f.Op == "nin" {
+			op = "NOT IN"
+		}
+		return fmt.Sprintf("%s %s (%s)", col, op, placeholders), values, nil
+	case "descendant_of":
+		// Tree operator (4.6.2): rows whose materialized path starts with the
+		// given ancestor's path prefix.
+		prefix, ok := value.(string)
+		if !ok || prefix == "" {
+			return "", nil, nil
+		}
+		return fmt.Sprintf("%s LIKE ?", fmt.Sprintf("_tpath_%s", field)), []any{prefix + ".%"}, nil
+	case "child_of":
+		return fmt.Sprintf("%s = ?", col), []any{value}, nil
+	case "root":
+		return fmt.Sprintf("%s IS NULL", col), nil, nil
+	default:
+		return "", nil, fmt.Errorf("unsupported filter operator %q", f.Op)
+	}
+}
+
+// predicateClauses renders a set of row predicates, failing closed: a predicate
+// that produces no clause means the caller's row restriction could not be
+// expressed, which must reject the request rather than quietly widen it.
+func (s *EntityStore) predicateClauses(preds []RowPredicate) (clauses []string, args []any, err error) {
+	for _, p := range preds {
+		if p.Field == "" {
+			return nil, nil, fmt.Errorf("%w: row predicate without a field", ErrForbidden)
+		}
+		clause, pargs, cerr := s.filterSQL(p.Field, p.FilterOpFrom())
+		if cerr != nil {
+			return nil, nil, cerr
+		}
+		if clause == "" {
+			return nil, nil, fmt.Errorf(
+				"%w: row predicate on %q (op %q) cannot be expressed — refusing to proceed unscoped",
+				ErrForbidden, p.Field, p.Op)
+		}
+		clauses = append(clauses, clause)
+		args = append(args, pargs...)
+	}
+	return clauses, args, nil
+}
+
 // ListParams holds pagination, sorting, and filtering for List queries.
 type ListParams struct {
 	WorkspaceID string
@@ -1775,6 +2246,11 @@ type ListParams struct {
 	Sort        string // field name, prefixed with - for DESC
 	Filters     map[string]FilterOp
 	Search      string // full-text search across data
+	// RowPredicates are server-resolved row constraints ANDed into the query
+	// (entity `row_scope` + role-grant row scope). They are kept apart from
+	// Filters on purpose: Filters came from the client and a client may drop
+	// them; predicates come from the manifest and must hold regardless.
+	RowPredicates []RowPredicate
 }
 
 // FilterOp represents a filter operation.
@@ -1819,81 +2295,27 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 
 	// Custom filters
 	for field, filter := range params.Filters {
-		col := s.columnRefExpr(field)
-		filter.Value = s.coerceFilterValue(field, filter.Value)
-		switch filter.Op {
-		case "eq":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
-			args = append(args, filter.Value)
-		case "neq":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s != ?", col))
-			args = append(args, filter.Value)
-		case "gt":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s > ?", col))
-			args = append(args, filter.Value)
-		case "gte":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s >= ?", col))
-			args = append(args, filter.Value)
-		case "lt":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s < ?", col))
-			args = append(args, filter.Value)
-		case "lte":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s <= ?", col))
-			args = append(args, filter.Value)
-		case "like":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s LIKE ?", col))
-			args = append(args, filter.Value)
-		case "ilike":
-			if s.driver == DriverPostgres {
-				whereClauses = append(whereClauses, fmt.Sprintf("%s ILIKE ?", col))
-			} else {
-				whereClauses = append(whereClauses, fmt.Sprintf("LOWER(%s) LIKE LOWER(?)", col))
-			}
-			args = append(args, filter.Value)
-		case "null":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NULL", col))
-		case "notnull":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NOT NULL", col))
-		case "between":
-			values := toAnySlice(filter.Value)
-			if len(values) != 2 {
-				continue
-			}
-			whereClauses = append(whereClauses, fmt.Sprintf("%s BETWEEN ? AND ?", col))
-			args = append(args, values[0], values[1])
-		case "in", "nin":
-			values := toAnySlice(filter.Value)
-			if len(values) == 0 {
-				continue
-			}
-			placeholders := strings.Repeat("?,", len(values))
-			placeholders = placeholders[:len(placeholders)-1]
-			op := "IN"
-			if filter.Op == "nin" {
-				op = "NOT IN"
-			}
-			whereClauses = append(whereClauses, fmt.Sprintf("%s %s (%s)", col, op, placeholders))
-			args = append(args, values...)
-		case "descendant_of":
-			// Tree operator (4.6.2): rows whose materialized path starts with
-			// the given ancestor's path prefix. Value is the ancestor's path
-			// (e.g. "a.b") or its id (resolved to its path).
-			prefix, ok := filter.Value.(string)
-			if !ok || prefix == "" {
-				continue
-			}
-			tpath := fmt.Sprintf("_tpath_%s", field)
-			whereClauses = append(whereClauses, fmt.Sprintf("%s LIKE ?", tpath))
-			args = append(args, prefix+".%")
-		case "child_of":
-			// Tree operator (4.6.2): direct children (parent FK equals value).
-			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
-			args = append(args, filter.Value)
-		case "root":
-			// Tree operator (4.6.2): root nodes (no parent).
-			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NULL", col))
+		clause, fargs, err := s.filterSQL(field, filter)
+		// A client filter that cannot be expressed is skipped, preserving the
+		// long-standing behaviour: the request is malformed, not the query. The
+		// authorization paths (predicateClauses) do the opposite and fail closed
+		// — a row restriction must never degrade into "no restriction".
+		if err != nil || clause == "" {
+			continue
 		}
+		whereClauses = append(whereClauses, clause)
+		args = append(args, fargs...)
 	}
+
+	// Server-resolved row predicates (entity `row_scope` + role-grant row
+	// scope). Strict: an inexpressible predicate rejects the query rather than
+	// returning rows the caller was not meant to see.
+	predClauses, predArgs, err := s.predicateClauses(params.RowPredicates)
+	if err != nil {
+		return nil, err
+	}
+	whereClauses = append(whereClauses, predClauses...)
+	args = append(args, predArgs...)
 
 	// Search across data JSONB
 	if params.Search != "" {
@@ -1906,7 +2328,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 	// Count total
 	var total int
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", tbl, whereStr)
-	err := txReadDB(ctx, s.db).QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	err = txReadDB(ctx, s.db).QueryRowContext(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, fmt.Errorf("%s list count: %w", s.entity, err)
 	}
@@ -2642,7 +3064,78 @@ func (s *EntityStore) FindByFields(ctx context.Context, workspaceID string, matc
 	return rec, nil
 }
 
-// UpsertProjection writes a row of a `characteristic: summary` projection,
+// FindByFieldsScoped is FindByFields with server-resolved row predicates ANDed
+// into the lookup (kafe 10.74).
+//
+// WHY IT EXISTS. `resource.find()` from a script is a READ of an entity, and a
+// read that skips the caller's row boundary is not a smaller version of the
+// boundary — it is the boundary gone. A guard script written as
+// `resource.find("cafe-order.order", {"status": "draft"})` answered with a row
+// the same caller could not GET over HTTP, so the script saw exactly what the
+// HTTP layer had just been taught to hide (10.67). The fix has to live at the
+// store, because that is the only layer both paths share.
+//
+// A row outside the predicates does not match, so the find returns (nil, nil) —
+// "not found", the same answer an out-of-scope id gets from GetByID. The caller
+// is therefore never told which rows exist beyond its boundary.
+func (s *EntityStore) FindByFieldsScoped(ctx context.Context, workspaceID string, match map[string]any, preds []RowPredicate) (*EntityRecord, error) {
+	if len(preds) == 0 {
+		return s.FindByFields(ctx, workspaceID, match)
+	}
+	if len(match) == 0 {
+		return nil, fmt.Errorf("FindByFieldsScoped: match must not be empty")
+	}
+	tbl := s.qualifiedTable()
+
+	// Deterministic column order so the query is stable across calls.
+	fields := make([]string, 0, len(match))
+	for f := range match {
+		fields = append(fields, f)
+	}
+	sort.Strings(fields)
+
+	conds := make([]string, 0, len(fields)+1)
+	args := make([]any, 0, len(fields)+1)
+	for _, f := range fields {
+		conds = append(conds, generatedColumnName(f)+" = ?")
+		args = append(args, match[f])
+	}
+	conds = append(conds, "tenant_id = ?")
+	args = append(args, workspaceID)
+
+	// Predicates are appended AFTER the caller's own match, so the caller can
+	// only narrow their search — the boundary is never part of what they control.
+	predClauses, predArgs, err := s.predicateClauses(preds)
+	if err != nil {
+		return nil, err
+	}
+	conds = append(conds, predClauses...)
+	args = append(args, predArgs...)
+
+	query := fmt.Sprintf(
+		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, doc_status, data FROM %s WHERE %s`,
+		tbl, strings.Join(conds, " AND "))
+	if s.softDelete {
+		query += " AND deleted_at IS NULL"
+	}
+	query += " LIMIT 1"
+
+	rec, err := s.scanRecord(ctx, txReadDB(ctx, s.db), query, args...)
+	if err != nil {
+		// "No row matched" is not an error for a find — callers (resource.find
+		// from Starlark) treat it as None. A row outside the caller's boundary
+		// is indistinguishable from an absent row, deliberately.
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	s.evaluateComputed(rec.Data)
+
+	return rec, nil
+}
+
 // matching on `match` (all pairs, AND) and merging `data` onto the existing row
 // or inserting a new one. It is the ONE supported write path for summary
 // entities (02-core-extended.md §6.1): the API-facing Insert/Update/SoftDelete
@@ -2677,6 +3170,10 @@ func (s *EntityStore) UpsertProjection(ctx context.Context, workspaceID string, 
 	}
 
 	s.applyDefaults(merged)
+	s.applyChildDefaults(merged)
+	// Same contract on the projection path: a summary row is never the
+	// caller's to forge, and its computed values are recomputed before write.
+	s.stripComputedValues(merged)
 	s.stripEnrichedRelations(merged)
 	s.stripRetired(merged)
 	s.sanitizeRichText(merged)
@@ -2687,6 +3184,9 @@ func (s *EntityStore) UpsertProjection(ctx context.Context, workspaceID string, 
 	if err := s.validateRequired(merged); err != nil {
 		return "", false, fmt.Errorf("%s upsert: %w", s.entity, err)
 	}
+	// "Recomputed on save" applies here too: a summary row's derived values
+	// must be written, not left to a later read (05-field-types.md §5.1).
+	s.evaluateComputed(merged)
 
 	tbl := s.qualifiedTable()
 	var id string
@@ -3038,11 +3538,21 @@ func (s *EntityStore) evaluateComputed(data map[string]any) {
 				if cf.Computed == nil || cf.Computed.Formula == "" {
 					continue
 				}
-				env := make(map[string]any, len(rec)+1)
+				env := make(map[string]any, len(rec)+3)
 				for k, v := range rec {
 					env[k] = v
 				}
 				env["backdate_limit_days"] = backdateLimit
+				// Child formulas get `resource`/`data` for the same reason the
+				// parent ones do: a field whose value is absent is missing from
+				// the env entirely, so naming it as a bare identifier is a
+				// compile error — swallowed below, leaving the computed value
+				// silently empty. A FieldMap answers None instead, which is the
+				// only way to test an OPTIONAL child field. (The same map is
+				// wrapped, so a later child formula sees an earlier one's value.)
+				fm := starlark.NewFieldMap(rec)
+				env["resource"] = fm
+				env["data"] = fm
 				val, err := starlark.EvalExpr(cf.Computed.Formula, env)
 				if err != nil {
 					// If evaluation fails, don't set the field — leave it absent
@@ -3058,11 +3568,31 @@ func (s *EntityStore) evaluateComputed(data map[string]any) {
 		if f.Computed == nil || f.Computed.Formula == "" {
 			continue
 		}
-		env := make(map[string]any, len(data)+1)
+		env := make(map[string]any, len(data)+3)
 		for k, v := range data {
 			env[k] = v
 		}
 		env["backdate_limit_days"] = backdateLimit
+		// `resource` (and its alias `data`) expose the WHOLE record as a
+		// FieldMap, exactly as guard expressions already do
+		// (internal/starlark/guard.go). A FieldMap answers `None` for a field
+		// that is not set, which is the only way a formula can test whether an
+		// OPTIONAL operand is present.
+		//
+		// Without it, `discount_amount if discount_amount else …` cannot even
+		// be written: an absent field is an undefined identifier, which is a
+		// compile error, not `None`. That failure is then swallowed below
+		// (`continue`) and the computed field silently ends up absent — the
+		// exact reason `order.total_amount` stayed empty for every order whose
+		// optional discount fields were not supplied (kafe 10.65).
+		//
+		// The same map instance is wrapped, so a formula can read a value a
+		// PREVIOUS computed field just wrote (e.g. service_charge_amount read
+		// by tax_amount): `data[f.Name] = val` below mutates the map the
+		// FieldMap points at.
+		fm := starlark.NewFieldMap(data)
+		env["resource"] = fm
+		env["data"] = fm
 		val, err := starlark.EvalExpr(f.Computed.Formula, env)
 		if err != nil {
 			// If evaluation fails, don't set the field — leave it absent
@@ -3080,7 +3610,7 @@ func (s *EntityStore) evaluateComputed(data map[string]any) {
 // is what makes the `!oldExists` branch below well-defined — it always means
 // "the STORED row has no value for the state field", never "this is a new
 // record".
-func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) error {
+func (s *EntityStore) validateStateTransition(oldData, newData map[string]any, permissions []string, systemCaller bool) error {
 	if s.stateMachine == nil {
 		return nil
 	}
@@ -3112,7 +3642,6 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 			return nil
 		}
 		oldVal = s.stateMachine.Initial
-		oldExists = true
 	}
 
 	oldState := fmt.Sprintf("%v", oldVal)
@@ -3126,6 +3655,28 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 	// Look for a matching transition
 	for _, t := range s.stateMachine.Transitions {
 		if t.From.Matches(oldState) && t.To == newState {
+			// Per-transition permission (kafe 10.46). The gate used to live ONLY in
+			// the HTTP handler, so a transition reached through `resource.save()`
+			// from a script was never checked at all — a script could run any
+			// transition, including ones gated to a role the caller does not hold.
+			//
+			// The declaration is read from the same place both layers read it
+			// (`spec.TransitionPermission`), so this is one rule enforced twice,
+			// not two rules that can drift. A SYSTEM caller (subscription/worker)
+			// bypasses explicitly via SystemCaller — never by having no identity,
+			// because an anonymous HTTP caller also has none.
+			if !systemCaller {
+				if required := spec.TransitionPermission(t); required != "" {
+					// Qualify exactly as the HTTP layer does (shared helper): the
+					// manifest may omit its own module prefix, while the
+					// materialized permission never does. Qualifying differently
+					// here would make the gate unmatchable — the failure mode where
+					// a transition is refused for EVERYONE.
+					if !hasPermission(permissions, spec.QualifyPermission(required, s.module)) {
+						return &ForbiddenError{Fields: []string{required}}
+					}
+				}
+			}
 			// Evaluate guard if present, against the COMBINED old+new data so
 			// the guard sees the new state values (new values take precedence).
 			// Uses the shared guard evaluator (internal/starlark.EvaluateGuard,
@@ -3670,4 +4221,60 @@ var ErrImmutableFieldChanged = fmt.Errorf("immutable field cannot be changed")
 var ErrValidationRule = fmt.Errorf("field validation failed")
 
 // ErrUnknownField is returned when data contains a field that is not declared in the entity spec.
+// `docs/spec/backend/01-core-basic.md` makes the rejection normative and fixes
+// the class: "Field yang tidak dikenal **harus ditolak** dengan
+// `VALIDATION_ERROR` (422)".
 var ErrUnknownField = fmt.Errorf("unknown field")
+
+// UnknownFieldError names the offending key(s). Carrying them structurally
+// (rather than only in the message) lets the HTTP layer fill the response's
+// `details[].field` instead of parsing its own error text.
+//
+// Fields is sorted and holds every unknown key in the payload, not just one:
+// the reported set must not depend on map iteration order, and telling the
+// caller about all of its typos at once is strictly more useful.
+type UnknownFieldError struct {
+	Fields []string
+}
+
+func (e *UnknownFieldError) Error() string {
+	if len(e.Fields) == 1 {
+		return fmt.Sprintf("unknown field: %q", e.Fields[0])
+	}
+	quoted := make([]string, len(e.Fields))
+	for i, f := range e.Fields {
+		quoted[i] = fmt.Sprintf("%q", f)
+	}
+	return "unknown fields: " + strings.Join(quoted, ", ")
+}
+
+// Field reports the single unknown field, or "" when there are several.
+func (e *UnknownFieldError) Field() string {
+	if len(e.Fields) == 1 {
+		return e.Fields[0]
+	}
+	return ""
+}
+
+// Unwrap makes errors.Is(err, ErrUnknownField) work.
+func (e *UnknownFieldError) Unwrap() error { return ErrUnknownField }
+
+// ErrInvalidFieldValue is returned when a value cannot be interpreted at all —
+// e.g. `transaction_date: "kemarin"`. Distinct from ErrValidationRule: the
+// value is not merely wrong against a rule, it is unparseable. Both are the
+// caller's mistake, so both must answer 4xx rather than 500.
+var ErrInvalidFieldValue = fmt.Errorf("invalid field value")
+
+// InvalidFieldValueError names the field and the rejected value.
+type InvalidFieldValueError struct {
+	Field string
+	Value any
+	Err   error
+}
+
+func (e *InvalidFieldValueError) Error() string {
+	return fmt.Sprintf("invalid value for field %q: %v", e.Field, e.Err)
+}
+
+// Unwrap makes errors.Is(err, ErrInvalidFieldValue) work.
+func (e *InvalidFieldValueError) Unwrap() error { return ErrInvalidFieldValue }

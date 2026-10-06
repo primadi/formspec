@@ -521,7 +521,7 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 	}
 
 	// SoftDelete
-	err = store.SoftDelete(ctx, "test-workspace", id)
+	err = store.SoftDelete(ctx, db.DeleteParams{WorkspaceID: "test-workspace", ID: id, SystemCaller: true})
 	if err != nil {
 		t.Fatalf("SoftDelete failed: %v", err)
 	}

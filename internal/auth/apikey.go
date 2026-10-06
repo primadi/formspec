@@ -78,6 +78,8 @@ func (s *ApiKeyStore) Create(ctx context.Context, workspaceID string, k *ApiKey)
 	_, err = s.store.Insert(ctx, db.InsertParams{
 		WorkspaceID: workspaceID,
 		CreatedBy:   "system",
+		// Auth internals run with no caller identity to consult.
+		SystemCaller: true,
 		Data: map[string]any{
 			"name":        k.Name,
 			"key_hash":    hash,

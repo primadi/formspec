@@ -57,7 +57,7 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 		}
 		for _, a := range e.Spec.Actions {
 			if !actionExists(es, a.Action) {
-				addf("%s: Form %q: action %q not on entity %q", e.Source, name, a.Action, e.Spec.Entity)
+				addf("%s: Form %q: action %q not on entity %q (neither a declared action nor a transition `via`)", e.Source, name, a.Action, e.Spec.Entity)
 			}
 		}
 		// `submit.call` makes the submit a Service call rather than an entity
@@ -114,7 +114,7 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 		}
 		for _, a := range append(append([]spec.TableAction{}, e.Spec.RowActions...), e.Spec.BulkActions...) {
 			if !builtinRowActions[a.Action] && !actionExists(es, a.Action) {
-				addf("%s: Table %q: action %q not on entity %q and not a builtin (view|edit|delete|export|print)",
+				addf("%s: Table %q: action %q not on entity %q and not a builtin (view|edit|delete|export|print), nor a transition `via`",
 					e.Source, name, a.Action, e.Spec.Entity)
 			}
 		}
@@ -420,11 +420,22 @@ func relationTailExists(resolve EntityResolver, module string, f *spec.Field, re
 }
 
 // actionExists reports whether a non-disabled action with the given name is
-// declared on the entity, or is one of the reserved actions that exist
+// available on the entity, or is one of the reserved actions that exist
 // implicitly (Core §4.1: create, update, submit, cancel, delete, amend,
 // create-submit, amend-submit — unless explicitly disabled).
+//
+// It reads the entity's action UNION (`ActionSources()`: declared `actions:`
+// plus every state-machine transition's `via`), not `actions:` alone. Since
+// L2/L3 a transition's `via` IS an action — it is what `PATCH` accepts and what
+// a form/table button invokes — so a manifest that declares transitions
+// via-only (the intended shape; duplicating them under `actions:` is rejected
+// by `ValidateActionTransitionDuplication`) is legal. Reading only `actions:`
+// therefore reported a false "action not on entity" for every such `via`: kafe
+// `order-form-pos` warned on start-preparing/mark-ready/mark-served/
+// complete-order while the same manifest's confirm-payment/void-order — which
+// still had `actions:` entries — passed, which is exactly the shape of the bug.
 func actionExists(es *spec.EntitySpec, name string) bool {
-	for _, a := range es.Actions {
+	for _, a := range es.ActionSources() {
 		if a.Name == name {
 			return !a.Disabled
 		}

@@ -1,0 +1,40 @@
+# Seed role service-demo.
+#
+# `demo` punya satu workflow approval (`product-discontinue-approval`) yang
+# menamai `demo.manager` — role yang **tidak pernah dideklarasikan** di tree ini,
+# sehingga approval-nya tidak bisa disetujui siapa pun: nama role dicocokkan
+# literal, dan yang tidak ada berarti 403 selamanya.
+#
+# `formspec validate` kini menolaknya (changelog `2026-10-04-005`); seed ini yang
+# menjawabnya, sekaligus memakai bentuk DUTY (grant menunjuk step, bukan nama role
+# di workflow).
+apiVersion: formspec.dev/v1
+kind: Seed
+metadata:
+  name: service-demo-roles
+  module: formspec.core
+  description: "Role demo: manager (approver) dan head (penerima eskalasi)"
+spec:
+  entities:
+    - entity: role
+      records:
+        # MANAGER — menyetujui penonaktifan produk.
+        - name: demo.manager
+          app: service-demo
+          description: "Manager — menyetujui penonaktifan produk"
+          grants:
+            - { page: "product-page", actions: [{ name: list }, { name: view }] }
+            # DUTY: `workflow.demo.product.discontinue.manager-review`.
+            - { page: "workflow:product.discontinue", actions: [{ name: manager-review }] }
+
+        # HEAD — penerima eskalasi bila manager tidak bertindak. Bukan approver
+        # kedua: ia menggantikan yang macet, bukan menambah tanda tangan.
+        #
+        # Duty-nya adalah `escalation.reassign: head-review` pada step — bukan
+        # nama role, sehingga hak takeover diberikan (dan dicabut) lewat grant.
+        - name: demo.head
+          app: service-demo
+          description: "Head — penerima eskalasi approval produk"
+          grants:
+            - { page: "product-page", actions: [{ name: list }, { name: view }] }
+            - { page: "workflow:product.discontinue", actions: [{ name: head-review }] }

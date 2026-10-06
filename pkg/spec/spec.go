@@ -50,8 +50,11 @@ const (
 )
 
 // Core Extended kinds (D48).
+//
+// There is no KindWorkflow: approval is declared ON the state-machine
+// transition it gates (`state_machine.transitions[].approval`), so a separate
+// manifest cannot drift from the thing it gates.
 const (
-	KindWorkflow       Kind = "Workflow"
 	KindApi            Kind = "Api"
 	KindKindDefinition Kind = "KindDefinition"
 	KindWebhook        Kind = "Webhook"
@@ -140,7 +143,7 @@ const (
 func IsValidKind(k Kind) bool {
 	switch k {
 	case KindApp, KindModule, KindDocument, KindEntity, KindService, KindConfig, KindSubscription,
-		KindWorkflow, KindApi, KindKindDefinition, KindWebhook, KindMockup, KindIntegrator,
+		KindApi, KindKindDefinition, KindWebhook, KindMockup, KindIntegrator,
 		KindEnvironment, KindPolicy, KindDatastore, KindWorkspace, KindSeed,
 		KindRenderer, KindVisualSpecKind, KindPersistBackend,
 		KindPage, KindForm, KindTable, KindDashboard, KindWidget, KindReport,
@@ -159,7 +162,7 @@ func AllKinds() []string {
 	out := []string{
 		string(KindApp), string(KindModule), string(KindDocument), string(KindEntity),
 		string(KindService), string(KindConfig), string(KindSubscription),
-		string(KindWorkflow), string(KindApi), string(KindKindDefinition), string(KindWebhook),
+		string(KindApi), string(KindKindDefinition), string(KindWebhook),
 		string(KindMockup), string(KindIntegrator),
 		string(KindRenderer), string(KindVisualSpecKind), string(KindPersistBackend),
 		string(KindPage), string(KindForm), string(KindTable), string(KindDashboard),

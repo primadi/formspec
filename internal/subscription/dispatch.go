@@ -151,6 +151,11 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, workspaceID, eventName, re
 		ActionName:  "handle",
 		Params:      params,
 		WorkspaceID: workspaceID,
+		// A subscription runs because an EVENT happened, not because a user
+		// asked: it has no identity to check, and its writes are the system's.
+		// Declared explicitly so the store can tell this apart from an
+		// anonymous caller (which also has no identity).
+		SystemCaller: true,
 	}
 
 	_, err := d.dispatcher.Dispatch(ctx, actionSpec, execParams)

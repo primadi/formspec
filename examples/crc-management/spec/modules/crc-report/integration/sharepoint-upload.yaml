@@ -11,3 +11,11 @@ spec:
       description: "Upload PDF ke folder SharePoint (Level1 WorkType / Level2 DocType / Level3 Year)"
       required_permission: crc-report.sharepoint-upload.upload
       audit: true
+    # Pembalik `upload` (7.7.2): dipanggil saat dokumen dibatalkan, supaya
+    # arsipnya tidak tertinggal. Idempoten — menghapus berkas yang sudah tidak
+    # ada bukan kegagalan, jadi retry aman.
+    - name: remove
+      description: "Tarik arsip PDF dari SharePoint (pembalik upload saat dokumen dibatalkan)"
+      required_permission: crc-report.sharepoint-upload.remove
+      idempotent: true
+      audit: true

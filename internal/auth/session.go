@@ -79,6 +79,9 @@ func (s *EntitySessionStore) Create(ctx context.Context, sess Session) error {
 	_, err := s.store.Insert(ctx, db.InsertParams{
 		WorkspaceID: sess.WorkspaceID,
 		CreatedBy:   sess.UserID,
+		// The framework creates the session, not the user: there is no caller
+		// payload whose permissions could be judged.
+		SystemCaller: true,
 		Data: map[string]any{
 			"transaction_date": sess.CreatedAt.UTC().Format("2006-01-02"),
 			"user_id":          sess.UserID,
@@ -122,7 +125,11 @@ func (s *EntitySessionStore) Delete(ctx context.Context, workspace, jti string) 
 	if err != nil || rec == nil {
 		return nil // already gone
 	}
-	return s.store.SoftDelete(ctx, rec.WorkspaceID, rec.ID)
+	return s.store.SoftDelete(ctx, db.DeleteParams{
+		WorkspaceID:  rec.WorkspaceID,
+		ID:           rec.ID,
+		SystemCaller: true,
+	})
 }
 
 // DeleteForUser removes all sessions belonging to a user within a workspace
@@ -139,7 +146,11 @@ func (s *EntitySessionStore) DeleteForUser(ctx context.Context, workspace, userI
 		return err
 	}
 	for _, rec := range res.Data {
-		_ = s.store.SoftDelete(ctx, rec.WorkspaceID, rec.ID)
+		_ = s.store.SoftDelete(ctx, db.DeleteParams{
+			WorkspaceID:  rec.WorkspaceID,
+			ID:           rec.ID,
+			SystemCaller: true,
+		})
 	}
 	return nil
 }
@@ -219,7 +230,11 @@ func (s *EntitySessionStore) PurgeExpired(ctx context.Context) (int, error) {
 			continue
 		}
 		if now.After(expiresAt) {
-			if err := s.store.SoftDelete(ctx, rec.WorkspaceID, rec.ID); err == nil {
+			if err := s.store.SoftDelete(ctx, db.DeleteParams{
+				WorkspaceID:  rec.WorkspaceID,
+				ID:           rec.ID,
+				SystemCaller: true,
+			}); err == nil {
 				purged++
 			}
 		}

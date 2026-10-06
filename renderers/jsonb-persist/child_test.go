@@ -215,7 +215,7 @@ func TestChildStorage_Table(t *testing.T) {
 	}
 
 	// --- SoftDelete ---
-	err = store.SoftDelete(ctx, "tenant-1", id)
+	err = store.SoftDelete(ctx, DeleteParams{WorkspaceID: "tenant-1", ID: id, SystemCaller: true})
 	if err != nil {
 		t.Fatalf("SoftDelete failed: %v", err)
 	}

@@ -5,7 +5,9 @@ metadata:
   module: sales-inventory-integrator
   description: Auto-create stock movement (type=out) setiap order dibayar — connects billing to inventory
 spec:
-  on: { resource: billing.order, event: paid }
-  deliver:
-    - channel: queue
-      job: create-out-movement
+  # Beraksi lewat HANDLER — lihat catatan yang sama di sales-gl-integrator.
+  events:
+    - billing.order.paid
+  handler:
+    type: native
+    ref: "SalesInventoryIntegrator.CreateOutMovementHandler"

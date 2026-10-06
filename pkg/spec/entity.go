@@ -1004,6 +1004,17 @@ func ValidateEntitySpec(d *EntitySpec) error {
 			return err
 		}
 	}
+	// Approval gates declared on transitions (02-core-extended.md §2). An
+	// approval with no step can never reach quorum, and step identity rules
+	// (name shape, uniqueness, mode) apply wherever the chain is declared.
+	if d.StateMachine != nil {
+		for i := range d.StateMachine.Transitions {
+			t := d.StateMachine.Transitions[i]
+			if err := ValidateApprovalSpec(t.Approval); err != nil {
+				return fmt.Errorf("state_machine transition %s->%s: %w", t.From, t.To, err)
+			}
+		}
+	}
 	// Normalize alias field types: `attachment` is an alias for `file`
 	// (05-field-types.md §1.3). Do this before any storage/widget mapping so
 	// every downstream path treats them identically.
@@ -1063,24 +1074,17 @@ func ValidateEntitySpec(d *EntitySpec) error {
 	// row_scope (S2, #6/#9): server-enforced row scoping. Every entry must name
 	// an existing field and declare where its value comes from — a scope whose
 	// source is unknown would silently not filter, which is worse than no scope.
+	//
+	// The rules live in ValidateRowScopeFilters because a ROLE GRANT carries the
+	// same construct (ActionGrant.RowScope) and `formspec check` validates both
+	// with the ones in pkg/spec, not with a second copy. Two copies of a
+	// security-shape rule drift, and the copy that drifts is the one that stops
+	// enforcing (10.46).
 	if len(d.RowScope) > 0 {
-		for i := range d.RowScope {
-			sc := &d.RowScope[i]
-			if sc.Field == "" {
-				return fmt.Errorf("row_scope[%d]: field is required", i)
-			}
-			if byName[sc.Field] == nil && !IsReservedField(sc.Field) {
-				return fmt.Errorf("row_scope[%d]: field %q is not declared on this entity", i, sc.Field)
-			}
-			switch sc.From {
-			case "session":
-				// `attr` is optional; empty means the entity's scope field (when
-				// declared) or principal_id.
-			case "route":
-				// `param` is optional; empty means the field name.
-			default:
-				return fmt.Errorf("row_scope[%d] (%s): from must be \"session\" or \"route\", got %q", i, sc.Field, sc.From)
-			}
+		if err := ValidateRowScopeFilters("row_scope", d.RowScope, func(name string) bool {
+			return byName[name] != nil || IsReservedField(name)
+		}); err != nil {
+			return err
 		}
 	}
 
@@ -1540,8 +1544,13 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		return err
 	}
 
-	// Hooks spec validation (Core Extended §8)
-	if err := ValidateHooks(d.Hooks, d.Actions); err != nil {
+	// Hooks spec validation (Core Extended §8). The hook's `action` may name
+	// EITHER a declared action or a transition `via`: since L3 a `via` IS an
+	// action, and since L4 declaring it a second time under `actions:` is
+	// rejected — so via-only is the intended shape. Passing `d.Actions` alone
+	// falsely rejected a hook targeting a via-only action with "does not match
+	// any declared action" (kafe 10.60, plan via-sebagai-action-penuh.md L9).
+	if err := ValidateHooks(d.Hooks, d.ActionSources()); err != nil {
 		return err
 	}
 
@@ -1864,6 +1873,18 @@ type TransitionDecl struct {
 	// the state machine reaches `paid` — including `formspec validate`. The
 	// name must reference a declared event on the same entity.
 	Emit string `yaml:"emit,omitempty" json:"emit,omitempty"`
+	// Approval gates this transition behind an approval chain (02-core-extended.md
+	// §2). It replaces the former `kind: Workflow` manifest: the gate lives ON the
+	// transition it intercepts, so the declaration cannot drift from the thing it
+	// gates, and a transition with several origin states is covered by
+	// construction rather than by a reference that must be kept in step.
+	//
+	// When set, the transition does NOT execute on the first call: the caller gets
+	// 202 and a pending approval is created. It runs — state write, `emit`, audit —
+	// only after every applicable step reaches quorum (or is skipped by its
+	// `when`). Requester exclusion applies: the caller who started it can never
+	// approve it.
+	Approval *ApprovalSpec `yaml:"approval,omitempty" json:"approval,omitempty"`
 }
 
 // UnmarshalYAML accepts both the canonical `via:` key and the legacy `action:`
@@ -1988,6 +2009,10 @@ type HookDecl struct {
 // ValidateHooks checks each hook's on/action/event shape against actions.
 // A hook on: before|after|on_error must set action (name or "*") and must
 // not set event; a hook on: before_deliver|after_deliver is the reverse.
+//
+// `actions` MUST be the UNION (`EntitySpec.ActionSources()`), not the declared
+// `actions:` slice alone: a hook may target a transition `via`, which is a full
+// action source since L3 (kafe 10.60).
 func ValidateHooks(hooks []HookDecl, actions []Action) error {
 	for _, h := range hooks {
 		switch h.On {
@@ -2078,9 +2103,40 @@ func ValidateTransitionEmits(sm *StateMachine, events []EventDecl) error {
 	return nil
 }
 
-// TransitionPermission returns the permission a CALLER must hold to run
-// transition t, or "" when the transition carries no gate.
+// QualifyPermission adds the module prefix to a permission declared inside a
+// manifest when it is not already qualified (§4.7: "Every permission string is
+// fully qualified as {module}.{key}. Inside a manifest, own-module prefix MAY be
+// omitted and MUST be auto-prefixed").
 //
+// Rules:
+//   - "invoices.list"          (2 segments) → "billing.invoices.list"
+//   - "billing.invoices.list"  (3+ segments) → unchanged (already qualified)
+//   - "billing.list" + module "billing"      → unchanged (redundant prefix)
+//   - "public"                                → unchanged (reserved keyword)
+//
+// It lives in pkg/spec so EVERY layer that evaluates a declared permission
+// qualifies it identically. Two implementations of this rule would drift, and
+// the symptom of drift is a gate that never matches the materialized permission
+// — i.e. one that can never be opened (kafe 10.47's failure mode).
+func QualifyPermission(perm, module string) string {
+	if perm == "" || perm == "public" || module == "" {
+		return perm
+	}
+	parts := strings.Split(perm, ".")
+	if len(parts) >= 3 {
+		return perm
+	}
+	if len(parts) == 2 {
+		if parts[0] == module {
+			return perm
+		}
+		return module + "." + perm
+	}
+	return module + "." + perm
+}
+
+// TransitionPermission returns the permission a CALLER must hold to run
+// transition t, or "" when the transition carries no gate.//
 // The transition is the ONLY place a gate belongs. A `via` action with a
 // `required_permission` does not enforce anything here: an action without an
 // `impl` has no route of its own, and the path that actually applies a
@@ -2435,12 +2491,86 @@ type PayloadDecl struct {
 
 // EventDeliveryDecl is one delivery target of an event — its "consequence map" entry (§12).
 type EventDeliveryDecl struct {
-	Channel        EventChannel    `yaml:"channel" json:"channel"` // audit_log | websocket | queue | reliable_event
-	Target         *DeliveryTarget `yaml:"target,omitempty" json:"target,omitempty"`
-	Job            string          `yaml:"job,omitempty" json:"job,omitempty"`
-	Retry          *RetryDecl      `yaml:"retry,omitempty" json:"retry,omitempty"`
-	DeadLetter     *DeliveryTarget `yaml:"dead_letter,omitempty" json:"dead_letter,omitempty"`
-	IdempotencyKey string          `yaml:"idempotency_key,omitempty" json:"idempotency_key,omitempty"`
+	Channel EventChannel `yaml:"channel" json:"channel"` // audit_log | websocket | queue | pubsub | reliable_event
+	// Target addresses an Entity/Service action for `reliable_event`.
+	Target *DeliveryTarget `yaml:"target,omitempty" json:"target,omitempty"`
+	// Job names the Service action a `queue` entry runs in the background,
+	// written `service.action` (publisher's module) or `module.service.action`.
+	//
+	// A job is stateless computation, so its home is `kind: Service` — which
+	// already carries an `impl`, `uses`/permission enforcement, and a
+	// dispatcher — rather than a separate job-handler registry. The entry runs
+	// through the outbox (the channel requires `publish.durable: true`), which
+	// is what gives it retry and dead-letter.
+	// @schema {example: "receipt-jobs.generate-receipt"}
+	Job string `yaml:"job,omitempty" json:"job,omitempty"`
+	// Notification describes what a `notification` entry delivers (todo 7.7.6).
+	//
+	// The framework writes an in-app notification addressed to `recipient`, so
+	// the entry works with no code at all — that row is what
+	// `kind: NotificationCenter` lists. `Handler` below is for channels OUTSIDE
+	// in-app (email, WA, push); it is optional.
+	Notification *NotificationDecl `yaml:"notification,omitempty" json:"notification,omitempty"`
+	// Handler names an optional Service action that also delivers this event
+	// (a Service action, same form as `job:`). Required only when the entry has
+	// no `notification:` block — otherwise it would deliver nothing.
+	Handler string `yaml:"handler,omitempty" json:"handler,omitempty"`
+	// Webhook describes where a `webhook` entry posts the event (todo 7.7.6).
+	Webhook        *WebhookDeliveryDecl `yaml:"webhook,omitempty" json:"webhook,omitempty"`
+	Retry          *RetryDecl           `yaml:"retry,omitempty" json:"retry,omitempty"`
+	DeadLetter     *DeliveryTarget      `yaml:"dead_letter,omitempty" json:"dead_letter,omitempty"`
+	IdempotencyKey string               `yaml:"idempotency_key,omitempty" json:"idempotency_key,omitempty"`
+}
+
+// WebhookDeliveryDecl declares where a `webhook` delivery entry posts the event.
+//
+// UNSIGNED, deliberately, for this first version: there is no HMAC signature and
+// no subscriber registry. The endpoint is declared where the consequence is —
+// `url:` literally, or `url_from: {config: <key>}` when the address belongs to
+// deployment config rather than to the module. Signing needs a per-subscriber
+// secret store, which is a separate decision (todo 7.7.6); until then a signed
+// entry would be a promise the runtime cannot keep.
+type WebhookDeliveryDecl struct {
+	// URL is the endpoint, literal. Use `url_from` when the address is
+	// deployment-specific.
+	// @schema {example: "https://example.com/hooks/order-paid"}
+	URL string `yaml:"url,omitempty" json:"url,omitempty"`
+	// URLFrom resolves the endpoint from a Config key instead of a literal.
+	//@schema {example: "{config: billing.webhook_url}"}
+	URLFrom *WebhookURLRef `yaml:"url_from,omitempty" json:"url_from,omitempty"`
+	// Headers are extra request headers (e.g. a routing key). Values may contain
+	// `{dotted.path}` templates over the event payload.
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+}
+
+// WebhookURLRef resolves a webhook endpoint from a Config key.
+type WebhookURLRef struct {
+	// @schema {example: "billing.webhook_url"}
+	Config string `yaml:"config" json:"config"`
+}
+
+// NotificationDecl describes the in-app notification a `notification` delivery
+// entry creates.
+//
+// Every field is a template over the EVENT PAYLOAD (`{dotted.path}`), because
+// that is what the delivery receives: the publisher declared `payload.fields`,
+// so what is available here is exactly that projection — not the record.
+type NotificationDecl struct {
+	// Recipient is the payload path whose value becomes the notification's
+	// `recipient_id` (e.g. `customer_id`). REQUIRED: a notification with no
+	// recipient can never be read by anyone, because the entity's `row_scope`
+	// admits only the addressee — so a missing recipient would be a row nobody
+	// can see rather than a harmless omission.
+	// @schema {example: "customer_id"}
+	Recipient string `yaml:"recipient" json:"recipient"`
+	// Title is the notification's heading, interpolated from the payload.
+	// @schema {example: "Pesanan {number} dibayar"}
+	Title string `yaml:"title" json:"title"`
+	// Body is the notification's text, interpolated from the payload.
+	Body string `yaml:"body,omitempty" json:"body,omitempty"`
+	// Level is the notification's severity (info | warning | critical).
+	// @schema {example: "info", enum: ["info", "warning", "critical"]}
+	Level string `yaml:"level,omitempty" json:"level,omitempty"`
 }
 
 // DeliveryTarget addresses the receiver of an event delivery.

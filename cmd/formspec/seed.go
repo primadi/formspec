@@ -371,6 +371,8 @@ func seedAllWith(ctx context.Context, res *manifest.LoadResult, reg *entity.Regi
 				WorkspaceID: workspaceID,
 				CreatedBy:   "seed",
 				Data:        rec,
+				// A seed has no caller: the manifest is the author.
+				SystemCaller: true,
 			})
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "formspec seed: %s insert %v: %v\n", p.entity, rec, err)

@@ -32,7 +32,7 @@ import { HTTPError } from "ky"
 import {
   FormaApiError,
   type ErrorDetail,
-  type ErrorResponse,
+  type ErrorDetailItem,
 } from "@/types/manifest"
 
 /**
@@ -45,8 +45,8 @@ export interface ApiErrorEnvelope {
   error?: {
     code?: string
     message?: string
-    details?: ErrorDetail[]
-    choices?: ErrorResponse["error"]["choices"]
+    details?: ErrorDetailItem[]
+    choices?: ErrorDetail["choices"]
   }
 }
 

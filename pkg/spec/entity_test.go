@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -42,6 +43,10 @@ func TestValidateEntitySpec_Scope(t *testing.T) {
 		{"session without attribute (defaults to principal_id)", FilterSpec{Field: "branch_id", From: "session"}},
 		{"route with parameter", FilterSpec{Field: "guest_token", From: "route", Param: "token"}},
 		{"route without parameter (defaults to field name)", FilterSpec{Field: "guest_token", From: "route"}},
+		// A literal is the value source that makes a server-enforced constant
+		// expressible (kafe 10.67: only paid orders reach the kitchen).
+		{"literal value", FilterSpec{Field: "branch_id", Op: "in", Value: "A,B"}},
+		{"literal value, default operator", FilterSpec{Field: "branch_id", Value: "A"}},
 	}
 	for _, c := range valid {
 		if err := ValidateEntitySpec(base(c.scope)); err != nil {
@@ -62,6 +67,16 @@ func TestValidateEntitySpec_Scope(t *testing.T) {
 		if err := ValidateEntitySpec(base(c.scope)); err == nil {
 			t.Errorf("%s: expected an error, got none", c.name)
 		}
+	}
+
+	// The refusal has to name the missing piece: an entry with no source is
+	// rejected, not accepted as a no-op that looks like protection.
+	err := ValidateEntitySpec(base(FilterSpec{Field: "branch_id"}))
+	if err == nil {
+		t.Fatal("expected an error for a row_scope entry with no value source")
+	}
+	if !strings.Contains(err.Error(), "value source") || !strings.Contains(err.Error(), "value") {
+		t.Errorf("error must point at the missing value source, got %q", err.Error())
 	}
 }
 

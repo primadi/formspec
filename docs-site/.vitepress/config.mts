@@ -168,6 +168,7 @@ const architecture = [
   item("K8s Operator", "/architecture/06-k8s-operator"),
   item("Vertical Modules", "/architecture/07-vertical-modules"),
   item("Repo Structure", "/architecture/08-repo-structure"),
+  item("Database Topology", "/architecture/10-database-topology"),
 ]
 
 const runtimes = [
@@ -303,9 +304,11 @@ export default defineConfig({
       // Fix sebenarnya di generator kind-docs (di luar scope docs-site);
       // di sini di-toleransi supaya build tidak gagal.
       if (/\.\.\/spec\//.test(link)) return true
+      // Stale depth yang sama untuk "../runtimes/..." dari kind docs
+      // (mis. kind/ui/ApprovalInbox.md → ../runtimes/06-ui-rest-contract).
+      if (/\.\.\/runtimes\//.test(link)) return true
       // Stale depth serupa di spec/renderers → dirujuk dengan satu "../" kurang.
       if (/\.\.\/renderers\/realtime/.test(link)) return true
-      if (/\.\.\/runtimes\/04-formspec-sidecar/.test(link)) return true
       // Link dev lokal (http://localhost:*) di docs
       if (/^http:\/\/localhost/.test(link)) return true
       return false

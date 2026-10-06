@@ -156,6 +156,39 @@ func (e *StateMachineEngine) FindTransitionByStates(entitySpec *spec.EntitySpec,
 	return nil
 }
 
+// FindTransitionByName locates the transition whose `via` is actionName and
+// which can start from fromState.
+//
+// FindTransitionByStates answers "which transition leads A→B", and its two
+// callers both have the target state in hand. An approval task does NOT: it
+// knows the transition's NAME (the workflow selects its intercepts by name, S9)
+// and the record's CURRENT state, and its target state is only whatever that
+// transition happens to declare. Resolving such a task by state PAIR therefore
+// depends on the record never moving — a stale row whose record has since
+// transitioned elsewhere matches no pair at all, and the gate the route enforces
+// would be silently skipped.
+//
+// Returns nil when no transition matches; the caller then falls through to
+// whatever it does for an unknown transition.
+func (e *StateMachineEngine) FindTransitionByName(entitySpec *spec.EntitySpec, actionName, fromState string) *spec.TransitionDecl {
+	if entitySpec == nil || entitySpec.StateMachine == nil || actionName == "" {
+		return nil
+	}
+	if fromState == "" {
+		// No origin to match against: a name that is unique within the machine
+		// still identifies the transition; several sharing a name is a
+		// declaration conflict the validator refuses, so the first match is the
+		// only match in a loadable manifest.
+		for i := range entitySpec.StateMachine.Transitions {
+			if entitySpec.StateMachine.Transitions[i].Action == actionName {
+				return &entitySpec.StateMachine.Transitions[i]
+			}
+		}
+		return nil
+	}
+	return e.findTransition(entitySpec.StateMachine, fromState, actionName)
+}
+
 // evaluateGuard evaluates a guard condition using the shared guard evaluator
 // (internal/starlark.EvaluateGuard — todo 7.5.4). The guard expression has
 // access to resource data fields directly, plus pre-computed sum_line_* /

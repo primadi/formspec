@@ -21,6 +21,7 @@
 07-vertical-modules.md        ← ERP module division: verticals/, App/Workspace composition, branch model
 08-repo-structure.md          ← Struktur folder repo FormSpec, lensa spec-vs-renderer (untuk kontributor codebase)
 09-domain-map.md              ← Peta subdomain formspec.dev, DNS, hosting, email
+10-database-topology.md       ← SQLite vs PostgreSQL: kapan masing-masing dipakai, batas satu-koneksi
 ```
 
 ---
@@ -40,8 +41,9 @@
 | ----- | ------------------------------------------------------------------------------------------------ |
 | 1     | [`01-architecture-overview.md`](./01-architecture-overview.md) — Full topology                   |
 | 2     | [`04-resource-registration.md`](./04-resource-registration.md) — Server, DB, Valkey registration |
-| 3     | [`05-failover.md`](./05-failover.md) — HA and auto-failover                                      |
-| 4     | [`06-k8s-operator.md`](./06-k8s-operator.md) — FormSpec Operator + ClusterClass                  |
+| 3     | [`10-database-topology.md`](./10-database-topology.md) — SQLite vs PostgreSQL per tier           |
+| 4     | [`05-failover.md`](./05-failover.md) — HA and auto-failover                                      |
+| 5     | [`06-k8s-operator.md`](./06-k8s-operator.md) — FormSpec Operator + ClusterClass                  |
 
 ### 👤 Workspace Owner
 
@@ -66,7 +68,7 @@
 
 ## Architecture Decisions Index
 
-Semua keputusan desain arsitektur tercatat sebagai D-ARCH-1 sampai D-ARCH-31 di [`01-architecture-overview.md`](./01-architecture-overview.md#12-architecture-decisions). Component inventory ada di [§2](./01-architecture-overview.md#2-component-inventory). Deployment model (satu pipeline, generic image) ada di [§3](./01-architecture-overview.md#3-deployment-model--satu-pipeline-generic-image).
+Semua keputusan desain arsitektur tercatat sebagai D-ARCH-1 sampai D-ARCH-32 di [`01-architecture-overview.md`](./01-architecture-overview.md#12-architecture-decisions). Component inventory ada di [§2](./01-architecture-overview.md#2-component-inventory). Deployment model (satu pipeline, generic image) ada di [§3](./01-architecture-overview.md#3-deployment-model--satu-pipeline-generic-image).
 
 ---
 
@@ -82,3 +84,4 @@ Semua keputusan desain arsitektur tercatat sebagai D-ARCH-1 sampai D-ARCH-31 di 
 | `06-k8s-operator.md`          | `spec/platform/03-kind-system.md`                                                                                                                             |
 | `07-vertical-modules.md`      | `spec/platform/02-workspace-app-module.md` §1/§3, `spec/backend/01-core-basic.md` §5, `docs/comparison/formspec-vs-frappe.md`                                 |
 | `08-repo-structure.md`        | [`docs/spec/README.md`](../spec/README.md) (prinsip contract-vs-renderer), [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md) |
+| `10-database-topology.md`     | [`spec/platform/06-datastore.md`](../spec/platform/06-datastore.md), [`spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md)            |

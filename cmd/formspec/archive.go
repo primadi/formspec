@@ -249,7 +249,11 @@ func archiveTransactions(ctx context.Context, reg *entity.Registry, database db.
 
 		// Delete the archived transaction rows.
 		for _, rec := range res.Data {
-			if err := store.SoftDelete(ctx, "demo", rec.ID); err != nil {
+			if err := store.SoftDelete(ctx, db.DeleteParams{
+				WorkspaceID:  "demo",
+				ID:           rec.ID,
+				SystemCaller: true,
+			}); err != nil {
 				// Best-effort: a locked/guarded row is left in place.
 				continue
 			}
@@ -331,6 +335,8 @@ func snapshotMasters(ctx context.Context, reg *entity.Registry, archiveDir strin
 			_, _ = store.Update(ctx, db.UpdateParams{
 				WorkspaceID: "demo", ID: id, Version: rec.Version,
 				UpdatedBy: "archive", Data: data,
+				// Framework operation (archive finalize), no user behind it.
+				SystemCaller: true,
 			})
 		}
 		if err := f.Close(); err != nil {

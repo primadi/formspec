@@ -69,7 +69,11 @@ func ValidateTransactionDate(transactionDate string, maxDaysBack, maxDaysForward
 
 	t, err := parseDate(transactionDate)
 	if err != nil {
-		return fmt.Errorf("invalid transaction_date %q: %w", transactionDate, err)
+		// A value that cannot be interpreted at all is the caller's mistake, and
+		// must not surface as 500 INTERNAL_ERROR — measured 2026-10-02 (kafe
+		// 10.61): `transaction_date: "kemarin"` answered INTERNAL_ERROR with
+		// raw driver text that already named the field.
+		return &InvalidFieldValueError{Field: "transaction_date", Value: transactionDate, Err: err}
 	}
 
 	now := timeNow().Truncate(24 * time.Hour)

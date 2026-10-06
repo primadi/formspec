@@ -13,42 +13,49 @@ import (
 	"time"
 
 	"github.com/primadi/formspec/internal/action"
+	"github.com/primadi/formspec/internal/approval"
 	"github.com/primadi/formspec/internal/auth"
 	entityengine "github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/observability"
-	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/internal/webhook"
-	"github.com/primadi/formspec/internal/workflow"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.
 type HandlerFactory struct {
-	registry        EntityStoreProvider
-	dispatcher      *action.Dispatcher
-	svcRegistry     *service.Registry                                  // kind: Service manifests (todo 7.1)
-	whRegistry      *webhook.Registry                                  // kind: Webhook manifests (todo 7.6)
-	whKeys          webhook.KeyResolver                                // resolves webhook secret/token keys from config (todo 7.6)
-	wfRegistry      *workflow.Registry                                 // kind: Workflow manifests (todo 7.4)
-	wfApprovals     *db.WorkflowApprovalStore                          // persists approval requests (todo 7.4)
-	auditWriter     AuditWriter                                        // writes framework-owned audit records (todo 7.4.6)
-	specLookup      func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
-	specDirLookup   func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
-	deliveryDeps    action.DeliveryDeps
-	idempotency     *db.IdempotencyStore    // wired when idempotency enforcement is enabled (todo 2.7)
-	settings        *spec.Settings          // resolved global settings namespace (spec §10) — seeds app-setting find-or-create
-	storage         func() (Storage, error) // optional — enables file upload/download routes (todo 7.17.1)
-	assetRoots      []string                // manifest roots for module asset serving (todo 5.9.1)
-	rateLimiter     *ResourceRateLimiter    // optional — per-resource/per-action rate limits (todo 7.12)
-	jobTracker      *job.Tracker            // optional — tracked async jobs (call: async + track: true, todo 7.13)
-	entityCache     *EntityCache            // optional — read-through find-by-id cache (Fase 14, opt-in via spec.cache)
-	linkStore       *db.StorageLinkStore    // optional — enables link routes (todo 7.17.6); nil → link routes return 503
-	uploadLimitMB   int                     // global upload limit (FORMSPEC_UPLOAD_MAX_MB, default 100)
-	downloadLimitMB int                     // global download limit (FORMSPEC_DOWNLOAD_MAX_MB, default 200)
+	registry         EntityStoreProvider
+	dispatcher       *action.Dispatcher
+	svcRegistry      *service.Registry                                  // kind: Service manifests (todo 7.1)
+	whRegistry       *webhook.Registry                                  // kind: Webhook manifests (todo 7.6)
+	whKeys           webhook.KeyResolver                                // resolves webhook secret/token keys from config (todo 7.6)
+	approvalReg      *approval.Registry                                 // approval gates on Entity transitions (todo 7.4)
+	approvalRequests *db.ApprovalRequestStore                           // persists approval requests (todo 7.4)
+	auditWriter      AuditWriter                                        // writes framework-owned audit records (todo 7.4.6)
+	specLookup       func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
+	specDirLookup    func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
+	deliveryDeps     action.DeliveryDeps
+	idempotency      *db.IdempotencyStore    // wired when idempotency enforcement is enabled (todo 2.7)
+	settings         *spec.Settings          // resolved global settings namespace (spec §10) — seeds app-setting find-or-create
+	storage          func() (Storage, error) // optional — enables file upload/download routes (todo 7.17.1)
+	assetRoots       []string                // manifest roots for module asset serving (todo 5.9.1)
+	rateLimiter      *ResourceRateLimiter    // optional — per-resource/per-action rate limits (todo 7.12)
+	jobTracker       *job.Tracker            // optional — tracked async jobs (call: async + track: true, todo 7.13)
+	entityCache      *EntityCache            // optional — read-through find-by-id cache (Fase 14, opt-in via spec.cache)
+	linkStore        *db.StorageLinkStore    // optional — enables link routes (todo 7.17.6); nil → link routes return 503
+	uploadLimitMB    int                     // global upload limit (FORMSPEC_UPLOAD_MAX_MB, default 100)
+	downloadLimitMB  int                     // global download limit (FORMSPEC_DOWNLOAD_MAX_MB, default 200)
+	// grantScopeLookup resolves the row scope the caller's ROLE GRANTS attach to
+	// one permission — the per-role half of row authorization that `row_scope`
+	// on the entity cannot express (it is per-entity and filters by WHO).
+	// Wired to auth.Service.GrantRowScope (kafe 10.67, GAP-08).
+	// An error means a declared row restriction could not be applied, which must
+	// DENY the request rather than widen it silently.
+	// nil = no grant scopes are enforced on this deployment.
+	grantScopeLookup func(ctx context.Context, workspaceID, app string, roles []string, permission string) ([]spec.FilterSpec, error)
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -60,6 +67,13 @@ type EntityStoreProvider interface {
 // resolver decides per entity whether caching applies (spec.cache opt-in)
 // and which backend to use (datastore-bound or shared in-memory).
 func (f *HandlerFactory) SetEntityCache(c *EntityCache) { f.entityCache = c }
+
+// SetGrantScopeLookup wires the resolver for per-role row scopes (kafe 10.67).
+// It is a function rather than an interface so the api package keeps no
+// dependency on the auth service's concrete type.
+func (f *HandlerFactory) SetGrantScopeLookup(lookup func(ctx context.Context, workspaceID, app string, roles []string, permission string) ([]spec.FilterSpec, error)) {
+	f.grantScopeLookup = lookup
+}
 
 // NewHandlerFactory creates a handler factory.
 func NewHandlerFactory(registry EntityStoreProvider) *HandlerFactory {
@@ -116,16 +130,16 @@ func (f *HandlerFactory) SetWebhookKeyResolver(k webhook.KeyResolver) {
 	f.whKeys = k
 }
 
-// SetWorkflowRegistry sets the kind: Workflow registry used to intercept
+// SetApprovalRegistry sets the approval-gate registry used to intercept
 // state-machine transitions for approval (todo 7.4).
-func (f *HandlerFactory) SetWorkflowRegistry(w *workflow.Registry) {
-	f.wfRegistry = w
+func (f *HandlerFactory) SetApprovalRegistry(w *approval.Registry) {
+	f.approvalReg = w
 }
 
-// SetWorkflowApprovalStore wires the approval store used to persist
+// SetApprovalRequestStore wires the approval store used to persist
 // in-flight approval requests (todo 7.4).
-func (f *HandlerFactory) SetWorkflowApprovalStore(s *db.WorkflowApprovalStore) {
-	f.wfApprovals = s
+func (f *HandlerFactory) SetApprovalRequestStore(s *db.ApprovalRequestStore) {
+	f.approvalRequests = s
 }
 
 // AuditWriter writes a framework-owned audit record (todo 7.4.6). Wired from
@@ -413,6 +427,19 @@ func (f *HandlerFactory) rateLimitFor(w http.ResponseWriter, r *http.Request, mo
 	return f.checkRateLimit(w, r, es, action)
 }
 
+// rateLimitForAction is rateLimitFor for a caller that already resolved the
+// action through the registry union (declared `actions:` ∪ transition `via`).
+// Prefer it wherever the resolved spec is in hand: `resolveAction` reads
+// `actions:` only, so a `rate_limit` declared on a transition `via` would
+// otherwise be ignored on the custom-action route (kafe 10.60a).
+func (f *HandlerFactory) rateLimitForAction(w http.ResponseWriter, r *http.Request, module, entity, action string, actionSpec *spec.Action) bool {
+	var es *spec.EntitySpec
+	if f.specLookup != nil {
+		es, _ = f.specLookup(module, entity)
+	}
+	return f.checkRateLimitAction(w, r, es, actionSpec, action)
+}
+
 // HandleList returns a GET / handler for the given entity.
 func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -461,13 +488,28 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 			return
 		}
 
+		// Role-grant row scope (kafe 10.67 / GAP-08): the rule "hanya pesanan
+		// lunas yang masuk dapur" belongs to the ROLE, not to the entity, so it
+		// is resolved from the caller's grants. Passed as predicates (ANDed in
+		// SQL) rather than merged into `filters`, so a grant restriction on a
+		// field the entity also scopes narrows instead of replacing.
+		var rowPreds []db.RowPredicate
+		if es, ok := f.entitySpec(module, entity); ok {
+			rowPreds, err = f.grantRowPredicates(r, es, module, entity, "list")
+			if err != nil {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+				return
+			}
+		}
+
 		result, err := store.List(ctx, db.ListParams{
-			WorkspaceID: workspaceID,
-			Page:        page,
-			PerPage:     perPage,
-			Sort:        sortParam,
-			Filters:     filters,
-			Search:      r.URL.Query().Get("search"),
+			WorkspaceID:   workspaceID,
+			Page:          page,
+			PerPage:       perPage,
+			Sort:          sortParam,
+			Filters:       filters,
+			Search:        r.URL.Query().Get("search"),
+			RowPredicates: rowPreds,
 		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
@@ -652,11 +694,26 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 		workspaceID := workspaceFromContext(ctx)
 		id := r.PathValue("id")
 
+		// Row predicates (entity `row_scope` + the caller's grant row scope).
+		// Resolved BEFORE any read, and also used to decide whether the
+		// read-through cache may serve this request: the cache key is
+		// (workspace, module, entity, id) — it is not caller-scoped — so serving
+		// a scoped read from it would hand one caller a row another caller was
+		// confined away from (kafe 10.67).
+		var rowPreds []db.RowPredicate
+		if es, ok := f.entitySpec(module, entity); ok {
+			rowPreds, err = f.rowPredicatesFor(r, es, module, entity, "view")
+			if err != nil {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+				return
+			}
+		}
+
 		// ── Read-through cache (Fase 14, opt-in via spec.cache) ──
 		var cacheBackend CacheKV
 		var cacheKey string
 		var cacheTTL time.Duration
-		if f.entityCache != nil && f.entityCache.Resolve != nil {
+		if len(rowPreds) == 0 && f.entityCache != nil && f.entityCache.Resolve != nil {
 			if b := f.entityCache.Resolve(module, entity); b != nil {
 				cacheBackend = b
 				cacheKey = CacheKey(workspaceID, module, entity, id)
@@ -672,7 +729,7 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 			}
 		}
 
-		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id, RowPredicates: rowPreds})
 		if err != nil {
 			// Auto-create for reference entities with natural key: if
 			// neither UUID nor natural key matched, create a new record
@@ -696,7 +753,7 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 					})
 					if insertErr == nil {
 						rec, err = store.GetByID(ctx, db.GetByIDParams{
-							WorkspaceID: workspaceID, ID: newID,
+							WorkspaceID: workspaceID, ID: newID, RowPredicates: rowPreds,
 						})
 						action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "created")
 					}
@@ -792,6 +849,12 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		var entitySpec *spec.EntitySpec
 		if f.specLookup != nil {
 			entitySpec, _ = f.specLookup(module, entity)
+		}
+		// Field-level write guard (05-field-types.md §5.3): a caller who may not
+		// SEE a field may not SET it either. Checked on the caller's payload, so
+		// only their intent is judged.
+		if !f.denyForbiddenFieldWrites(w, entitySpec, IdentityFromContext(ctx), body) {
+			return
 		}
 		actionSpec := resolveAction(entitySpec, "create")
 		var hooks []spec.HookDecl
@@ -931,6 +994,13 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		if f.specLookup != nil {
 			updateEntitySpec, _ = f.specLookup(module, entity)
 		}
+		// Field-level write guard (05-field-types.md §5.3). Checked against the
+		// BODY, not the merged record: a stored value the caller did not send is
+		// not their intent, and flagging it would make every PATCH of a record
+		// that happens to carry such a field fail.
+		if !f.denyForbiddenFieldWrites(w, updateEntitySpec, IdentityFromContext(ctx), body) {
+			return
+		}
 		if err := f.normalizeMoneyFields(updateEntitySpec, body); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
 			return
@@ -940,13 +1010,27 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		updatedBy := userFromContext(ctx)
 		id := r.PathValue("id")
 
+		// Row predicates (entity `row_scope` + the caller's grant row scope),
+		// evaluated against the row as it exists BEFORE the update. A caller
+		// cannot touch a record outside their row scope, and receives the same
+		// answer a read gives (404) so the write path is not an existence
+		// oracle either (kafe 10.67: a barista must not touch an unpaid order).
+		var rowPreds []db.RowPredicate
+		if es, ok := f.entitySpec(module, entity); ok {
+			rowPreds, err = f.rowPredicatesFor(r, es, module, entity, "update")
+			if err != nil {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+				return
+			}
+		}
+
 		// Get current version and data — PATCH is a partial update, so the
 		// submitted body is merged onto the existing record rather than
 		// replacing it outright (Update()'s SQL overwrites the whole JSON
 		// blob, and required-field validation runs against the merged
 		// result, not just the fields the caller happened to resend).
 		// GetByID transparently resolves both UUID and natural key lookups.
-		current, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		current, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id, RowPredicates: rowPreds})
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 			return
@@ -1045,7 +1129,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			if fromState != "" && toState != "" && fromState != toState {
 				if trans := entityengine.NewStateMachineEngine().FindTransitionByStates(entitySpec, fromState, toState); trans != nil {
 					if required := spec.TransitionPermission(*trans); required != "" {
-						qualified := permission.AutoPrefixPermission(required, module)
+						qualified := spec.QualifyPermission(required, module)
 						identity := IdentityFromContext(ctx)
 						if identity == nil || !identity.HasPermission(qualified) {
 							writeError(w, http.StatusForbidden, "FORBIDDEN",
@@ -1101,19 +1185,19 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 				}
 			}
 		}
-		if entitySpec != nil && entitySpec.StateMachine != nil && f.wfRegistry != nil && f.wfApprovals != nil {
+		if entitySpec != nil && entitySpec.StateMachine != nil && f.approvalReg != nil && f.approvalRequests != nil {
 			sm := entitySpec.StateMachine
 			fromState := preUpdateState
 			toState := stateFieldValue(sm, merged)
 			if fromState != "" && toState != "" && fromState != toState {
 				if trans := entityengine.NewStateMachineEngine().FindTransitionByStates(entitySpec, fromState, toState); trans != nil {
-					wfEngine := workflow.NewEngine(f.wfRegistry)
-					if wfEngine.RequiresApproval(module+"."+entity, trans.Action, fromState, toState) {
+					approvalEngine := approval.NewEngine(f.approvalReg)
+					if approvalEngine.RequiresApproval(module+"."+entity, trans.Action) {
 						// `decision` is an approval-flow verb, not an entity field:
 						// it rides in the same PATCH body as the target state, but
 						// the record must never store it.
 						delete(merged, "decision")
-						f.handleWorkflowApproval(w, r, ctx, module, entity, id, trans.Action, fromState, toState, merged, current.Version, updatedBy, workspaceID, body, wfEngine)
+						f.handleApproval(w, r, ctx, module, entity, id, trans.Action, fromState, toState, merged, current.Version, updatedBy, workspaceID, body, approvalEngine)
 						return
 					}
 				}
@@ -1158,6 +1242,8 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			UpdatedBy:     updatedBy,
 			Data:          execParams.Resource,
 			Permissions:   permissionsFromContext(ctx),
+			SystemCaller:  action.IsSystemCaller(ctx),
+			RowPredicates: rowPreds,
 			PendingEvents: pendingEvents,
 			RequestID:     requestIDFromContext(ctx),
 		})
@@ -1167,7 +1253,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		}
 
 		// Fetch updated record
-		rec, _ := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		rec, _ := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id, RowPredicates: rowPreds})
 		// Invalidate the read-through cache (Fase 14) — never blocks the write path.
 		f.invalidateEntityCache(ctx, workspaceID, module, entity, id)
 		// Attach new version
@@ -1255,7 +1341,29 @@ func (f *HandlerFactory) HandleDelete(module, entity string) http.HandlerFunc {
 		workspaceID := workspaceFromContext(ctx)
 		id := r.PathValue("id")
 
-		if err := store.SoftDelete(ctx, workspaceID, id); err != nil {
+		// Row predicates (entity `row_scope` + the caller's grant row scope).
+		// A row outside the caller's scope reports as absent rather than
+		// deletable — the same answer a read gives (kafe 10.45/10.67).
+		var rowPreds []db.RowPredicate
+		if es, ok := f.entitySpec(module, entity); ok {
+			rowPreds, err = f.rowPredicatesFor(r, es, module, entity, "delete")
+			if err != nil {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+				return
+			}
+		}
+
+		if err := store.SoftDelete(ctx, db.DeleteParams{
+			WorkspaceID: workspaceID,
+			ID:          id,
+			// The delete path carries the caller's identity like every other
+			// write, so a row outside their row scope reads as absent (404)
+			// rather than deletable (kafe 10.45).
+			Permissions:   permissionsFromContext(ctx),
+			SystemCaller:  action.IsSystemCaller(ctx),
+			DeletedBy:     userFromContext(ctx),
+			RowPredicates: rowPreds,
+		}); err != nil {
 			// Detect lifecycle/referential integrity errors → 409 Conflict
 			var lcErr *db.LifecycleError
 			if errors.As(err, &lcErr) {
@@ -1953,8 +2061,9 @@ func isValidationError(err error) bool {
 }
 
 // writeStoreError maps a storage-layer error to the right HTTP status + code:
-// validation → 422 VALIDATION_ERROR, version conflict → 409 CONFLICT,
-// anything else → 500 INTERNAL_ERROR.
+// validation → 422 VALIDATION_ERROR, unknown field / unparseable value /
+// value outside `enum_values` → 422 VALIDATION_ERROR (kafe 10.61), version
+// conflict → 409 CONFLICT, anything else → 500 INTERNAL_ERROR.
 func writeStoreError(w http.ResponseWriter, err error) {
 	// Unwrap to find LifecycleError (errors.Is with pointer type)
 	if _, ok := errors.AsType[*db.LifecycleError](err); ok {
@@ -1969,12 +2078,34 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	switch {
 	case isValidationError(err):
 		writeStoreValidationError(w, err)
+	case errors.Is(err, db.ErrUnknownField),
+		errors.Is(err, db.ErrInvalidFieldValue),
+		errors.Is(err, db.ErrInvalidEnumValue):
+		// Three caller-fault classes that answered 500 INTERNAL_ERROR until
+		// 2026-10-02 (kafe 10.61), each violating a written contract:
+		//
+		//	unknown field      → 01-core-basic.md mandates VALIDATION_ERROR (422)
+		//	unparseable value  → caller sent "kemarin" as a date
+		//	enum CHECK         → 05-field-types.md §enum mandates 422 for a value
+		//	                     outside `enum_values`
+		//
+		// 500 is the class that pages an operator, so each of these raised a
+		// false alarm, buried real faults among them, and told the user nothing
+		// actionable even though the storage error already named the field.
+		writeInvalidFieldError(w, err)
 	case errors.Is(err, db.ErrUniqueViolation):
 		// Must be checked BEFORE the generic conflict branch so the caller gets
 		// the offending field rather than a bare "CONFLICT".
 		writeUniqueViolationError(w, err)
 	case isConflictError(err):
 		writeError(w, http.StatusConflict, "CONFLICT", err.Error())
+	case isStoreForbidden(err):
+		// The STORE refused the write (field-level `required_permission`,
+		// 05-field-types.md §5.3). The HTTP layer usually catches this first
+		// (denyForbiddenFieldWrites), but the store is the choke point every
+		// path shares — including `resource.save()` from a script — so a
+		// refusal raised there must report the same class, not a 500.
+		writeStoreForbiddenError(w, err)
 	case errors.Is(err, db.ErrCrossStoreTx):
 		writeError(w, http.StatusInternalServerError, "CROSS_STORE_TX", err.Error())
 	default:
@@ -2047,6 +2178,82 @@ func writeUniqueViolationError(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusConflict, "CONFLICT", err.Error())
 }
 
+// writeStoreForbiddenError writes a 403 for a write the STORE refused on
+// permission grounds, naming the fields so the caller can act on it.
+//
+// It complements denyForbiddenFieldWrites (the early HTTP check): that one
+// catches the HTTP path before any work is done, while this one covers a
+// refusal raised inside the store — where the script path also lands.
+func writeStoreForbiddenError(w http.ResponseWriter, err error) {
+	var fe *db.ForbiddenError
+	if errors.As(err, &fe) && len(fe.Fields) > 0 {
+		details := make([]ErrorDetailItem, 0, len(fe.Fields))
+		for _, name := range fe.Fields {
+			details = append(details, ErrorDetailItem{
+				Level:   "field",
+				Field:   name,
+				Message: "setting field " + name + " requires its required_permission",
+			})
+		}
+		writeErrorWithDetails(w, http.StatusForbidden, "FORBIDDEN", err.Error(), details)
+		return
+	}
+	// The typed error did not survive (script boundary): the marker in the
+	// message still identifies the class, so the caller gets a 403 with the
+	// field named in the message even when the structured details are gone.
+	writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+}
+
+// isStoreForbidden reports whether err is a store permission refusal.
+//
+// Two checks, because a refusal takes two shapes by the time it is reported: the
+// sentinel (`errors.Is`) on paths where the error object survives, and the shared
+// message marker on paths where it does not — a failed script reaches the API
+// layer as a plain string, which drops every wrapped sentinel. Both name the
+// same class, and a missed classification still REFUSES the write (it merely
+// reports it as a 500), so the failure mode stays fail-closed.
+func isStoreForbidden(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, db.ErrForbidden) || strings.Contains(err.Error(), db.ForbiddenMarker)
+}
+
+// writeInvalidFieldError writes a 422 VALIDATION_ERROR for a field the caller
+// sent that the storage layer could not accept — a field the entity does not
+// declare, a value that cannot be parsed, or a value outside a declared
+// `enum_values` set.
+//
+// The field name is extracted from the typed error so the response's
+// `details[]` names it; when the driver text does not carry one (PostgreSQL
+// reports only a constraint name for an enum CHECK) the detail stays
+// level-only rather than guessing by parsing the message.
+//
+// It used to be 500 INTERNAL_ERROR for all three (measured 2026-10-02, kafe
+// 10.61): a 5xx makes a client retry a request that can never succeed, and
+// hides a real fault among the user mistakes.
+func writeInvalidFieldError(w http.ResponseWriter, err error) {
+	// An unknown-field error can name several keys (they are collected and
+	// sorted, so the answer does not depend on map order) — give each one its
+	// own detail entry rather than naming only the first.
+	if e, ok := errors.AsType[*db.UnknownFieldError](err); ok {
+		details := make([]ErrorDetailItem, 0, len(e.Fields))
+		for _, f := range e.Fields {
+			details = append(details, ErrorDetailItem{Level: "field", Field: f, Message: err.Error()})
+		}
+		writeErrorWithDetails(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(), details)
+		return
+	}
+	field := ""
+	if e, ok := errors.AsType[*db.InvalidFieldValueError](err); ok {
+		field = e.Field
+	} else if e, ok := errors.AsType[*db.EnumViolationError](err); ok {
+		field = e.Field
+	}
+	writeErrorWithDetails(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(),
+		[]ErrorDetailItem{{Level: "field", Field: field, Message: err.Error()}})
+}
+
 // writeValidationErrors writes one or more validation errors as 422 VALIDATION_ERROR.
 // Spec §16: errors include structured details array with level, optional field, and message.
 //
@@ -2088,7 +2295,9 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		resourceID := r.PathValue("id")
 
 		// Rate limit (todo 7.12): per-action override wins over resource default.
-		if !f.rateLimitFor(w, r, module, entity, actionName) {
+		// `actionSpec` comes from the registry union, so a `rate_limit` declared
+		// on a transition `via` is enforced here too (kafe 10.60a).
+		if !f.rateLimitForAction(w, r, module, entity, actionName, &actionSpec) {
 			return
 		}
 
@@ -2181,25 +2390,24 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			}
 		}
 
-		// Workflow interception (todo 7.4): if this transition is intercepted
-		// by a kind: Workflow, the transition does NOT execute immediately —
-		// it enters the approval flow. The first call creates a pending
-		// approval; subsequent calls (approve/reject) advance it.
-		if f.wfRegistry != nil && entitySpec != nil && entitySpec.StateMachine != nil && resourceID != "" {
+		// Approval interception (todo 7.4): if this transition carries an
+		// `approval` gate, it does NOT execute immediately — it enters the
+		// approval flow. The first call creates a pending approval; subsequent
+		// calls (approve/reject) advance it.
+		if f.approvalReg != nil && entitySpec != nil && entitySpec.StateMachine != nil && resourceID != "" {
 			sm := entitySpec.StateMachine
 			currentState := ""
 			if cs, ok := resourceData[sm.Field]; ok && cs != nil {
 				currentState = fmt.Sprintf("%v", cs)
 			}
 			toState, _ := entityengine.NewStateMachineEngine().Transition(entitySpec, currentState, actionName)
-			wfEngine := workflow.NewEngine(f.wfRegistry)
-			// actionName is the transition's `via` name — required here because a
-			// workflow may select its transition by name (S9), which no state
-			// pair can express when the transition has several origin states.
-			if wfEngine.RequiresApproval(module+"."+entity, actionName, currentState, toState) {
+			approvalEngine := approval.NewEngine(f.approvalReg)
+			// actionName is the transition's `via` name — the gate is declared on
+			// that transition, so the name is all the gate is identified by.
+			if approvalEngine.RequiresApproval(module+"."+entity, actionName) {
 				// This transition requires approval. Route to the approval
 				// handler instead of executing the transition directly.
-				f.handleWorkflowApproval(w, r, ctx, module, entity, resourceID, actionName, currentState, toState, resourceData, resourceVersion, userID, workspaceID, params, wfEngine)
+				f.handleApproval(w, r, ctx, module, entity, resourceID, actionName, currentState, toState, resourceData, resourceVersion, userID, workspaceID, params, approvalEngine)
 				return
 			}
 		}
@@ -2262,6 +2470,12 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			if rbErr := scope.Rollback(); rbErr != nil {
 				log.Printf("formspec: rollback scope for %s: %v", actionName, rbErr)
 			}
+			// A store-level permission refusal keeps its class (403) even though a
+			// script cost it its sentinel — see isStoreForbidden.
+			if isStoreForbidden(err) {
+				writeStoreForbiddenError(w, err)
+				return
+			}
 			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
 			return
 		}
@@ -2279,6 +2493,12 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			}
 			if errors.Is(err, db.ErrCrossStoreTx) {
 				writeError(w, http.StatusInternalServerError, "CROSS_STORE_TX", err.Error())
+				return
+			}
+			// A script that wrote a gated field had its refusal carried across the
+			// Starlark boundary as text; report it as the permission failure it is.
+			if isStoreForbidden(err) {
+				writeStoreForbiddenError(w, err)
 				return
 			}
 			writeError(w, http.StatusInternalServerError, "ACTION_ERROR", err.Error())
@@ -2348,8 +2568,8 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 	}
 }
 
-// handleWorkflowApproval processes a state-machine transition that is
-// intercepted by a kind: Workflow (todo 7.4). The transition does NOT execute
+// handleApproval processes a state-machine transition that carries an
+// `approval` gate (todo 7.4). The transition does NOT execute
 // immediately — it enters the approval flow:
 //
 //   - First call (no pending approval): creates a pending approval request and
@@ -2363,23 +2583,21 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 //     declared).
 //
 // The requester can never approve their own request (7.4.5).
-func (f *HandlerFactory) handleWorkflowApproval(
+func (f *HandlerFactory) handleApproval(
 	w http.ResponseWriter, r *http.Request, ctx context.Context,
 	module, entity, resourceID, transition, fromState, toState string,
 	resourceData map[string]any, resourceVersion int,
-	userID, workspaceID string, params map[string]any, wfEngine *workflow.Engine,
+	userID, workspaceID string, params map[string]any, approvalEngine *approval.Engine,
 ) {
-	// Resolve the intercepting workflow(s). Use the first one for the
-	// approval flow (multiple workflows on the same transition are chained
-	// in a later iteration).
-	wfs := wfEngine.WorkflowsFor(module+"."+entity, transition, fromState, toState)
+	// Resolve the approval gate declared on the transition.
+	wfs := approvalEngine.ApprovalsFor(module+"."+entity, transition)
 	if len(wfs) == 0 {
 		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", "no workflow for transition")
 		return
 	}
 	wf := wfs[0]
 
-	// The transition's declared input contract. `handleWorkflowApproval` is
+	// The transition's declared input contract. `handleApproval` is
 	// reached from both write paths, and neither passes the resolved spec — so it
 	// is resolved here rather than widening a signature five call sites share.
 	var contractSpec *spec.EntitySpec
@@ -2392,37 +2610,48 @@ func (f *HandlerFactory) handleWorkflowApproval(
 	}
 
 	// Determine applicable steps (evaluate `when` conditions).
-	steps, err := wfEngine.ApplicableSteps(wf, resourceData)
+	steps, err := approvalEngine.ApplicableSteps(wf, resourceData)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
 		return
 	}
 	if len(steps) == 0 {
 		// No applicable steps — the transition proceeds without approval.
-		f.executeWorkflowTransition(w, r, ctx, module, entity, resourceID, fromState, toState, resourceData, resourceVersion, workspaceID, userID)
+		f.executeApprovalTransition(w, r, ctx, module, entity, resourceID, fromState, toState, resourceData, resourceVersion, workspaceID, userID)
 		return
 	}
 
 	// Load the current pending approval (if any).
-	dbRow, err := f.wfApprovals.GetByRecord(ctx, workspaceID, module+"."+entity, resourceID)
+	dbRow, err := f.approvalRequests.GetByRecord(ctx, workspaceID, module+"."+entity, resourceID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
 		return
 	}
-	approval := workflowApprovalFromRow(dbRow)
+	pending := workflowApprovalFromRow(dbRow)
 
 	// No pending approval → this is the request to START the approval flow.
-	if approval == nil {
-		approval = workflow.NewApproval(wf, module, module+"."+entity, resourceID, fromState, toState, f.requesterIDFor(ctx, module, entity, resourceID, workspaceID, resourceData))
-		// Persist the workflow's manifest name (not a pointer address) so the
-		// escalation worker can resolve it back (todo 7.4.4).
-		if wfKey := f.wfRegistry.NameFor(wf); wfKey != "" {
-			if wfModule, wfName, ok := strings.Cut(wfKey, "/"); ok {
-				approval.WorkflowModule = wfModule
-				approval.WorkflowName = wfName
+	if pending == nil {
+		// The workflow's MANIFEST identity, resolved before the approval is built:
+		// it is what the escalation worker resolves back (todo 7.4.4) AND what the
+		// step's duty permission is derived from (`workflow.{module}.{name}.{step}`),
+		// so it can no longer be filled in with a placeholder and patched later.
+		wfModule, wfName := module, ""
+		if wfKey := f.approvalReg.NameFor(wf); wfKey != "" {
+			if m, n, ok := strings.Cut(wfKey, "/"); ok {
+				wfModule, wfName = m, n
 			}
 		}
-		row := workflowApprovalToRow(approval)
+		if wfName == "" {
+			// Unreachable for a workflow obtained from the registry; refused rather
+			// than persisted, because a nameless row makes every duty unholdable and
+			// the symptom is a silent 403.
+			writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR",
+				"workflow has no registry name — its approval duties could not be derived")
+			return
+		}
+		pending = approval.NewApproval(wf, wfModule, wfName, module+"."+entity, resourceID,
+			fromState, toState, f.requesterIDFor(ctx, module, entity, resourceID, workspaceID, resourceData))
+		row := workflowApprovalToRow(pending)
 		row.TenantID = workspaceID
 		row.RejectStep = -1
 		// Carry the requester's declared inputs across the approval boundary
@@ -2433,14 +2662,14 @@ func (f *HandlerFactory) handleWorkflowApproval(
 		// state alone (measured on kafe `void-order`: a voided order with no
 		// `void_reason`).
 		row.Params = spec.TransitionInputParams(contractSpec, contractTrans, params, resourceData)
-		if _, err := f.wfApprovals.Create(ctx, *row); err != nil {
+		if _, err := f.approvalRequests.Create(ctx, *row); err != nil {
 			writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
 			return
 		}
 		writeJSON(w, http.StatusAccepted, SingleResponse{
 			Data: map[string]any{
 				"status":       "approval_required",
-				"workflow":     approval.WorkflowName,
+				"workflow":     pending.GateName,
 				"from":         fromState,
 				"to":           toState,
 				"active_step":  0,
@@ -2462,61 +2691,91 @@ func (f *HandlerFactory) handleWorkflowApproval(
 	if identity != nil {
 		userRoles = identity.Roles
 	}
+	// Eligibility input: the caller's roles plus their permission predicate, so a
+	// step that declares a DUTY (`permission`) is satisfied by holding it.
+	approver := approval.Approver{
+		UserID: userID,
+		Roles:  userRoles,
+		Can: func(permission string) bool {
+			return identity != nil && identity.HasPermission(permission)
+		},
+	}
 
 	decision, _ := params["decision"].(string)
 	switch decision {
 	case "approve":
-		// Requester can never approve their own request (7.4.5).
-		ok, reason := wfEngine.CanApprove(wf, approval.ActiveStep, userID, userRoles, approval.RequesterID, approval.EscalatedSteps[approval.ActiveStep], resourceData)
+		// Requester can never approve their own request (7.4.5). `steps` is the
+		// APPLICABLE list, and the engine resolves the position inside it by step
+		// NAME — so this and the audit record below describe the same step.
+		ok, reason := approvalEngine.CanApprove(pending, steps, approver)
 		if !ok {
 			writeError(w, http.StatusForbidden, "WORKFLOW_DENIED", reason)
 			return
 		}
-		if err := approval.Approve(userID); err != nil {
+		if err := pending.Approve(steps, userID); err != nil {
 			writeError(w, http.StatusConflict, "WORKFLOW_DENIED", err.Error())
 			return
 		}
 
+		// The resolved position, not the raw stored index: after a manifest edit
+		// the two can name different steps.
+		stepIdx := pending.ActiveIndex(steps)
+
 		// Record the signed approval statement in the audit trail (7.4.6).
-		f.recordWorkflowAudit(ctx, workspaceID, module, entity, resourceID, "workflow.approve", userID, map[string]any{
-			"workflow": approval.WorkflowName,
-			"step":     approval.ActiveStep,
+		f.recordApprovalAudit(ctx, workspaceID, module, entity, resourceID, "workflow.approve", userID, map[string]any{
+			"workflow": pending.GateName,
+			"step":     approval.StepKey(steps, stepIdx),
 			"from":     fromState,
 			"to":       toState,
 			"decision": "approve",
 		})
 
-		// Check if the active step reached quorum.
-		step := steps[approval.ActiveStep]
-		eligibleCount := len(step.Roles)
-		if approval.StepApproved(step, eligibleCount) {
-			// Advance to the next step.
-			approval.ActiveStep++
+		// Check if the active step reached quorum. The number comes from the step's
+		// own declaration (`approvers`, or the role chain for `sequential`) — never
+		// from a guess about how many people hold its roles.
+		if pending.StepApproved(steps, stepIdx) {
+			// Advance to the next step. The applicable list is passed so the
+			// recorded step NAME stays consistent with the recorded index.
+			pending.Advance(steps)
+		}
+
+		// A request that has run off the end of its steps is FINISHED, not
+		// pending. Without this the row kept status='pending' with
+		// active_step == len(steps), and every reader that filters on
+		// status='pending' kept handing the completed request back:
+		// GetByRecord returned it for the next void request on the same record
+		// (which then answered "workflow step out of range" instead of starting
+		// a NEW approval), and the ApprovalInbox listed it as a task nobody
+		// could act on. Found while building that inbox's source (5.13.6,
+		// changelog 2026-10-04-004); pinned by
+		// TestWorkflowApproval_CompletedRequestIsNoLongerPending.
+		if pending.AllStepsApproved(steps) {
+			pending.Status = approval.ApprovalApproved
 		}
 
 		// Persist the updated approval.
-		row := workflowApprovalToRow(approval)
-		row.ID = approval.ID
-		if err := f.wfApprovals.Update(ctx, *row); err != nil {
+		row := workflowApprovalToRow(pending)
+		row.ID = pending.ID
+		if err := f.approvalRequests.Update(ctx, *row); err != nil {
 			writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
 			return
 		}
 
 		// If all steps are approved, execute the real transition.
-		if approval.AllStepsApproved(steps) {
+		if pending.AllStepsApproved(steps) {
 			// Merge the requester's stored inputs back in, so the record the
 			// approver's request carries is completed with what the requester
 			// declared. An explicit value from the approver wins — they may have
 			// corrected it — and the stored value is the fallback.
-			mergeApprovalParams(approval.Params, resourceData)
-			f.executeWorkflowTransition(w, r, ctx, module, entity, resourceID, fromState, toState, resourceData, resourceVersion, workspaceID, userID)
+			mergeApprovalParams(pending.Params, resourceData)
+			f.executeApprovalTransition(w, r, ctx, module, entity, resourceID, fromState, toState, resourceData, resourceVersion, workspaceID, userID)
 			return
 		}
 
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: map[string]any{
 				"status":      "approved",
-				"active_step": approval.ActiveStep,
+				"active_step": pending.ActiveStep,
 				"total_steps": len(steps),
 				"record_id":   resourceID,
 			},
@@ -2525,25 +2784,25 @@ func (f *HandlerFactory) handleWorkflowApproval(
 
 	case "reject":
 		// Requester can never reject their own request either.
-		ok, reason := wfEngine.CanApprove(wf, approval.ActiveStep, userID, userRoles, approval.RequesterID, approval.EscalatedSteps[approval.ActiveStep], resourceData)
+		ok, reason := approvalEngine.CanApprove(pending, steps, approver)
 		if !ok {
 			writeError(w, http.StatusForbidden, "WORKFLOW_DENIED", reason)
 			return
 		}
-		approval.Reject(userID)
+		pending.Reject(steps, userID)
 
 		// Record the signed rejection statement in the audit trail (7.4.6).
-		f.recordWorkflowAudit(ctx, workspaceID, module, entity, resourceID, "workflow.reject", userID, map[string]any{
-			"workflow": approval.WorkflowName,
-			"step":     approval.ActiveStep,
+		f.recordApprovalAudit(ctx, workspaceID, module, entity, resourceID, "workflow.reject", userID, map[string]any{
+			"workflow": pending.GateName,
+			"step":     approval.StepKey(steps, pending.ActiveIndex(steps)),
 			"from":     fromState,
 			"to":       toState,
 			"decision": "reject",
 		})
 
-		row := workflowApprovalToRow(approval)
-		row.ID = approval.ID
-		if err := f.wfApprovals.Update(ctx, *row); err != nil {
+		row := workflowApprovalToRow(pending)
+		row.ID = pending.ID
+		if err := f.approvalRequests.Update(ctx, *row); err != nil {
 			writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
 			return
 		}
@@ -2576,10 +2835,10 @@ func (f *HandlerFactory) handleWorkflowApproval(
 func (f *HandlerFactory) seedStoredApprovalParams(
 	ctx context.Context, workspaceID, module, entity, resourceID string, merged map[string]any,
 ) {
-	if f.wfApprovals == nil || merged == nil || resourceID == "" {
+	if f.approvalRequests == nil || merged == nil || resourceID == "" {
 		return
 	}
-	row, err := f.wfApprovals.GetByRecord(ctx, workspaceID, module+"."+entity, resourceID)
+	row, err := f.approvalRequests.GetByRecord(ctx, workspaceID, module+"."+entity, resourceID)
 	if err != nil || row == nil {
 		return
 	}
@@ -2643,14 +2902,14 @@ func (f *HandlerFactory) requesterIDFor(
 	return rec.CreatedBy
 }
 
-// executeWorkflowTransition performs the actual state-machine transition once
+// executeApprovalTransition performs the actual state-machine transition once
 // a workflow's approval is complete (or no approval is needed). It updates the
 // record's state field to the target state.
 //
 // r (the *http.Request) is unused today — kept in the signature for symmetry
 // with the other workflow handlers and future request-scoped needs; renamed to
 // _ to avoid the unused-param warning.
-func (f *HandlerFactory) executeWorkflowTransition(
+func (f *HandlerFactory) executeApprovalTransition(
 	w http.ResponseWriter, _ *http.Request, ctx context.Context,
 	module, entity, resourceID, fromState, toState string,
 	resourceData map[string]any, resourceVersion int,
@@ -2717,7 +2976,7 @@ func (f *HandlerFactory) executeWorkflowTransition(
 	}
 
 	// Record the completed transition in the audit trail (7.4.6).
-	f.recordWorkflowAudit(ctx, workspaceID, module, entity, resourceID, "workflow.transition", "system", map[string]any{
+	f.recordApprovalAudit(ctx, workspaceID, module, entity, resourceID, "workflow.transition", "system", map[string]any{
 		"to": toState,
 	})
 
@@ -2736,22 +2995,23 @@ func (f *HandlerFactory) executeWorkflowTransition(
 }
 
 // workflowApprovalFromRow converts a persisted approval row into a
-// workflow.Approval (todo 7.4).
-func workflowApprovalFromRow(row *db.WorkflowApprovalRow) *workflow.Approval {
+// approval.Approval (todo 7.4).
+func workflowApprovalFromRow(row *db.ApprovalRequestRow) *approval.Approval {
 	if row == nil {
 		return nil
 	}
-	return &workflow.Approval{
+	return &approval.Approval{
 		ID:             row.ID,
-		WorkflowModule: row.WorkflowModule,
-		WorkflowName:   row.WorkflowName,
+		GateModule:     row.GateModule,
+		GateName:       row.GateName,
 		Entity:         row.Entity,
 		RecordID:       row.RecordID,
 		From:           row.FromState,
 		To:             row.ToState,
 		RequesterID:    row.RequesterID,
-		Status:         workflow.ApprovalStatus(row.Status),
+		Status:         approval.ApprovalStatus(row.Status),
 		ActiveStep:     row.ActiveStep,
+		ActiveStepName: row.ActiveStepName,
 		Approvals:      row.Approvals,
 		RejectedBy:     row.RejectedBy,
 		RejectStep:     row.RejectStep,
@@ -2760,23 +3020,24 @@ func workflowApprovalFromRow(row *db.WorkflowApprovalRow) *workflow.Approval {
 	}
 }
 
-// workflowApprovalToRow converts a workflow.Approval into a persistence row
+// workflowApprovalToRow converts a approval.Approval into a persistence row
 // (todo 7.4).
-func workflowApprovalToRow(a *workflow.Approval) *db.WorkflowApprovalRow {
+func workflowApprovalToRow(a *approval.Approval) *db.ApprovalRequestRow {
 	if a == nil {
 		return nil
 	}
-	return &db.WorkflowApprovalRow{
+	return &db.ApprovalRequestRow{
 		ID:             a.ID,
 		Entity:         a.Entity,
 		RecordID:       a.RecordID,
-		WorkflowModule: a.WorkflowModule,
-		WorkflowName:   a.WorkflowName,
+		GateModule:     a.GateModule,
+		GateName:       a.GateName,
 		FromState:      a.From,
 		ToState:        a.To,
 		RequesterID:    a.RequesterID,
 		Status:         string(a.Status),
 		ActiveStep:     a.ActiveStep,
+		ActiveStepName: a.ActiveStepName,
 		Approvals:      a.Approvals,
 		RejectedBy:     a.RejectedBy,
 		RejectStep:     a.RejectStep,
@@ -2785,10 +3046,10 @@ func workflowApprovalToRow(a *workflow.Approval) *db.WorkflowApprovalRow {
 	}
 }
 
-// recordWorkflowAudit writes a signed workflow decision (approve/reject/
+// recordApprovalAudit writes a signed workflow decision (approve/reject/
 // transition) to the audit trail (todo 7.4.6). Best-effort — a failure to
 // write the audit record does not fail the workflow decision itself.
-func (f *HandlerFactory) recordWorkflowAudit(ctx context.Context, workspaceID, module, entity, recordID, action, actor string, changes map[string]any) {
+func (f *HandlerFactory) recordApprovalAudit(ctx context.Context, workspaceID, module, entity, recordID, action, actor string, changes map[string]any) {
 	if f.auditWriter == nil {
 		return
 	}

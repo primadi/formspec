@@ -5,7 +5,11 @@ metadata:
   module: sales-gl-integrator
   description: Auto-create journal entry setiap order dibayar — connects billing to gl
 spec:
-  on: { resource: billing.order, event: paid }
-  deliver:
-    - channel: queue
-      job: create-sales-journal
+  # Beraksi lewat HANDLER. Handler Subscription sudah berjalan di worker outbox
+  # (at-least-once), jadi ia SENDIRI adalah eksekusi latar — tidak perlu
+  # `queue` + `job` lagi (itu konsekuensi milik publisher, bukan consumer).
+  events:
+    - billing.order.paid
+  handler:
+    type: native
+    ref: "SalesGlIntegrator.CreateSalesJournalHandler"

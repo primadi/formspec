@@ -1,7 +1,8 @@
 // impl/sales-gl-integrator/create_sales_journal.go
 //
 // Implementasi native untuk Subscription job "create-sales-journal".
-// Dipicu oleh kind: Subscription → on: billing.order, event: paid → deliver: queue, job: create-sales-journal.
+// Handler Subscription: dipicu oleh `order-to-journal`
+// (`events: [billing.order.paid]` → `handler: SalesGlIntegrator.CreateSalesJournalHandler`).
 // File ini TIDAK termasuk dalam deployment artifact.
 
 package salesglintegrator

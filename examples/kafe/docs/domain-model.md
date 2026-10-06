@@ -517,7 +517,7 @@ stateDiagram-v2
 | `mark-ready`      | `in_kitchen` → `ready`                             | `cafe-order.orders.mark-ready`      | Dapur/bar                                                                     |
 | `mark-served`     | `ready` → `served`                                 | `cafe-order.orders.mark-served`     | Pelayan mengantar                                                             |
 | `complete-order`  | `served` → `completed`                             | `cafe-order.orders.complete-order`  | Penutup                                                                       |
-| **`void-order`**  | `paid`/`in_kitchen`/`ready`/`served` → `cancelled` | `cafe-order.orders.void-order`      | **`kind: Workflow` — approval supervisor** (D5)                               |
+| **`void-order`**  | `paid`/`in_kitchen`/`ready`/`served` → `cancelled` | `cafe-order.orders.void-order`      | **`approval` inline — supervisor** (D5)                                       |
 
 **Aturan penting:** `update` biasa hanya berlaku di `draft`. Setelah
 `awaiting_payment`, FormSpec menolak update — semua perubahan lewat action di

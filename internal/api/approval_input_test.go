@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/primadi/formspec/internal/approval"
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/entity"
-	"github.com/primadi/formspec/internal/workflow"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -20,7 +20,7 @@ import (
 // (docs_internal/plan/action-input-contract.md, Fase 4 / D5).
 //
 // The reported defect: an approval-gated transition returns 202 BEFORE any
-// write, and `handleWorkflowApproval` read only the `decision` verb — so the
+// write, and `handleApproval` read only the `decision` verb — so the
 // inputs the requester collected were dropped. An approval-gated `void-order`
 // with a `void_reason` input ended as a voided record with no reason, and a
 // transition guarding on that value failed a check nobody could satisfy.
@@ -62,6 +62,10 @@ func setupApprovalInputHarness(t *testing.T) *approvalInputHarness {
 				Params: &spec.ParamsDecl{
 					Inputs: []spec.ParamInput{{Name: "void_reason", Required: true}},
 				},
+				Approval: &spec.ApprovalSpec{
+					Steps:    []spec.ApprovalStep{{Roles: []string{"supervisor"}}},
+					OnReject: &spec.ApprovalReject{To: "posted"},
+				},
 			}},
 		},
 	}
@@ -73,25 +77,22 @@ func setupApprovalInputHarness(t *testing.T) *approvalInputHarness {
 	}
 	recordID, err := store.Insert(context.Background(), db.InsertParams{
 		WorkspaceID: "t1", CreatedBy: "clerk-1",
-		Data: map[string]any{"status": "posted"},
+		// Seed a record that is already past the initial state. That is a
+		// system-shaped write (it reproduces a stored row), so it declares
+		// itself instead of relying on the rule not existing (kafe 10.72).
+		SystemCaller: true,
+		Data:         map[string]any{"status": "posted"},
 	})
 	if err != nil {
 		t.Fatalf("seed insert: %v", err)
 	}
 
-	wfReg := workflow.NewRegistry()
-	wfReg.Add("billing", "void-approval", &spec.WorkflowSpec{
-		Entity: "billing.order",
-		On: &spec.WorkflowTrigger{
-			Transition: &spec.WorkflowTransitionRef{Name: "void-order"},
-		},
-		Steps:    []spec.WorkflowStep{{Roles: []string{"supervisor"}}},
-		OnReject: &spec.WorkflowReject{To: "posted"},
-	})
+	wfReg := approval.NewRegistry()
+	wfReg.AddEntity("billing", "order", &orderSpec)
 
 	factory := NewHandlerFactory(reg)
-	factory.SetWorkflowRegistry(wfReg)
-	factory.SetWorkflowApprovalStore(db.NewWorkflowApprovalStore(d, db.DriverSQLite))
+	factory.SetApprovalRegistry(wfReg)
+	factory.SetApprovalRequestStore(db.NewApprovalRequestStore(d, db.DriverSQLite))
 	factory.SetSpecLookup(func(m, n string) (*spec.EntitySpec, bool) {
 		info, ok := reg.GetEntity(m, n)
 		if !ok || info.EntitySpec == nil {
@@ -234,7 +235,7 @@ func TestApprovalInput_StoredOnTheApprovalRow(t *testing.T) {
 		t.Fatalf("start approval = %d, want 202: %s", rr.Code, rr.Body.String())
 	}
 
-	row, err := h.factory.wfApprovals.GetByRecord(t.Context(), "t1", "billing.order", h.recordID)
+	row, err := h.factory.approvalRequests.GetByRecord(t.Context(), "t1", "billing.order", h.recordID)
 	if err != nil {
 		t.Fatalf("GetByRecord: %v", err)
 	}

@@ -138,6 +138,17 @@ spec:
       publish: { durable: true }
       deliver:
         - { channel: reliable_event }
+    # Dibatalkan — pasangan simetris untuk arsip SharePoint (7.7.2). Dokumen
+    # yang sudah `completed` (dan terarsip) tetap bisa menuju `cancelled` lewat
+    # transisi `cancel` (`from: "*"`), jadi arsipnya harus bisa ditarik lagi;
+    # tanpa event ini `formspec validate` menolak integrator yang mendengarkan
+    # `completed` karena pembatalan di sisi sumber akan terblokir permanen.
+    - name: on_cancel
+      description: "Dokumen dibatalkan — pemicu penarikan arsip & pembalik"
+      type: async
+      publish: { durable: true }
+      deliver:
+        - { channel: reliable_event }
   state_machine:
     field: status
     initial: draft
@@ -153,16 +164,50 @@ spec:
     transitions:
       - { from: draft, to: in_progress, via: start }
       - { from: in_progress, to: waiting_foreman_review, via: submit_review }
-      - { from: waiting_foreman_review, to: in_progress, via: foreman_approve }
+      # Approval gate inline (dulu 3 manifest `kind: Workflow` terpisah).
+      # Duty di-qualify jadi
+      # `workflow.crc-field.checklist-document.<via>.<step>`; grant di
+      # `modules/formspec.core/seeds/roles.yaml`.
+      - from: waiting_foreman_review
+        to: in_progress
+        via: foreman_approve
+        approval:
+          steps:
+            - name: foreman-sign-off
+              permission: foreman-sign-off
+              approvers: 1
+              mode: any
+              escalation: { after: 48h, reassign: foreman-supervisor-sign-off }
+          on_reject: { to: revise }
       - { from: waiting_foreman_review, to: revise, via: foreman_reject }
       - { from: revise, to: in_progress, via: resubmit }
       - { from: in_progress, to: waiting_customer_approval, via: request_customer_approval }
-      - { from: waiting_customer_approval, to: in_progress, via: customer_approve }
+      - from: waiting_customer_approval
+        to: in_progress
+        via: customer_approve
+        approval:
+          steps:
+            - name: customer-sign-off
+              permission: customer-sign-off
+              approvers: 1
+              mode: any
+              escalation: { after: 72h, reassign: foreman-sign-off }
+          on_reject: { to: revise }
       - { from: waiting_customer_approval, to: revise, via: customer_reject }
       - { from: in_progress, to: waiting_cap_approval, via: submit_cap }
-      - { from: waiting_cap_approval, to: completed, via: cap_approve }
+      - from: waiting_cap_approval
+        to: completed
+        via: cap_approve
+        approval:
+          steps:
+            - name: cap-sign-off
+              permission: cap-sign-off
+              approvers: 1
+              mode: any
+              escalation: { after: 48h, reassign: cap-supervisor-sign-off }
+          on_reject: { to: revise }
       - { from: waiting_cap_approval, to: revise, via: cap_reject }
-      - { from: "*", to: cancelled, via: cancel }
+      - { from: "*", to: cancelled, via: cancel, emit: on_cancel }
   actions:
     - name: start
       description: "Mulai mengisi form"

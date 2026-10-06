@@ -35,6 +35,23 @@ spec:
   menu:
     - type: module
       module: cafe-order
+    # Grup authored (bukan adopt node): `cafe-order/module.yaml` sengaja tidak
+    # menyarankan entri inbox di menu default-nya. Antrean approval adalah tugas
+    # supervisor, bukan langkah alur kasir — jadi ia dipasang di App yang memang
+    # punya role supervisor.
+    #
+    # Menu = deklarasi permukaan, jadi `supervisor-inbox` TIDAK perlu lagi
+    # didaftarkan di `registered_views` (permukaan = menu ∪ registered_views).
+    #
+    # CATATAN (5.25.9 ⏸️): route dan entri nav-nya kini ada, dan sejak
+    # 2026-10-04 sumbernya juga ada (`GET /_ui/workflow/approvals` — 5.13.6
+    # ditutup, changelog `2026-10-04-004`), jadi tautan ini benar-benar hidup.
+    # Yang belum: `realtime` belum dihormati (5.13.7 ⏸️), jadi supervisor
+    # harus me-refresh untuk melihat tugas void baru.
+    - label: "Persetujuan"
+      icon: "clipboard-check"
+      children:
+        - { label: "Antrean Void", icon: "inbox", module: cafe-order, view: supervisor-inbox }
     - type: module
       module: cafe-stock
     - type: module
@@ -44,9 +61,9 @@ spec:
     - type: module
       module: cafe-master
   # Permukaan App = target menu ∪ `registered_views` (plan registered-views.md).
-  # Menu di atas (via Adopt node) sudah mendaftarkan seluruh entity master/stok/
-  # loyality/laporan. Yang TIDAK tercakup menu dan tetap dibutuhkan POS:
-  # workbench kasir, inbox approval, dan struk.
+  # Menu di atas sudah mendaftarkan seluruh entity master/stok/loyality/laporan
+  # (via Adopt node) DAN `supervisor-inbox` (grup "Persetujuan"). Yang TIDAK
+  # tercakup menu dan tetap dibutuhkan POS: workbench kasir dan struk.
   #
   # `close-shift-wizard` SENGAJA tidak didaftarkan: wizard itu mengikat dirinya
   # ke transisi `close-shift` pada entity `shift` (`entity:` + `action:` di
@@ -56,9 +73,13 @@ spec:
   registered_views:
     # Page kasir (route /pos) — entri POS di menu cafe-order masih dikomentari.
     - { view: cafe-order/pos-workbench }
-    # Inbox approval supervisor (void pesanan).
-    - { view: cafe-order/supervisor-inbox }
-    # Struk dicetak dari detail pesanan.
+    # Struk dicetak dari detail pesanan. Sengaja TIDAK dipasang di menu: ia
+    # dibuka dari SATU record pesanan, bukan tujuan navigasi.
+    #
+    # ⚠️ Sama seperti inbox sebelum ia pindah ke menu (5.25.9 ⏸️): route-nya ADA,
+    # tetapi tidak ada tombol/link yang membukanya — tidak ditemukan satu pun
+    # `print/...` di `src/kinds`/`src/engine`. Jadi kasir masih harus mengetik
+    # `/kafe/app/pos/print/receipt-thermal/<order-id>` sendiri.
     - { view: cafe-order/receipt-thermal }
     - { view: cafe-order/receipt-digital }
   confirm:

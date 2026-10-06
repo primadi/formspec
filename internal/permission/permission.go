@@ -15,6 +15,8 @@ package permission
 import (
 	"fmt"
 	"strings"
+
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // PermissionType classifies a permission entry.
@@ -129,34 +131,12 @@ func ValidatePermissionFormat(perm string) error {
 
 // AutoPrefixPermission adds the module prefix if the permission is not qualified.
 //
-// Spec §4.7: "Every permission string is fully qualified as {module}.{key}.
-// Inside a manifest, own-module prefix MAY be omitted and MUST be auto-prefixed."
-//
-// Rules:
-//   - "invoices.list" (2 segments) → "billing.invoices.list"  (unqualified → auto-prefix)
-//   - "billing.invoices.list" (3+ segments) → "billing.invoices.list" (already qualified)
-//   - "public" → "public" (reserved keyword, unchanged)
+// Deprecated: the rule is shared with the storage layer, which also evaluates
+// declared permissions (transition gates). Use spec.QualifyPermission so both
+// layers cannot drift — a divergence makes a gate that never matches the
+// materialized permission, i.e. one that can never be opened.
 func AutoPrefixPermission(perm, module string) string {
-	if perm == "" || perm == "public" {
-		return perm
-	}
-	// Count segments to determine if it's already qualified
-	// Qualified = {module}.{key} = 2+ dots = 3+ segments
-	// Unqualified = {key} = 0-1 dots = 1-2 segments
-	parts := strings.Split(perm, ".")
-	if len(parts) >= 3 {
-		return perm // already qualified (module.entity.action)
-	}
-	if len(parts) == 2 {
-		// 2 segments — treat as unqualified {entity}.{action}
-		// Unless the first segment is our own module name (redundant)
-		if parts[0] == module {
-			return perm // "billing.list" with module billing → keep
-		}
-		return module + "." + perm // "invoices.list" → "billing.invoices.list"
-	}
-	// 1 segment — bare action name
-	return module + "." + perm
+	return spec.QualifyPermission(perm, module)
 }
 
 // ParseResourceTarget parses a resource use string into module/entity/action.

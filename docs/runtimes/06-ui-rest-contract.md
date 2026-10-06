@@ -107,19 +107,81 @@ Kode error: `VALIDATION_ERROR` (422), `UNAUTHORIZED` (401), `FORBIDDEN` (403),
   engine untuk membatasi baris, dan nilainya tidak bisa dilebarkan klien
   ([`../spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §1.7).
 
-## 5. Surface publik
+## 5. Surface approval — `…/_ui/workflow/…`
+
+`kind: ApprovalInbox` ([`../kind/ui/ApprovalInbox.md`](../kind/ui/ApprovalInbox.md))
+adalah **satu-satunya kind yang sumbernya bukan entity**: barisnya hidup di tabel
+framework `formspec_workflow_approval`, jadi tidak ada route entity yang bisa
+mengeksposnya. Karena itu ia punya surface sendiri, di `/_ui/` dan bukan
+`/api/v1/` — sama seperti `print`.
+
+```
+GET  /{workspace}/_ui/workflow/approvals?app={app}
+POST /{workspace}/_ui/workflow/approvals/{id}   → {"decision":"approve"|"reject"}
+```
+
+`GET` membalas `{ data: [ … ], meta: { … } }` (envelope §3) dengan item:
+
+| Field                                      | Isi                                                                                                                                                                   |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                       | id baris approval — dipakai oleh `POST`                                                                                                                               |
+| `entity`, `record_id`                      | record yang sedang diputuskan                                                                                                                                         |
+| `workflow`, `workflow_module`              | approval gate yang mengawal transisi — namanya `{entity}.{transition}` (field dipertahankan demi kompatibilitas klien)                                                |
+| `from`, `to`, `active_step`, `total_steps` | transisi yang menunggu dan posisi step                                                                                                                                |
+| `title`, `description`                     | label tugas dari `steps[].title`/`description`; diisi dari nama transisi bila tak dideklarasikan                                                                      |
+| `display_fields`                           | `[{ field, label?, type?, value }]` — nilai record yang approver butuhkan (`label`/`type` diambil dari deklarasi field entity, jadi klien memformatnya seperti tabel) |
+| `can_decide`                               | pemanggil memegang permission yang menggerbangi transisi itu                                                                                                          |
+
+Aturan yang **bukan** detail implementasi:
+
+- **Barisnya sudah tersaring, bukan daftar penuh.** Yang dikembalikan hanya tugas
+  yang boleh ditindak pemanggil: App yang dipakai (module-nya), workspace-nya, dan
+  langkah yang role-nya dipegang pemanggil. Pemohon **tidak pernah** melihat
+  permintaannya sendiri (§ core-extended 7.4.5).
+- **`can_decide` memisahkan dua pertanyaan.** Role pada langkah menentukan apa
+  yang **terdaftar** (`list`), sedangkan permission yang menggerbangi route
+  transisi menentukan apa yang bisa **dijalankan** (`POST`). Tugas dengan
+  `can_decide: false` tetap terdaftar — itu antrean pemanggil — tetapi `POST`
+  membalas `403`.
+- **`display_fields` hanya terisi bila pemanggil memegang
+  `{module}.{plural}.view`.** Tugasnya tetap terlihat; nilainya tidak. Membaca
+  record demi label tugas tidak boleh menjadi jalan memutar izin baca.
+- **Nilai `display_fields` jatuh ke input pemohon.** Transisi yang di-intercept
+  tidak menulis apa pun sampai approval selesai, jadi sebuah field yang diisi
+  pemohon (`void_reason`) hanya ada di `params` baris approval. Nilai record tetap
+  menang bila sudah ada.
+- **`POST` mendelegasikan ke mesin approval yang sama** dengan halaman record
+  (`PATCH`/aksi transisi): quorum, larangan menyetujui permintaan sendiri, audit
+  bertanda tangan, dan emit event transisi semuanya berlaku. `403`/`409` yang
+  sama juga bisa muncul di sini — lihat §4 core-extended.
+- **Idempotensi bukan milik endpoint ini.** Tugas yang sudah diputuskan hilang dari
+  daftar (`status` berubah dari `pending`), jadi keputusan kedua membalas `404`
+  alih-alih “sukses” kedua kali.
+- **`app` opsional** bila workspace hanya punya satu App atau sesi sudah terikat
+  pada satu App. Bila lebih dari satu dan tidak ada yang ditunjuk, permintaan
+  ditolak — sama seperti `/_meta/ui`.
+- **Realtime belum berlaku** untuk permukaan ini: hub WS mendorong per
+  `{module}/{entity}`, sedangkan approval bukan entity (`realtime: true` pada kind
+  belum dihormati — todo 5.13.7 ⏸️). Klien harus me-refresh.
+
+`GET /_ui/print/{module}/{name}/{id}` (§7) adalah endpoint non-entity lain di
+surface yang sama; keduanya berada di `/_ui/` karena memakai autentikasi sesi,
+bukan `spec.expose`.
+
+## 6. Surface publik
 
 App dengan `access: public` membuka sebagian endpoint untuk anonim, tetapi hanya
-pasangan entity+aksi yang didaftarkan di `public_entities`, dan sebuah grant boleh
-membatasi **baris**-nya lewat `scope`
+entity+aksi yang **dibaca view publiknya** — grant itu **diturunkan** dari
+permukaan App, dan sebuah grant boleh membatasi **baris**-nya lewat scope yang
+berasal dari `param` route pada Table block
 ([`../spec/frontend/05-app-kinds.md`](../spec/frontend/05-app-kinds.md) §1.1).
 Ringkasnya: grant berlaku untuk **anonim**; pemanggil yang sudah terautentikasi
 tetap wajib memegang permission entity itu.
 
-## 6. Di luar cakupan halaman ini
+## 7. Di luar cakupan halaman ini
 
 Surface eksternal (`/{workspace}/api/v1/…`) punya kontrak terpisah dan
 deny-by-default lewat `spec.expose` (§8.2/§8.4). Print, Report, dan dashboard
-memakai endpoint-nya sendiri di surface yang sama; kontrak HTTP per entity
-dicetak oleh `formspec describe`, sedangkan kontrak kind ada di
-[`../kind/`](../kind/).
+memakai endpoint-nya sendiri di surface yang sama (§5 mencakup approval);
+kontrak HTTP per entity dicetak oleh `formspec describe`, sedangkan kontrak kind
+ada di [`../kind/`](../kind/).

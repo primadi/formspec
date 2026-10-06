@@ -470,6 +470,8 @@ func (r *ResourceAPI) builtinCreate() *starlark.Builtin {
 		newRes.saveFn = r.saveFn
 		newRes.callFn = r.callFn
 		newRes.loadFn = r.loadFn
+		newRes.findFn = r.findFn
+		newRes.upsertFn = r.upsertFn
 		newRes.createFn = r.createFn
 		return newRes, nil
 	})
@@ -489,10 +491,13 @@ func (r *ResourceAPI) builtinNew() *starlark.Builtin {
 	) (starlark.Value, error) {
 		newRes := NewResourceAPI(r.Module, r.Entity, "", 0, make(map[string]any))
 		// Propagate handlers so the new handle can .set()/.save()/.call()/
-		// .fetch()/.create()/.new() from — save() with ID "" inserts.
+		// .fetch()/.find()/.upsert()/.create()/.new() from — save() with ID ""
+		// inserts.
 		newRes.saveFn = r.saveFn
 		newRes.callFn = r.callFn
 		newRes.loadFn = r.loadFn
+		newRes.findFn = r.findFn
+		newRes.upsertFn = r.upsertFn
 		newRes.createFn = r.createFn
 		return newRes, nil
 	})

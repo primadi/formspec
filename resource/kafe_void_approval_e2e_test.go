@@ -37,8 +37,13 @@ import (
 //
 // Roles ride in the JWT's `roles` claim straight from the user record
 // (`IssueAccessToken`: `Roles: u.Roles`), which is what `CanApprove` reads — so
-// the workflow's `roles: [cafe-order.supervisor]` step is satisfied by the
-// supervisor seeded here and by nobody else.
+// the workflow's `roles: [supervisor]` step is satisfied by the supervisor
+// seeded here and by nobody else.
+//
+// The name is the SEEDED role name (`supervisor`), not the module-qualified
+// spelling the workflow used to carry: role names are compared literally and
+// role records are looked up exactly, so `cafe-order.supervisor` resolved to no
+// role at all (kafe 5.13.8).
 func seedKafeRoleToken(t *testing.T, app *App, username string, roles []string) string {
 	t.Helper()
 	api.ResetAuthRateLimiters()
@@ -114,7 +119,7 @@ func TestKafe_VoidOrder_ReasonRequiredThenSupervisorApproval(t *testing.T) {
 	seedKafeAccounts(t, app)
 
 	cashier := seedKafeRoleToken(t, app, "kasir", []string{})
-	supervisor := seedKafeRoleToken(t, app, "supervisor", []string{"cafe-order.supervisor"})
+	supervisor := seedKafeRoleToken(t, app, "supervisor", []string{"supervisor"})
 
 	const guestToken = "E2E-GUEST-TOKEN-VOID"
 	createSession(t, app, admin, ids.tableID, ids.branchID, guestToken)
@@ -214,7 +219,7 @@ func TestKafe_VoidOrder_EmitsOnCancel(t *testing.T) {
 	seedKafeAccounts(t, app)
 
 	cashier := seedKafeRoleToken(t, app, "kasir-emit", []string{})
-	supervisor := seedKafeRoleToken(t, app, "supervisor-emit", []string{"cafe-order.supervisor"})
+	supervisor := seedKafeRoleToken(t, app, "supervisor-emit", []string{"supervisor"})
 
 	const guestToken = "E2E-GUEST-TOKEN-VOID-EMIT"
 	createSession(t, app, admin, ids.tableID, ids.branchID, guestToken)

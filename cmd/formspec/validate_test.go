@@ -128,41 +128,52 @@ spec:
 	}
 }
 
-func TestValidateSchema_WorkflowStatesRejected(t *testing.T) {
+func TestValidateSchema_WorkflowKindRejected(t *testing.T) {
 	ksc := newTestCompiler(t)
-	// The stale Workflow shape (custom states/transitions) must be rejected.
+	// `kind: Workflow` is gone: approval is declared ON the entity transition it
+	// gates, so a separate Workflow manifest is an unknown kind now.
 	doc := `
 apiVersion: formspec.dev/v1
 kind: Workflow
 metadata: { name: wf, module: gl }
 spec:
   entity: gl.journal-entry
-  states:
-    - { name: draft }
-  transitions:
-    - { from: draft, to: posted, action: post }
+  on: { transition: { name: post } }
 `
-	errMsg := validateSchemaString(t, ksc, doc)
-	if errMsg == "" {
-		t.Fatal("expected stale Workflow shape to be rejected by schema")
+	if errMsg := validateSchemaString(t, ksc, doc); errMsg == "" {
+		t.Fatal("expected the removed Workflow kind to be rejected by schema")
 	}
 }
 
-func TestValidateSchema_CanonicalWorkflowAccepted(t *testing.T) {
+func TestValidateSchema_CanonicalApprovalAccepted(t *testing.T) {
 	ksc := newTestCompiler(t)
 	doc := `
 apiVersion: formspec.dev/v1
-kind: Workflow
-metadata: { name: wf, module: gl }
+kind: Entity
+metadata: { name: journal-entry, module: gl }
 spec:
-  entity: gl.journal-entry
-  on: { transition: { from: draft, to: posted } }
-  steps:
-    - { roles: [gl.supervisor], approvers: 1 }
-  on_reject: { to: rejected }
+  version: v1
+  characteristic: transaction
+  fields:
+    - { name: status, type: string }
+  state_machine:
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Draft" }
+      - { name: posted, label: "Posted" }
+      - { name: rejected, label: "Rejected" }
+    transitions:
+      - from: draft
+        to: posted
+        via: post
+        approval:
+          steps:
+            - { name: supervisor-check, permission: supervisor-check, roles: [gl.supervisor], approvers: 1 }
+          on_reject: { to: rejected }
 `
 	if errMsg := validateSchemaString(t, ksc, doc); errMsg != "" {
-		t.Fatalf("expected canonical Workflow to pass, got: %s", errMsg)
+		t.Fatalf("expected canonical inline approval to pass, got: %s", errMsg)
 	}
 }
 

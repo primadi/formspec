@@ -3,8 +3,10 @@ package main
 import (
 	"testing"
 
+	"github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -117,43 +119,71 @@ func TestKafeAssignmentSources_EmployeeMapsUsernameToBranch(t *testing.T) {
 }
 
 // A public grant that constrains rows carries its own scope; anything else
-// anonymous would be unfiltered, which is what the allowlist exists to prevent.
+// anonymous would be unfiltered, which is what the derivation exists to prevent.
+//
+// The allowlist is no longer written in the manifest — it is derived from the
+// App's surface (plan docs_internal/plan/implicit-public-grants.md), so this
+// test derives from the same kafe tree and checks the invariants on the result.
 func TestKafePublicGrants_ScopedWhereRowsMatter(t *testing.T) {
-	res, err := manifest.NewLoader("../../examples/kafe/spec").LoadAll()
+	const specPath = "../../examples/kafe/spec"
+
+	loaded, err := manifest.NewLoader(specPath).LoadAll()
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	sawScoped := false
-	for _, m := range res.Manifests {
-		if spec.Kind(m.Kind) != spec.KindApp {
-			continue
-		}
-		sm, ok := m.Spec.(map[string]any)
-		if !ok {
-			continue
-		}
-		as, err := manifest.RawSpecToAppSpec(sm)
-		if err != nil || as.PublicEntities == nil {
-			continue
-		}
-		for _, decl := range *as.PublicEntities {
-			if len(decl.Scope) == 0 {
+	uiReg := ui.NewRegistry()
+	if errs := uiReg.LoadDir(specPath); len(errs) > 0 {
+		t.Fatalf("load UI manifests: %v", errs)
+	}
+	apps, err := app.Resolve(loaded.Manifests, uiReg)
+	if err != nil {
+		t.Fatalf("resolve apps: %v", err)
+	}
+
+	// An EntityLister over the same tree.
+	lister := func() []ui.EntityDescriptor {
+		var out []ui.EntityDescriptor
+		for _, m := range loaded.Manifests {
+			if spec.Kind(m.Kind) != spec.KindEntity {
 				continue
 			}
-			sawScoped = true
+			sm, ok := m.Spec.(map[string]any)
+			if !ok {
+				continue
+			}
+			es, err := manifest.RawSpecToEntitySpec(sm)
+			if err != nil {
+				continue
+			}
+			out = append(out, ui.EntityDescriptor{Module: m.Metadata.Module, Name: m.Metadata.Name, Spec: es})
+		}
+		return out
+	}
+
+	sawScoped := false
+	for name, a := range apps {
+		if a.Spec == nil || a.Spec.Access != spec.AppAccessPublic {
+			continue
+		}
+		for _, decl := range uiReg.DerivePublicGrants(lister, ui.PublicGrantInput{
+			Modules:         a.Modules,
+			Menu:            a.Menu,
+			RegisteredViews: a.Spec.RegisteredViews,
+		}) {
 			for _, sc := range decl.Scope {
 				if sc.From != "route" {
-					t.Errorf("%s: public grant %s must scope from a route parameter, got from=%q", m.Metadata.Name, decl.Entity, sc.From)
+					t.Errorf("%s: public grant %s must scope from a route parameter, got from=%q", name, decl.Entity, sc.From)
 				}
+				sawScoped = true
 			}
 			for _, act := range decl.Actions {
-				if act == "find" {
-					t.Errorf("%s: grant %s both declares a scope and grants find — find resolves by id and cannot be guarded", m.Metadata.Name, decl.Entity)
+				if act == "find" && len(decl.Scope) > 0 {
+					t.Errorf("%s: grant %s both declares a scope and grants find — find resolves by id and cannot be guarded", name, decl.Entity)
 				}
 			}
 		}
 	}
 	if !sawScoped {
-		t.Fatal("expected at least one public grant to constrain its rows (order by guest token, prices by branch)")
+		t.Fatal("expected at least one public grant to constrain its rows (order by guest token)")
 	}
 }

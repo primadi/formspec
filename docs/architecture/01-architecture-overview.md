@@ -5,7 +5,7 @@
 **License:** Creative Commons CC0
 **Governed by:** FormSpec Overview · FormSpec Reference
 
-> Dokumen ini menjelaskan arsitektur deployment FormSpec secara end-to-end: topology multi-region, tiga level kontrol, admin surfaces, deployment tiers, security model, dan semua keputusan desain arsitektur (D-ARCH-1 s/d D-ARCH-31).
+> Dokumen ini menjelaskan arsitektur deployment FormSpec secara end-to-end: topology multi-region, tiga level kontrol, admin surfaces, deployment tiers, security model, dan semua keputusan desain arsitektur (D-ARCH-1 s/d D-ARCH-32).
 
 ---
 
@@ -556,6 +556,7 @@ Untuk development dan small deployment, FormSpec berjalan dalam **standalone mod
 | D-ARCH-29 | ClusterClass model | Cloud Owner definisikan ClusterClass (SLA, spesifikasi, harga). Workspace owner pilih class + region |
 | D-ARCH-30 | Metering model | Per resource sebagai dasar, diagregasi per workspace untuk billing |
 | D-ARCH-31 | Workspace↔pod model | **1 workspace = 1 Deployment** (dedicated). Failover/scaling = K8s native. Tenant murah/gratis dilayani dengan scale-to-zero + resource request kecil per ClusterClass — bukan pool pod multi-workspace |
+| D-ARCH-32 | Topologi database | Satu PersistBackend (jsonb-persist) di atas dua engine. SQLite sah untuk deployment yang tidak pernah butuh replica kedua, scale-to-zero, atau restore per-tenant (standalone, on-prem, CI); tier shared economy dan seterusnya memakai PostgreSQL; enterprise memakai Postgres dedicated via `kind: Datastore` — lihat [`10-database-topology.md`](./10-database-topology.md) |
 
 ---
 

@@ -37,7 +37,8 @@ untuk pola umum atas koleksi child: `sum_line(field)` (menjumlahkan field
 numerik pada seluruh child record), `len(resource.items)` (jumlah record pada
 koleksi child), dan builtin agregat sejenis — sehingga guard seperti "total
 baris harus > 0 sebelum boleh submit" bisa ditulis tanpa handler terpisah.
-Approval berbasis role atas transisi adalah `kind: Workflow` (§2) — bukan
+Approval berbasis role atas transisi adalah field `approval` pada transisi itu
+sendiri (§2) — bukan
 bagian state machine dasar.
 
 ### 1.1 Denormalisasi Field Finansial (Normatif)
@@ -56,79 +57,86 @@ bebas, mis. suffix `_at_transaction`). Ini berbeda dari master snapshot
 saat archiving (§10) — snapshot finansial ini terjadi _setiap transaksi_,
 bukan cuma saat archive run.
 
-## 2. Workflow
+## 2. Approval
 
-Lifecycle sederhana cukup inline di Entity (§1). Approval berbasis role
-hidup di `kind: Workflow` dan **menempel tanpa mengubah Entity** — pola yang
-sama dengan Subscription (§3), diterapkan ke transisi state machine:
+Lifecycle sederhana cukup inline di Entity (§1). **Approval juga inline di
+Entity** — dideklarasikan pada transisi yang di-gate, lewat field `approval`:
 
 ```yaml
-apiVersion: formspec.dev/v1
-kind: Workflow
-metadata: { name: journal-posting-approval, module: gl }
-spec:
-  entity: gl.journal-entry
-  on: { transition: { from: draft, to: posted } }
-  steps:
-    - { roles: [gl.supervisor], approvers: 1 }
-    - {
-        roles: [gl.controller],
-        approvers: 1,
-        when: "resource.amount > 100000000",
-      }
-  on_reject: { to: rejected }
-  escalation: { after: 48h, notify_roles: [gl.manager] }
+state_machine:
+  field: status
+  transitions:
+    - from: [paid, in_kitchen, ready, served]
+      to: cancelled
+      via: void-order
+      require_permission: orders.void-order
+      approval:
+        steps:
+          # Duty: siapa boleh menyetujui ditentukan GRANT, bukan nama role
+          # di sini (§2.1) — permission-nya `workflow.cafe-order.order.void-order.supervisor-check`.
+          - name: supervisor-check
+            permission: supervisor-check
+            approvers: 1
+            mode: any
+            # Takeover bila menggantung: duty `manager-check`, di-grant di
+            # `seeds/roles.yaml`. Bukan nama role.
+            escalation: { after: 4h, reassign: manager-check }
+        on_reject: { to: paid }
 ```
 
-Transisi yang di-intercept baru eksekusi setelah seluruh step yang berlaku
-mencapai quorum-nya; approval adalah pernyataan bertanda tangan yang tercatat
-di audit. Eligibilitas approver = keanggotaan role per-App. **Pemohon tidak
-pernah bisa menyetujui permintaannya sendiri.** Workflow selalu tampil di
-output gabungan `formspec describe document` — perilaku yang menempel selalu
-ter-compile, tidak pernah tersembunyi.
+Approval pernah hidup di manifest `kind: Workflow` terpisah; kini ia menyatu
+dengan transisi yang di-gate. Alasannya konkret: (1) gate tidak bisa menyimpang
+dari hal yang di-gate, karena keduanya satu deklarasi; (2) transisi
+multi-origin tercover **by construction**, bukan oleh referensi yang harus
+dijaga tetap sinkron; (3) satu manifest lebih sedikit untuk dibaca. Yang tidak
+berubah: approval **menunda** transisi, ia tidak mengubah apa yang dilakukan
+transisi itu.
 
-Approval **menunda** transisi; ia tidak mengubah apa yang dilakukan transisi
-itu. Saat quorum tercapai, transisi dijalankan lengkap — penulisan state,
-`emit`-nya, dan audit — dalam satu tulisan. Sebuah transisi yang mendeklarasikan
-`emit` karena itu tetap memancarkan event-nya pada jalur ber-approval; kalau
-tidak, state akan berubah tanpa konsumennya diberi tahu (terukur pada kafe
-`void-order`: order menjadi `cancelled` sementara mejanya tetap `occupied`,
-sehingga tamu berikutnya tidak bisa check-in).
+**Alur.** Saat transisi ber-`approval` dipanggil pertama kali, transisi **tidak**
+langsung dieksekusi: request mengembalikan **202** dengan status
+`approval_required`, dan satu baris approval pending dibuat. Record **belum
+berubah**. Panggilan berikutnya membawa keputusan (`{"decision": "approve"}` atau
+`{"decision": "reject"}`). Setelah seluruh step yang berlaku mencapai quorum,
+transisi dieksekusi lengkap — penulisan state, `emit`-nya, dan audit — dalam satu
+tulisan. Sebuah transisi yang mendeklarasikan `emit` karena itu tetap memancarkan
+event-nya pada jalur ber-approval; kalau tidak, state akan berubah tanpa
+konsumennya diberi tahu (terukur pada kafe `void-order`: order menjadi
+`cancelled` sementara mejanya tetap `occupied`, sehingga tamu berikutnya tidak
+bisa check-in). Tolak memindahkan record ke `on_reject.to`.
+
+Eligibilitas approver = memegang duty step ATAU salah satu role-nya, dan
+**pemohon tidak pernah bisa menyetujui permintaannya sendiri**. Approval selalu
+tampil di output gabungan `formspec describe document` — perilaku yang menempel
+selalu ter-compile, tidak pernah tersembunyi.
 
 Input yang dikumpulkan pemohon juga melewati approval: nilainya disimpan
 bersama baris approval dan diterapkan saat eksekusi, sehingga approver tidak
 perlu mengetik ulang alasan orang lain — dan bila approver mengirim nilai
 sendiri, nilai itu yang menang.
 
-#### 2.0.1 Merujuk transisi: lewat `name`, bukan pasangan state
+#### 2.0.1 Transisi yang di-gate
 
-Pemicu menerima dua bentuk, dan keduanya **saling eksklusif**:
-
-```yaml
-on:
-  transition: { name: void-order } # disarankan — mengawal SELURUH state asal
-  # transition: { from: paid, to: cancelled }  # bentuk pasangan state (satu state asal)
-```
-
-`name` adalah `via` transisi di state machine entity yang dideklarasikan, jadi
-satu referensi mengawal transisi itu **dari semua state asalnya**. Ini penting
-karena transisi boleh punya banyak state asal:
+`approval` melekat pada **transisi**, jadi ia diidentifikasi oleh `via` transisi
+itu — bukan oleh pasangan state. Satu deklarasi pada transisi
 
 ```yaml
-- { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order }
+- {
+    from: [paid, in_kitchen, ready, served],
+    to: cancelled,
+    via: void-order,
+    approval: { ... },
+  }
 ```
 
-Pasangan `from`/`to` hanya bisa menyebut **satu** state asal. Menulis
-`from: paid, to: cancelled` untuk transisi di atas berarti void dari
-`in_kitchen`/`ready`/`served` **tidak melewati approval sama sekali** — tanpa
-error, tanpa log. Karena itu `formspec validate` **menolak** pasangan `from`/`to`
-yang hanya mencakup sebagian transisi, dan menyebutkan `name` sebagai gantinya.
-Nama transisi yang tidak ada di entity juga ditolak — beserta daftar `via` yang
-tersedia — sehingga salah ketik tidak berakhir sebagai workflow yang tidak pernah
-memicu apa pun.
+mengawal transisi itu **dari semua state asalnya**; tidak ada selector yang bisa
+menyebut sebagian state asal, karena tidak ada selector sama sekali. Inilah yang
+membuat lubang lama — `from: paid, to: cancelled` yang hanya mengawal satu dari
+empat state asal, sehingga void dari `in_kitchen`/`ready`/`served` lolos approval
+tanpa error — **tidak bisa diekspresikan lagi**.
 
-Nama boleh ditulis berkualifikasi (`cafe-order.order.void-order`) dan diterima
-**hanya bila cocok** dengan `spec.entity`.
+Konsekuensinya: transisi **tanpa `via`** tidak bisa diberi approval, karena tidak
+ada nama untuk merujuknya. `formspec validate` menolak `approval` pada transisi
+tanpa `via` alih-alih menerima gerbang yang tidak pernah dikenali runtime.
 
 ### 2.1 Multi-Approver & Percabangan per Step
 
@@ -136,18 +144,106 @@ Satu step mendeklarasikan **berapa banyak** persetujuan yang dibutuhkan dan
 **bagaimana** persetujuan itu dikumpulkan:
 
 - `approvers: N` — kuorum: jumlah persetujuan berbeda yang harus terkumpul agar
-  step lolos (default `1`). Approver yang menghitung wajib memenuhi
-  `roles`-nya. `quorum` diterima sebagai alias `approvers`.
+  step lolos (default `1`). Approver yang menghitung wajib eligible untuk
+  step-nya (lihat `permission`/`roles` di bawah). `quorum` diterima sebagai alias
+  `approvers`.
 - `mode` — cara kuorum dikumpulkan di dalam satu step:
 
-  | `mode`          | Arti                                                                                                                     | Contoh                                  |
-  | --------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
-  | `all` (default) | Semua approver yang berhak wajib menyetujui — kuorum = jumlah yang berhak                                                | Dua direktur wajib tanda tangan bersama |
-  | `any`           | Cukup `approvers: N` dari kumpulan yang berhak (mana pun)                                                                | Salah satu dari tiga manajer cukup      |
-  | `sequential`    | Approver menyetujui **berurutan** sesuai urutan `roles`; approver berikutnya baru bisa bertindak setelah yang sebelumnya | Rantai atasan berjenjang                |
+  | `mode`               | Arti                                                                                                                                                                                  | Contoh                             |
+  | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+  | _(absen)_ atau `any` | Kuorum = `approvers` (default `1`), diambil dari kumpulan yang eligible                                                                                                               | Salah satu dari tiga manajer cukup |
+  | `sequential`         | Approver menyetujui **berurutan** sesuai urutan `roles`; approver berikutnya baru bisa bertindak setelah yang sebelumnya. Kuorum = jumlah `roles` (satu tanda tangan per mata rantai) | Rantai atasan berjenjang           |
+  | `all`                | ⛔ **ditolak `formspec validate`**                                                                                                                                                    | —                                  |
 
   `mode` mengatur pengumpulan **di dalam** satu step; urutan **antar** step selalu
   berurutan (step 2 tidak mulai sebelum step 1 lolos).
+
+  **Kenapa `all` ditolak.** Ia menjanjikan "semua approver yang berhak wajib
+  menyetujui" — sebuah jumlah yang **tidak bisa diturunkan dari manifest**: daftar
+  `roles` bukan daftar orang (satu orang bisa memegang dua role, satu role bisa
+  dipegang banyak orang), dan pemegang sebuah `permission` tidak bisa dienumerasi
+  sama sekali. Runtime dulu menjawabnya dengan `len(roles)` — jumlah **nama**,
+  bukan jumlah orang — sehingga `roles: [a, b]` yang dipegang satu orang menuntut
+  dua tanda tangan dari orang yang mustahil memberikannya (approval ganda untuk
+  satu step ditolak), dan step itu tidak akan pernah bisa disetujui. Menolak
+  deklarasinya lebih jujur daripada menyimpan angka yang tidak benar. Manifest
+  yang tidak menulis `mode` berperilaku persis seperti sebelumnya.
+
+  `mode: sequential` mengambil jumlahnya dari rantai itu sendiri, sehingga
+  `approvers` bersamanya ditolak (dua jawaban untuk satu pertanyaan), dan `roles`
+  wajib ada (rantai itulah urutannya). `permission` tidak boleh digabung dengan
+  `sequential`: rantai diurutkan oleh `roles`, sedangkan duty adalah permission
+  datar yang tidak punya posisi di urutan itu — dan kedua jawaban atas "bolehkah
+  pemegang duty mengambil giliran role lain?" sama-sama merugikan, jadi
+  kombinasinya ditolak alih-alih dipilih diam-diam.
+
+- `name`, `permission`, `roles` — **siapa** yang boleh menyetujui step ini, dan
+  apa nama step-nya.
+
+  **`permission` adalah bentuk yang dituju:** approval dinyatakan sebagai
+  `resource + action`, bukan sebagai nama role di YAML. Nama pendek
+  (`supervisor-check`) di-qualify menjadi
+  `workflow.{module}.{workflow}.{step}` — **empat segmen**, sehingga ia tidak bisa
+  bertabrakan dengan permission entity (`{module}.{plural}.{action}`) dan tidak
+  terjangkau wildcard module seperti `cafe-order.*`. Nilai yang sudah
+  berkualifikasi diambil apa adanya.
+
+  Siapa yang memegangnya ditentukan di **grant role**, bukan di workflow:
+
+  ```yaml
+  # roles.yaml — duty di-grant seperti kind navigasi lain (`report:`, `print:`)
+  grants:
+    - {
+        page: "workflow:order-void-approval",
+        actions: [{ name: supervisor-check }],
+      }
+  ```
+
+  Efeknya bisa diperiksa: mencabut grant itu dari sebuah role mencabut hak
+  menyetujui orang-orangnya **tanpa menyentuh manifest workflow**.
+
+  **`roles` masih diterima, tetapi BUKAN bentuk yang dituju — dan hanya rantai
+  berurutan yang benar-benar membutuhkannya.** Dua hal berbeda, dan keduanya
+  sengaja tidak dihapus:
+  - **Bentuk yang dituju adalah duty** (`permission`). `roles` menulis **nama
+    role langsung di manifest**, yang AGENTS.md aturan 6 minta dihindari: sebuah
+    duty adalah `resource + action` yang di-grant (dan dicabut) dari seed role,
+    sehingga mengganti nama role tidak bisa diam-diam mematikan approval. Karena
+    itu `formspec validate` memberi **peringatan** (advisory, bukan error) untuk
+    step non-rantai yang bersandar pada `roles` saja, beserta grant yang perlu
+    ditambahkan.
+  - **`roles` TETAP WAJIB pada `mode: sequential`.** Rantai diurutkan oleh
+    `roles`, sedangkan duty adalah permission datar tanpa posisi di urutan itu;
+    kombinasi keduanya ditolak validator (§ kuorum di bawah). Jadi pada rantai,
+    `roles` bukan warisan — ia satu-satunya bentuk yang bisa menyatakan urutan,
+    dan step itu **tidak** diperingatkan.
+
+  `CanApprove` meloloskan pemanggil yang memegang **duty ATAU salah satu role**,
+  sehingga mengadopsi duty tidak menjadi flag day. Sebuah step wajib
+  mendeklarasikan **salah satu** dari keduanya — step dengan keduanya kosong
+  tidak bisa disetujui siapa pun (`hasAnyRole` atas daftar kosong bernilai false
+  untuk semua orang), dan `formspec validate` menolaknya alih-alih membiarkannya
+  menggantung.
+
+  **`name` adalah identitas step**, bukan hiasan: state approval yang tersimpan
+  (step aktif, langkah yang sudah menandatangani, step yang dieskalasi) menunjuk
+  step lewat **nama**, supaya menambah, menghapus, atau melewati step
+  tidak diam-diam mengalihkannya ke step lain. Ia
+  **wajib** bila step punya `escalation` (worker eskalasi tidak bisa melihat
+  record, jadi tidak bisa mengevaluasi `when` dan hanya bisa percaya nama) atau
+  `permission` (duty di-derive dari nama itu). Nama harus unik dalam satu workflow
+  dan berbentuk identifier (huruf kecil, angka, dash) karena ia muncul di
+  permission string, di grant, dan di riwayat approval.
+
+  Riwayat persetujuan disimpan per step dan di-key oleh identitas itu — bukan oleh
+  posisi. Konsekuensinya bisa diperiksa: menyisipkan step di depan tidak membuat
+  tanda tangan kemarin berpindah ke step baru, dan `when` yang membuat sebuah
+  step tidak berlaku tidak membuat tanda tangan berpindah arti. Step tanpa `name`
+  memakai bentuk `#index` sebagai key, yang tidak bisa bertabrakan dengan nama
+  (nama tidak boleh dimulai angka atau `#`). Baris yang ditulis sebelum aturan ini
+  berlaku tetap terbaca: key numeriknya diterima sebagai fallback, dan dipindahkan
+  ke key nama saat riwayat itu ditulis lagi — sehingga tanda tangan yang sudah
+  tercatat tidak pernah hilang dari hitungan kuorum.
 
 - `when` — kondisi FormSpecExpr atas `resource`: step hanya berlaku bila `when`
   bernilai true (mis. `resource.amount > 100000000`). Step yang tidak berlaku
@@ -162,14 +258,17 @@ Satu step mendeklarasikan **berapa banyak** persetujuan yang dibutuhkan dan
   void) tanpa membuka record sendiri. Setiap entri `display_fields` **wajib**
   menunjuk field yang benar-benar ada di entity workflow — `formspec validate`
   menolaknya bila tidak, karena field yang salah ketik akan tampil sebagai kolom
-  kosong (terbaca "tidak ada data", bukan "salah tulis").
+  kosong (terbaca "tidak ada data", bukan "salah tulis"). Nilainya dibaca dari
+  record, dan **jatuh ke input pemohon** bila record belum memilikinya (transisi
+  yang di-intercept tidak menulis apa pun sampai approval selesai).
 
   ```yaml
   steps:
-    - title: "Persetujuan Void Pesanan"
+    - name: supervisor-check
+      permission: supervisor-check
+      title: "Persetujuan Void Pesanan"
       description: "Periksa nomor pesanan, total, dan alasan void."
       display_fields: [number, total_amount, void_reason]
-      roles: [cafe-order.supervisor]
   ```
 
 - **Input pemohon bertahan melewati approval.** Transisi yang di-intercept boleh
@@ -191,38 +290,60 @@ Satu step mendeklarasikan **berapa banyak** persetujuan yang dibutuhkan dan
   adalah tempat yang benar untuk **mengumpulkannya** dari pemohon. Keduanya
   sering menunjuk field yang sama (`void_reason`) dengan peran berbeda.
 
-**Timeout & eskalasi.** `escalation.after` menandai durasi diam sebelum step
-dieskalasi; `notify_roles` diberi tahu, dan `reassign_roles` (opsional)
-memindahkan hak persetujuan ke role lain setelah durasi itu lewat — sehingga
-approval tidak menggantung selamanya karena satu orang cuti. Eskalasi,
-reassignment, setiap persetujuan, dan setiap penolakan **wajib** tercatat di
-audit trail bisnis (§11) — siapa, kapan, keputusan apa.
+**Timeout & eskalasi.** `escalation.after` (di **step**) menandai durasi diam
+sebelum step dieskalasi, dan `escalation.reassign` memindahkan hak persetujuan
+ke **duty** lain setelah durasi itu lewat — sehingga approval tidak menggantung
+selamanya karena satu orang cuti. Eskalasi, reassignment, setiap persetujuan, dan
+setiap penolakan **wajib** tercatat di audit trail bisnis (§11) — siapa, kapan,
+keputusan apa.
+
+`reassign` adalah **permission** (duty), bukan nama role — bentuk yang sama
+seperti `steps[].permission`. Nama pendek di-qualify jadi
+`workflow.{module}.{entity}.{transition}.{reassign}`, dan siapa memegangnya
+ditentukan GRANT di `seeds/roles.yaml`. Efeknya bisa diperiksa: mencabut grant
+itu mencabut hak takeover tanpa menyentuh manifest.
+
+Eskalasi ada **di step** — bentuk itu sendiri: `escalation` adalah field milik
+step. Tidak ada `escalation` di level `approval`. Tiga bentuk ditolak
+`formspec validate` karena tidak bisa menghasilkan apa pun: `after` tanpa
+`reassign`, `reassign` tanpa `after`, dan `reassign` yang menunjuk duty step itu
+sendiri — eskalasi ke orang yang **sudah** boleh menyetujui tidak mengubah
+apa-apa.
+
+**`notify_roles` dihapus**, bukan diganti kosa katanya. Notifikasi belum punya
+kanal sama sekali, jadi field itu tidak pernah bisa berbuat sesuatu; mengganti
+namanya menjadi permission tetap tidak memberi tahu siapa pun. Ia akan kembali
+sebagai field `notify` (duty) **saat kanalnya benar-benar ada** — bukan
+sebelumnya.
 
 ```yaml
-# Purchase order — dua approver paralel, salah satu jalur eskalasi
-kind: Workflow
-metadata: { name: po-approval, module: procurement }
-spec:
-  entity: procurement.purchase-order
-  on: { transition: { from: draft, to: approved } }
-  steps:
-    - roles: [procurement.manager]
-      approvers: 2                 # kuorum dua manajer
-      mode: any                    # dua mana pun dari kumpulan yang berhak
-      escalation: { after: 24h, reassign_roles: [procurement.head] }
-  on_reject: { to: rejected }
+# Purchase order — dua approver paralel, salah satu jalur eskalasi.
+# Approval menyatu pada transisi yang di-gate:
+state_machine:
+  field: status
+  transitions:
+    - from: draft
+      to: approved
+      via: approve
+      approval:
+        steps:
+          - name: manager-check
+            roles: [procurement.manager]
+            approvers: 2 # kuorum dua manajer
+            mode: any # dua mana pun dari kumpulan yang berhak
+            escalation: { after: 24h, reassign: head-review }
+        on_reject: { to: rejected }
 
-# Leave request — rantai berjenjang (atasan → HR)
-kind: Workflow
-metadata: { name: leave-approval, module: hr }
-spec:
-  entity: hr.leave-request
-  on: { transition: { from: submitted, to: approved } }
-  steps:
-    - { roles: [hr.line-manager], approvers: 1 }
-    - { roles: [hr.hr-officer],   approvers: 1,
-        when: "resource.days > 5" }         # cuti panjang butuh HR
-  on_reject: { to: rejected }
+    # Leave request — rantai berjenjang (atasan → HR), `when` melewati step yang
+    # tidak berlaku:
+    - from: submitted
+      to: approved
+      via: approve-leave
+      approval:
+        steps:
+          - { roles: [hr.line-manager], approvers: 1 }
+          - { roles: [hr.hr-officer], approvers: 1, when: "resource.days > 5" } # cuti panjang butuh HR
+        on_reject: { to: rejected }
 ```
 
 ## 3. Subscription & Event Delivery
@@ -245,11 +366,117 @@ panel) adalah _data, bukan manifest_ — manifest Subscription mendefinisikan
 apa yang ikut ter-ship bersama module, subscription dinamis mencatat pilihan
 operator, hidup di `formspec.core`.
 
-**Delivery channel** yang tersedia (di luar `queue`/`websocket`/`audit_log`
-Core Basic): `webhook` (keluar ke subscriber terdaftar, HMAC signed, retry),
-`notification` (bridge tipis ke module `formspec/notify` — template & channel
-provider live di module resmi, bukan di kontrak ini), `pubsub` (non-durable,
-at-most-once eksplisit).
+**Delivery channel** yang tersedia: `websocket` · `audit_log` · `queue` · `pubsub` ·
+`reliable_event` · `notification` · `webhook` — semuanya **terkirim** (lihat tabel
+status di bawah; `notification` lewat module resmi `formspec/notify`, `webhook`
+**unsigned** untuk sekarang).
+
+#### Status kanal — mana yang benar-benar terkirim
+
+Deklarasi yang diterima tetapi tidak dikirim adalah keadaan terburuk dari tiga:
+manifest **terlihat** terkonfigurasi, `formspec validate` hijau, dan outbox
+menandai entry-nya `completed` — jadi tidak ada satu pun data yang menunjukkan
+konsekuensinya tidak pernah terjadi. Karena itu status tiap kanal dinyatakan di
+sini, dan **ditegakkan**:
+
+| Kanal                                                              | Status       | Catatan                                                                                  |
+| ------------------------------------------------------------------ | ------------ | ---------------------------------------------------------------------------------------- |
+| `audit_log` · `websocket` · `pubsub` · `reliable_event`            | **terkirim** | —                                                                                        |
+| `queue` (pada `events[].deliver[]`)                                | **terkirim** | berjalan di **worker outbox** — job = Service action (di bawah)                          |
+| `notification`                                                     | **terkirim** | baris in-app ditulis framework (module `formspec/notify`); `handler:` opsional untuk email/WA/push |
+| `webhook` (keluar)                                                 | **terkirim** | **UNSIGNED**: tanpa HMAC, tanpa registry subscriber; endpoint dideklarasikan di manifest |
+| blok `delivery:` Tier-2 pada `kind: Subscription`                  | **inert**    | field-nya tidak dibaca runtime sama sekali — termasuk `retry`/`dead_letter` yang orang wajar harapkan ikut berlaku |
+
+Mekanisme pelaporan tetap ada untuk kanal berikutnya yang ditambahkan tanpa
+cabang delivery: `pkg/spec/delivery_channels.go` memuat daftar
+“dideklarasikan tetapi tidak dikirim”, dipakai validator **dan** runtime —
+saat ini **kosong**.
+
+**`notification` — notifikasi in-app, opsional plus kanal luar.** Entry-nya
+menulis baris `formspec.core.notification` untuk penerima yang disebut
+`recipient` (lintasan payload), itulah yang ditampilkan `kind: NotificationCenter`:
+
+```yaml
+deliver:
+  - channel: notification
+    notification:
+      recipient: "customer_id"          # lintasan payload → recipient_id
+      title: "Pesanan {number} dibayar" # template `{path}` atas payload
+      body: "Total {total}"
+      level: info                       # info | warning | critical
+    handler: "notify-jobs.send-email"   # OPSIONAL: Service action untuk kanal luar
+```
+
+`recipient` **wajib**: `recipient_id` inilah yang dicocokkan `row_scope` entity
+notifikasi, jadi baris tanpa penerima adalah baris yang **tidak bisa dibaca
+siapa pun** — validator menolaknya alih-alih menulis baris tak terlihat.
+`handler:` memakai kosa kata referensi yang **sama** dengan `job:`
+(`service.action` / `module.service.action`).
+
+**`webhook` — POST keluar, UNSIGNED.** Endpoint dinyatakan di tempat
+konsekuensinya berada:
+
+```yaml
+deliver:
+  - channel: webhook
+    webhook:
+      url: "https://example.com/hooks/order-paid"   # ATAU url_from di bawah
+      # url_from: { config: billing.webhook_url }   # endpoint milik deployment
+      headers: { X-Order: "{number}" }
+```
+
+Tepat **satu** dari `url:` / `url_from:` harus ada; keduanya atau tidak keduanya
+ditolak. Non-2xx dari penerima adalah **error** (outbox retry → dead-letter),
+bukan sukses.
+
+**Batas yang dinyatakan untuk `webhook`:** tidak ada HMAC signature dan tidak ada
+registry subscriber — endpoint disimpan di manifest/config, bukan per-langganan.
+Menandatangani butuh penyimpanan secret per-subscriber, dan mengumumkan signature
+yang runtime belum bisa menghasilkan justru promise yang file ini terus tolak.
+Sampai itu ada, `webhook` keluar hanya boleh dipakai untuk penerima yang memang
+tidak menuntut verifikasi.
+
+**`queue` — job latar sebagai Service action.** Entry `queue` menamai
+**Service action**, ditulis `service.action` (module = module publisher) atau
+`module.service.action`:
+
+```yaml
+deliver:
+  - { channel: queue, job: receipt-jobs.generate-receipt } # billing.receipt-jobs.generate-receipt
+  - { channel: queue, job: gl.journal-jobs.post } # lintas module
+```
+
+Rumahnya `kind: Service` — sebuah job adalah komputasi tanpa state, dan Service
+sudah membawa resolusi `impl`, penegakan `uses`/permission, serta dispatcher yang
+sama — jadi tidak ada registry job handler tersendiri untuk dipelajari dan
+dijaga sinkron. **`job:` wajib**: tanpa nama, worker tidak punya apa pun untuk
+dipanggil, dan `formspec validate` menolaknya. Nama yang tidak menunjuk Service
+action yang ada juga ditolak (`formspec validate`), karena bentuk itu hijau di
+validator tetapi dead-letter di runtime.
+
+**Antreannya adalah outbox.** `ValidateEventDurability` sudah mewajibkan
+`publish.durable: true` untuk channel `queue`, jadi event-nya toh masuk outbox;
+worker outbox yang mem-poll, memanggil job, dan me-retry dengan backoff lalu
+dead-letter. Tidak ada tabel queue kedua — dua mekanisme retry untuk satu jaminan
+adalah duplikasi yang justru membuat keduanya sulit dipercaya. Batas yang
+dinyatakan: **tidak ada worker paralel**, jadi throughput sebuah job terikat
+poll interval outbox (default ~1s). Untuk throughput tinggi, queue sungguhan
+(Redis/Kafka) adalah pekerjaan tersendiri — bukan yang diklaim di sini.
+
+Batasnya ditegakkan dua arah, dan keduanya normatif:
+
+1. **`formspec validate` melaporkan** setiap kanal yang tidak akan terkirim
+   (severity _warning_, tidak menggagalkan — `queue` masih dipakai `verticals/*`),
+   jadi hijau tidak bisa lagi disalahartikan sebagai "kanal ini bekerja".
+2. **Runtime tidak mengaku sukses.** Kanal yang tidak dikenal/dikirim
+   **menggagalkan delivery**: outbox me-retry lalu **dead-letter**
+   (`formspec_outbox.status='failed'`), sehingga kegagalannya terlihat di data.
+   Pada jalur non-durable (tanpa retry) sinyalnya adalah log **error**.
+
+Catatan penting yang mudah tertukar: `webhook` **sudah** terimplementasi di jalur
+lain — `callback.channel: webhook` pada action Service async (§13.1), yang
+mengirim hasil job ke URL dari header pemanggil. Yang belum adalah webhook
+**keluar** sebagai konsekuensi event.
 
 **`emits:` — event kustom sebagai event source.** Selain event lifecycle
 reserved (`before_*`/`on_*`, [`01-core-basic.md`](01-core-basic.md) §7), sebuah

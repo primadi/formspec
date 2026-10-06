@@ -12,7 +12,11 @@ spec:
   parameters:
     - { field: work_type, label: "Work Type", type: "select" }
     - { field: status, label: "Status", type: "select" }
-    - { field: transaction_date, label: "Periode", type: "date_range" }
+    # Periode = dua tanggal, bukan `date_range`: `ReportParam.type` tidak punya
+    # `date_range` (itu kosa kata *FilterSpec*, terpisah). Bentuk dua tanggal
+    # inilah yang dipakai contoh normatif `06-page-kinds.md` §8.
+    - { field: date_from, label: "Periode Dari", type: "date" }
+    - { field: date_to, label: "Periode Sampai", type: "date" }
   groups:
     - { field: status, label: "Status" }
   columns:

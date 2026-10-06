@@ -213,7 +213,7 @@ func SystemTableDDLs(driver DriverType) []string {
 		),
 
 		// formspec_workflow_approval — pending/active approval requests for
-		// kind: Workflow interception (02-core-extended.md §2). One row per
+		// transition approval gate (02-core-extended.md §2). One row per
 		// (tenant, entity, record, workflow) while approval is in flight.
 		createTableSQL(driver, "formspec_workflow_approval",
 			idColumn(driver),
@@ -227,10 +227,16 @@ func SystemTableDDLs(driver DriverType) []string {
 			"requester_id    text    NOT NULL DEFAULT ''",
 			"status          text    NOT NULL DEFAULT 'pending'",
 			"active_step     integer NOT NULL DEFAULT 0",
+			// active_step_name names the step active_step points at, for steps that
+			// declare a name. The index alone is ambiguous once `when` can skip
+			// steps: a consumer holding only the index (the escalation worker, which
+			// has no entity access) would read a different step than the one
+			// awaiting approval.
+			"active_step_name text   NOT NULL DEFAULT ''",
 			"approvals       text    NOT NULL DEFAULT '{}'",
 			"rejected_by     text    NOT NULL DEFAULT ''",
 			"reject_step     integer NOT NULL DEFAULT -1",
-			"escalated_steps text    NOT NULL DEFAULT '{}'", // stepIdx -> reassign_roles (7.4.4)
+			"escalated_steps text    NOT NULL DEFAULT '{}'", // stepKey -> reassignment duty (7.4.4)
 			// params carries the input values the REQUESTER supplied for the
 			// transition (plan action-input-contract, D5). Without it they were
 			// dropped: a 202 is returned before any write, so `void_reason` on the
@@ -388,16 +394,17 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 	// Ensure the escalated_steps and params columns exist on
 	// formspec_workflow_approval — each was added after the table's initial
 	// creation, so existing databases need an ALTER TABLE ADD COLUMN.
-	if err := r.ensureWorkflowApprovalColumn(ctx); err != nil {
+	if err := r.ensureApprovalColumn(ctx); err != nil {
 		return err
 	}
 	return nil
 }
 
-// ensureWorkflowApprovalColumn adds the columns formspec_workflow_approval
-// gained after its initial creation: escalated_steps (todo 7.4.4) and params
-// (plan action-input-contract).
-func (r *MigrationRunner) ensureWorkflowApprovalColumn(ctx context.Context) error {
+// ensureApprovalColumn adds the columns formspec_workflow_approval
+// gained after its initial creation: escalated_steps (todo 7.4.4), params
+// (plan action-input-contract), and active_step_name (plan
+// approval-duty-permission, Fase 2).
+func (r *MigrationRunner) ensureApprovalColumn(ctx context.Context) error {
 	existing, err := r.existingColumns(ctx, "", "formspec_workflow_approval")
 	if err != nil {
 		return fmt.Errorf("ensure workflow approval columns: list columns: %w", err)
@@ -412,6 +419,14 @@ func (r *MigrationRunner) ensureWorkflowApprovalColumn(ctx context.Context) erro
 		if _, err := r.db.ExecContext(ctx,
 			"ALTER TABLE formspec_workflow_approval ADD COLUMN params text NOT NULL DEFAULT '{}'"); err != nil {
 			return fmt.Errorf("ensure approval params: add column: %w", err)
+		}
+	}
+	// Rows written before this column existed keep the empty default and their
+	// consumers fall back to the index, which is exactly what they did before.
+	if !existing["active_step_name"] {
+		if _, err := r.db.ExecContext(ctx,
+			"ALTER TABLE formspec_workflow_approval ADD COLUMN active_step_name text NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("ensure active_step_name: add column: %w", err)
 		}
 	}
 	return nil

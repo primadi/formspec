@@ -86,6 +86,39 @@ func TestResourceAPI_Fetch_CrossModule(t *testing.T) {
 	}
 }
 
+func TestResourceAPI_New_PropagatesFindAndUpsertHandlers(t *testing.T) {
+	scriptPath := writeScript(t, ""+
+		"def execute(resource, params, ctx):\n"+
+		"    n = resource.new(\"order\")\n"+
+		"    found = n.find(\"cafe-order.order\", {\"code\": \"A1\"})\n"+
+		"    saved = n.upsert(\"cafe-stock.stock-level\", {\"ingredient_id\": \"I1\"}, {\"quantity_on_hand\": 7})\n"+
+		"    return ok({\"found\": found != None, \"upserted\": saved})\n")
+
+	res := NewResourceAPI("cafe-order", "order", "o-1", 1, map[string]any{})
+	res.SetFindFunc(func(module, entity string, match map[string]any) (map[string]any, int, string, error) {
+		return map[string]any{"code": "A1"}, 1, "o-2", nil
+	})
+	res.SetUpsertFunc(func(module, entity string, match, data map[string]any) (string, bool, error) {
+		return "sl-1", true, nil
+	})
+
+	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
+	ctxObj.Now = now
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
+	if err != nil {
+		t.Fatalf("ExecuteScript error: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("script failed: %s", result.Error)
+	}
+	if result.Data["found"] != true {
+		t.Fatalf("new().find() should be callable on a fresh resource; got %#v", result.Data)
+	}
+	if result.Data["upserted"] == nil {
+		t.Fatalf("new().upsert() should be callable on a fresh resource; got %#v", result.Data)
+	}
+}
+
 func TestResourceAPI_Fetch_SameModule_Regression(t *testing.T) {
 	scriptPath := writeScript(t, ""+
 		"def execute(resource, params, ctx):\n"+

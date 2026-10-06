@@ -321,9 +321,33 @@ func moneyBuiltins() starlark.StringDict {
 		}
 		return starlark.String(m.currency), nil
 	})
+	// money_zero(x) — a zero money value in x's currency.
+	//
+	// Needed because money arithmetic refuses to mix money with a bare number
+	// (05-field-types.md §2.1: "tidak ada koersi diam-diam"), so an optional
+	// branch cannot fall back to the literal `0`. Writing `subtotal * 0`
+	// instead would work but reads as an accident in a manifest.
+	//
+	// The currency is taken from the operand rather than hardcoded, so a
+	// workspace that is not IDR keeps working — the same "never guess the
+	// currency" rule ResolveMoneyCurrency enforces.
+	moneyZeroFn := starlark.NewBuiltin("money_zero", func(
+		_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var v starlark.Value
+		if err := starlark.UnpackArgs("money_zero", args, kwargs, "value", &v); err != nil {
+			return nil, err
+		}
+		m, ok := v.(*moneyValue)
+		if !ok {
+			return nil, fmt.Errorf("money_zero(): expected a money value, got %s", v.Type())
+		}
+		return newMoneyValue("0", m.currency)
+	})
 	return starlark.StringDict{
 		"amount":         amountFn,
 		"currency":       currencyFn,
+		"money_zero":     moneyZeroFn,
 		"money_amount":   amountFn,
 		"money_currency": currencyFn,
 	}

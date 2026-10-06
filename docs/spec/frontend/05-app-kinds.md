@@ -28,45 +28,62 @@ workspace (`/`, `/barbershop`, `/app/kafe`, …) — server me-mount SPA shell
 dinamis di setiap `root_url`; `access` tidak lagi membatasi pilihan prefix.
 `app_renderer` hanya memilih chrome — tidak menyiratkan public/private.
 
-### 1.1 `public_entities` — allowlist anonim, dan scope-nya
+### 1.1 Grant anonim — diturunkan dari permukaan App
 
 `access: public` **tidak** berarti "seluruh module terbuka". App publik
-mendeklarasikan tepat apa yang boleh disentuh anonim:
+mengekspos tepat apa yang **view-nya benar-benar panggil** — dan itu
+**diturunkan**, bukan dideklarasikan ulang:
 
-```yaml
-spec:
-  access: public
-  public_entities:
-    # Katalog: boleh dibaca anonim, tanpa syarat tambahan.
-    - { entity: cafe-master.menu-item, actions: [list, find] }
-    # Pesanan: `create` terbuka (pelanggan memesan), `list` hanya BERSAMA
-    # token tamu — nilai token dibaca server dari query, bukan dari klien.
-    - entity: cafe-order.order
-      actions: [create, list]
-      scope:
-        - { field: guest_token, op: eq, from: route }
-```
+> **permukaan view** (target menu ∪ `registered_views`) **× `public` per-view**
+> → grant anonim (entity + aksi + scope baris).
 
-`actions` adalah himpunan tertutup (`list`, `find`, `create`, `update`,
-`delete`). Entri kosong (`actions: []`) ditolak; `public_entities: []` berarti
-"tidak ada yang anonim"; **absen** mempertahankan perilaku lama (list/find/create
-seluruh module) — deklarasikan allowlist-nya.
+Tidak ada field `public_entities` di manifest. Sebelumnya ada, dan ia bermasalah
+karena menduplikasi fakta yang sudah tersirat di view: Page sudah menyatakan
+`public: true`, field child dengan `picker` sudah menyebut entity sumber, Table
+sudah memberi `param` route yang menjadi scope baris. Daftar manual kedua kalinya
+hanya bisa **drift** — entri yang ditulis tetapi tidak pernah di-fetch klien, atau
+view baru yang lupa didaftarkan sehingga jalur yang seharusnya jalan malah 401.
 
-**`scope` adalah otorisasi per baris untuk pembacaan anonim.** Tanpa scope,
-"anonim boleh `list`" berarti anonim membaca **setiap baris** entity itu — itulah
-sebabnya grant semacam ini berbahaya, dan sebabnya scope ada:
+**Aturan turunannya adalah graf FETCH klien, bukan graf referensi spec.** Hanya
+konstruk yang membuat renderer mengirim request ke entity API yang memberi aksi:
 
-- Nilainya diambil dari **parameter request** (`param`, default nama field), jadi
-  klien tidak bisa melebarkannya — bukan `fixed_filters` yang di-merge browser.
+| Konstruk                                                              | Di-fetch klien    | Aksi                               |
+| --------------------------------------------------------------------- | ----------------- | ---------------------------------- |
+| Table block / Table / Kanban / Report / Listing / Timeline / Calendar | `list`            | `list`                             |
+| Form `mode: create`                                                   | `create`          | `create`                           |
+| Form `mode: edit`                                                     | `update` + `find` | `update`, `find`                   |
+| Form `mode: view` / kosong                                            | `find`            | `find`                             |
+| `context: {source: entity}`                                           | `find` by id      | `find`                             |
+| field child `picker.entity`                                           | `list`            | `list`                             |
+| `picker.display.price_entity`                                         | `list`            | `list`                             |
+| field `relation` yang ter-render (`RelationPicker`)                   | `list` + `find`   | `list`, `find`                     |
+| `registered_views: [{entity: X}]`                                     | derived CRUD      | `list`, `find`, `create`, `update` |
+
+Yang **tidak** memberi aksi — dan di sinilah presisinya:
+
+- **`picker.display.category_field`** — chip kategori dibaca dari baris yang sudah
+  dimuat, tidak ada request.
+- **kolom table ber-relasi** dan **`context`** yang di-inline server (alias
+  relasi) — label sudah ada di record.
+- **snapshot dan field `computed`** — nilai statis, atau dihitung server saat baca.
+- **field `widget: hidden`** — disimpan di state form, tidak di-mount, jadi tidak
+  ada kontrol yang fetch.
+
+`delete` **tidak pernah** diberikan implisit: ia operasi administratif yang
+tempatnya di App privat.
+
+**`scope` adalah otorisasi per baris untuk pembacaan anonim**, dan ia pun
+diturunkan: `param` pada Table block yang nilainya placeholder route
+(`{guest_token: ":guest_token"}`) menjadi filter baris yang ditegakkan server —
+nilainya datang dari route, jadi klien tidak bisa melebarkannya.
+
 - Parameter yang tidak ada **menolak permintaan** (403). Tidak pernah berarti
   "tanpa filter".
 - Nilai scope **menimpa** filter klien pada field yang sama.
-- Hanya `from: route` diterima. Permukaan publik tidak punya identitas sesi, jadi
-  scope `from: session` tidak akan pernah resolve dan akan menolak semua bacaan —
-  itu ditolak saat validasi, bukan dibiarkan jadi 403 tanpa gejala.
 - **`scope` tidak bisa digabung dengan `find`.** `find` me-resolve lewat id dan
   scope tidak bisa menjaganya, jadi kombinasi itu akan terlihat terfilter padahal
-  mengembalikan record apa pun yang id-nya diketahui — validator menolaknya.
+  mengembalikan record apa pun yang id-nya diketahui — turunan membuang `find`
+  pada grant ber-scope.
 
 **Grant adalah _floor_, bukan bypass permission.** Pada route yang sama,
 permintaan **sudah terautentikasi** yang memegang permission entity
@@ -80,13 +97,19 @@ terautentikasi tanpa permission tersebut — jatuh ke grant dan boleh melakukan
 persis apa yang boleh dilakukan tamu, tidak lebih; **scope grant ikut berlaku
 padanya**. Efektivitasnya `max(permission miliknya, grant publik)`.
 
-Fallback ini bukan kelonggaran: grant publik sudah publik (dideklarasikan di
-manifest dan dikirim apa adanya ke pengunjung anonim lewat bundle), dan jalur
+Fallback ini bukan kelonggaran: grant publik sudah publik (diturunkan dari view
+yang publik, dan dikirim apa adanya ke pengunjung anonim lewat bundle), dan jalur
 fallback tetap dibatasi `scope`. Tanpanya, pemanggil yang login justru **lebih
 buruk** daripada tamu di permukaan App itu sendiri — halaman katalog yang
 sebelumnya terbuka menjadi 404 begitu pengunjung menekan "Sign up" atau login
 lewat `chrome.auth`, dan `create` anonim (mis. pesan QR) berhenti bekerja untuk
 pelanggan yang sudah mendaftar.
+
+**Dua konsekuensi yang perlu disadari operator.** (1) Menaruh view staf di dalam
+App publik ikut membuka data view itu — itulah sebabnya view yang bukan untuk
+anonim harus `public: false`. (2) Grant di-union lintas App publik se-workspace
+saat registrasi route, karena `/_ui/entity` berskope workspace/module, bukan
+per-App.
 
 ### 1.2 `registered_views` — permukaan App
 
@@ -114,7 +137,7 @@ spec:
 Tepat satu dari `entity`/`view` per entri. `entity` menerima `module/entity`
 atau `module.entity`; modul **wajib** anggota `spec.modules`. Bentuknya salah →
 `validate`/`apply` menolak; view/entity yang tidak ada → ditolak saat resolve
-(boot). Tiga state pointer seperti `public_entities`:
+(boot). Tiga state seperti `public_entities` dulu:
 
 | Deklarasi                 | Efek                                                                  |
 | ------------------------- | --------------------------------------------------------------------- |
@@ -124,7 +147,7 @@ atau `module.entity`; modul **wajib** anggota `spec.modules`. Bentuknya salah �
 
 **Ini kurasi permukaan (least privilege), BUKAN gerbang otorisasi data.** Route
 data (`/_ui/entity/...`) berskope workspace/module, bukan per-App; RBAC dan
-`public_entities` tetap penjaga datanya. Konsekuensinya: entity yang tidak
+grant turunan (`§1.1`) tetap penjaga datanya. Konsekuensinya: entity yang tidak
 terdaftar **tetap dikirim** di bundle (agar relasi/picker tetap resolve) dengan
 penanda `routable: false` — klien tidak mendaftarkan route-nya, tetapi memilih
 entity itu tetap mengembalikan datanya (sesuai permission). Entity non-routable

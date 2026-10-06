@@ -23,11 +23,11 @@ Detail lengkap (Windows, `go install`, manual): [`install.md`](install.md).
 Satu hal yang perlu dipahami sebelum menulis YAML apa pun — **tiga file type
 saja** yang dikenal FormSpec:
 
-| Tipe     | Isi                                                    |
-| -------- | ------------------------------------------------------ |
-| `yaml`   | Deskripsi resource (manifest) — sumber kebenaran       |
-| `script` | Logic Starlark yang berjalan di sandbox                |
-| `asset`  | Komponen UI statis/custom (JS/TS)                      |
+| Tipe     | Isi                                              |
+| -------- | ------------------------------------------------ |
+| `yaml`   | Deskripsi resource (manifest) — sumber kebenaran |
+| `script` | Logic Starlark yang berjalan di sandbox          |
+| `asset`  | Komponen UI statis/custom (JS/TS)                |
 
 Tidak ada file `.env`, file route, atau file migration manual. Kalau Anda
 mencari tempat meletakkan salah satunya, itu tanda Anda harus mengekspresikannya
@@ -83,10 +83,10 @@ validasi tidak akan boot.
 Buka `spec/apps/tokoku.yaml`. Dua sumbu di sini **orthogonal** dan keduanya
 keputusan design-time (tidak bisa di-switch saat runtime):
 
-| Sumbu          | Nilai                                                     | Default        |
-| -------------- | --------------------------------------------------------- | -------------- |
-| `access`       | `private` (login wajib) · `public` (landing anonim)       | `private`      |
-| `app_renderer` | `sidebar-nav` · `topnav` · `no-nav`                       | `sidebar-nav`  |
+| Sumbu          | Nilai                                               | Default       |
+| -------------- | --------------------------------------------------- | ------------- |
+| `access`       | `private` (login wajib) · `public` (landing anonim) | `private`     |
+| `app_renderer` | `sidebar-nav` · `topnav` · `no-nav`                 | `sidebar-nav` |
 
 Tanyakan ke diri Anda (atau ke user Anda):
 
@@ -110,12 +110,12 @@ lifecycle-nya.
 Pilih **characteristic** yang tepat — ini menentukan strategi penyimpanan dan
 perilaku API:
 
-| Characteristic | Sifat                                                         |
-| -------------- | ------------------------------------------------------------- |
-| `master`       | Data stabil — kategori, produk, customer                     |
-| `transaction`  | Append-heavy, time-partitioned — order, invoice, jurnal       |
-| `reference`    | Read-only seed — provinsi, tarif pajak, chart of accounts     |
-| `summary`      | Projection yang dikelola sistem — tidak ada CUD via API       |
+| Characteristic | Sifat                                                     |
+| -------------- | --------------------------------------------------------- |
+| `master`       | Data stabil — kategori, produk, customer                  |
+| `transaction`  | Append-heavy, time-partitioned — order, invoice, jurnal   |
+| `reference`    | Read-only seed — provinsi, tarif pajak, chart of accounts |
+| `summary`      | Projection yang dikelola sistem — tidak ada CUD via API   |
 
 Buat entity pertama:
 
@@ -136,7 +136,7 @@ metadata:
   module: tokoku
   description: "Produk yang dijual"
 spec:
-  version: v1              # WAJIB — satu-satunya properti `required` di spec
+  version: v1 # WAJIB — satu-satunya properti `required` di spec
   characteristic: master
   plural: products
   fields:
@@ -195,12 +195,12 @@ formspec validate --spec spec
 
 Kesalahan paling sering di tahap ini — contoh pesan nyata dari validator:
 
-| Pesan                                                              | Artinya                                                          |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `schema: /spec: missing property 'version'`                        | `spec.version` belum diisi (satu-satunya field wajib)             |
-| `schema: /spec/characteristic: validation failed`                  | Nilai `characteristic` bukan `master`/`transaction`/…             |
-| `additional properties 'permissions' not allowed`                  | Permission tidak dideklarasikan di Entity (lihat di atas)        |
-| `reference: App mounts module(s) X, which no kind: Module declares` | Nama di `App.spec.modules` tidak cocok dengan Module mana pun    |
+| Pesan                                                               | Artinya                                                       |
+| ------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `schema: /spec: missing property 'version'`                         | `spec.version` belum diisi (satu-satunya field wajib)         |
+| `schema: /spec/characteristic: validation failed`                   | Nilai `characteristic` bukan `master`/`transaction`/…         |
+| `additional properties 'permissions' not allowed`                   | Permission tidak dideklarasikan di Entity (lihat di atas)     |
+| `reference: App mounts module(s) X, which no kind: Module declares` | Nama di `App.spec.modules` tidak cocok dengan Module mana pun |
 
 > **Belum divalidasi (jujur):** dua Entity dengan `metadata.name` sama di satu
 > module **tidak** dilaporkan sebagai error oleh `formspec validate`.
@@ -240,15 +240,15 @@ dimuat ulang tanpa restart.
 Saat behavior lupa tidak cukup (mis. "diskon maksimal 10%", "void transaksi
 butuh approval"), ada beberapa jalur — pilih yang paling sempit:
 
-| Kebutuhan                                        | Jalur                                        |
-| ------------------------------------------------ | -------------------------------------------- |
-| Validasi satu field (presence, panjang, range)   | `required` + `rules` pada field              |
-| Validasi antar-field dalam satu record           | `rules` field (`after:`/`before:`)           |
-| Logic di satu transisi state                     | `guard` pada transition                      |
-| Side-effect setelah action                       | `hooks: [{ point: after, script: ... }]`     |
-| Logic lintas-resource, sandboxed                 | `kind: Service` + Starlark                   |
-| Butuh performa / library Go                      | `kind: Service` + `impl: { type: native }`   |
-| Persetujuan sebelum transisi                     | `kind: Workflow`                             |
+| Kebutuhan                                      | Jalur                                      |
+| ---------------------------------------------- | ------------------------------------------ |
+| Validasi satu field (presence, panjang, range) | `required` + `rules` pada field            |
+| Validasi antar-field dalam satu record         | `rules` field (`after:`/`before:`)         |
+| Logic di satu transisi state                   | `guard` pada transition                    |
+| Side-effect setelah action                     | `hooks: [{ point: after, script: ... }]`   |
+| Logic lintas-resource, sandboxed               | `kind: Service` + Starlark                 |
+| Butuh performa / library Go                    | `kind: Service` + `impl: { type: native }` |
+| Persetujuan sebelum transisi                   | `state_machine.transitions[].approval`     |
 
 > Level validasi **L4–L6** (`business_rules`, `cross_validate`, `consistency`)
 > sudah ada di kontrak tapi **belum bisa dideklarasikan** di `pkg/spec` —
@@ -259,13 +259,13 @@ butuh approval"), ada beberapa jalur — pilih yang paling sempit:
 Contoh — guard pada transisi, di `entity.yaml` (terverifikasi lolos validasi):
 
 ```yaml
-    transitions:
-      - from: draft
-        to: active
-        via: activate
-        guard:
-          expression: "resource.stock >= 0"
-          message: "Stok tidak boleh negatif saat mengaktifkan produk"
+transitions:
+  - from: draft
+    to: active
+    via: activate
+    guard:
+      expression: "resource.stock >= 0"
+      message: "Stok tidak boleh negatif saat mengaktifkan produk"
 ```
 
 Script Starlark berjalan di sandbox dengan batas keras (wall-clock, memori,
@@ -277,15 +277,15 @@ tertutup: `ctx.db`, `ctx.cache`, `ctx.lock`, `ctx.queue`, `ctx.pubsub`,
 
 ## 6. Berikutnya
 
-| Saya ingin…                                        | Lihat                                                        |
-| -------------------------------------------------- | ------------------------------------------------------------ |
-| Referensi satu kind (atribut, contoh, gotcha)      | <https://docs.formspec.dev/kind/>                            |
-| Kontrak normatif (backend/frontend/platform)       | [`../spec/`](../spec/README.md)                              |
-| Tutorial alur bisnis lengkap                       | [`order-to-cash-tutorial.md`](order-to-cash-tutorial.md)     |
-| Bangun app dibantu AI agent                        | [`agent-assisted-app-development.md`](agent-assisted-app-development.md) |
-| Atur login, role, dan permission                   | [`authentication.md`](authentication.md)                     |
-| Reproduksi/ubah renderer atau persist backend      | [`authoring-a-page-renderer.md`](authoring-a-page-renderer.md), [`authoring-a-persist-backend.md`](authoring-a-persist-backend.md) |
-| Deploy ke produksi (`serve --mode=production`)     | [`../spec/platform/`](../spec/platform/README.md)            |
+| Saya ingin…                                    | Lihat                                                                                                                              |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Referensi satu kind (atribut, contoh, gotcha)  | <https://docs.formspec.dev/kind/>                                                                                                  |
+| Kontrak normatif (backend/frontend/platform)   | [`../spec/`](../spec/README.md)                                                                                                    |
+| Tutorial alur bisnis lengkap                   | [`order-to-cash-tutorial.md`](order-to-cash-tutorial.md)                                                                           |
+| Bangun app dibantu AI agent                    | [`agent-assisted-app-development.md`](agent-assisted-app-development.md)                                                           |
+| Atur login, role, dan permission               | [`authentication.md`](authentication.md)                                                                                           |
+| Reproduksi/ubah renderer atau persist backend  | [`authoring-a-page-renderer.md`](authoring-a-page-renderer.md), [`authoring-a-persist-backend.md`](authoring-a-persist-backend.md) |
+| Deploy ke produksi (`serve --mode=production`) | [`../spec/platform/`](../spec/platform/README.md)                                                                                  |
 
 ### Membangun dengan AI agent
 

@@ -15,7 +15,8 @@ spec:
     - table:
         # `param` meneruskan token dari route ke blok sebagai nilai filter.
         # Sejak 2.2 nilai ini BUKAN lagi satu-satunya pengaman: App `kafe-qr`
-        # mendeklarasikan `public_entities[].scope` pada `order`, jadi engine
+        # mendeklarasikan scope turunan pada `order` (dari `param` route),
+        # jadi engine
         # sendiri yang membatasi `list` anonim ke baris dengan token itu —
         # klien tidak bisa menghilangkannya, dan permintaan tanpa token ditolak.
         ref: order-table-customer

@@ -103,4 +103,38 @@ func TestValidateDanglingRefs(t *testing.T) {
 			t.Fatalf("expected rejection of the nested dangling view, got %v", rejects)
 		}
 	})
+
+	// Regression (kafe-pos, todo 5.25.9): Widget, Print, ApprovalInbox and
+	// NotificationCenter each have a client route registered by buildRoutes, but
+	// were absent from viewKinds — so a genuinely navigable menu entry
+	// (`view: approval-inbox:supervisor-inbox`) was refused with "would navigate
+	// nowhere". An author's only escape was to NOT put the view in the menu,
+	// which is the opposite of what the surface rule wants.
+	t.Run("every kind with a client route is accepted as a menu view", func(t *testing.T) {
+		view := func(kind, name string) manifest.RawManifest {
+			return manifest.RawManifest{
+				APIVersion: "formspec.dev/v1",
+				Kind:       kind,
+				Source:     "alpha/" + name + ".yaml",
+				Metadata:   manifest.RawMetadata{Name: name, Module: "alpha"},
+				Spec:       map[string]any{},
+			}
+		}
+		manifests := []manifest.RawManifest{module("alpha")}
+		menu := []any{}
+		for _, v := range []struct{ kind, name string }{
+			{"Widget", "catalog-metric"},
+			{"Print", "receipt"},
+			{"ApprovalInbox", "supervisor-inbox"},
+			{"NotificationCenter", "alerts"},
+		} {
+			manifests = append(manifests, view(v.kind, v.name))
+			menu = append(menu, map[string]any{"label": v.name, "view": v.name})
+		}
+		manifests = append(manifests, app([]any{"alpha"}, menu))
+
+		if rejects := validateDanglingRefs(manifests); len(rejects) != 0 {
+			t.Fatalf("expected these views to be accepted, got %v", rejects)
+		}
+	})
 }

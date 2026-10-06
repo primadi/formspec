@@ -279,7 +279,7 @@ func TestS10_RemainingClosedSets(t *testing.T) {
 	}
 
 	// EventDeliveryDecl.channel
-	for _, v := range []string{"audit_log", "websocket", "queue", "reliable_event"} {
+	for _, v := range []string{"audit_log", "websocket", "queue", "pubsub", "reliable_event"} {
 		if !IsEventChannel(v) {
 			t.Errorf("IsEventChannel(%q) = false, want true", v)
 		}
@@ -298,14 +298,14 @@ func TestS10_RemainingClosedSets(t *testing.T) {
 		t.Error("IsPrintFormat(\"docx\") = true, want false")
 	}
 
-	// WorkflowStep.mode
+	// ApprovalStep.mode
 	for _, v := range []string{"all", "any", "sequential"} {
-		if !IsWorkflowStepMode(v) {
-			t.Errorf("IsWorkflowStepMode(%q) = false, want true", v)
+		if !IsApprovalStepMode(v) {
+			t.Errorf("IsApprovalStepMode(%q) = false, want true", v)
 		}
 	}
-	if IsWorkflowStepMode("quorum") {
-		t.Error("IsWorkflowStepMode(\"quorum\") = true, want false")
+	if IsApprovalStepMode("quorum") {
+		t.Error("IsApprovalStepMode(\"quorum\") = true, want false")
 	}
 }
 
