@@ -32,12 +32,12 @@ WebSocket ke client yang sedang terhubung. Prinsip kuncinya:
 
 ### 2.1 Endpoint, auth, dan koneksi
 
-| Aspek        | Detail                                                                                                                                                                                                                             |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Endpoint     | `/{workspace}/_ui/_ws` (`internal/api/router.go` → `HandleWS` di `internal/api/wshub.go`)                                                                                                                                          |
-| Auth         | Utama: **single-use ticket** — `POST /{workspace}/_ui/_ws/ticket` (header `Authorization: Bearer`) mengembalikan `{ticket, expires_in}`; client connect dengan `?ticket=`. Fallback deprekasi: `?token=` (browser tidak bisa set header saat WS handshake)                                                                      |
-| Origin check | `websocket.Accept(..., &AcceptOptions{InsecureSkipVerify: true})` — diperlukan saat SPA diakses lewat reverse proxy dev (Vite) yang membuat `Origin` ≠ `Host`; auth tetap dijaga oleh AuthMiddleware + filter permission per-pesan |
-| Protocol     | Push-only untuk data; frame masuk dari client hanya subscription-control                                                                                                                                                           |
+| Aspek        | Detail                                                                                                                                                                                                                                                     |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint     | `/{workspace}/_ui/_ws` (`internal/api/router.go` → `HandleWS` di `internal/api/wshub.go`)                                                                                                                                                                  |
+| Auth         | Utama: **single-use ticket** — `POST /{workspace}/_ui/_ws/ticket` (header `Authorization: Bearer`) mengembalikan `{ticket, expires_in}`; client connect dengan `?ticket=`. Fallback deprekasi: `?token=` (browser tidak bisa set header saat WS handshake) |
+| Origin check | `websocket.Accept(..., &AcceptOptions{InsecureSkipVerify: true})` — diperlukan saat SPA diakses lewat reverse proxy dev (Vite) yang membuat `Origin` ≠ `Host`; auth tetap dijaga oleh AuthMiddleware + filter permission per-pesan                         |
+| Protocol     | Push-only untuk data; frame masuk dari client hanya subscription-control                                                                                                                                                                                   |
 
 **Ticket handshake (todo 5.8.4).** JWT full-lifetime di query string bocor ke
 access log proxy/server, riwayat browser, dan header `Referer`. Alur ticket
@@ -278,12 +278,12 @@ Semantik subscription server (`wsConn.wants`):
 
 ## 8. File Kunci
 
-| Path                                                         | Peran                                                                 |
-| ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `internal/api/wshub.go`                                      | WSHub, connection manager, subscription filter, read/write pump       |
-| `internal/api/router.go`                                     | Route `/{workspace}/_ui/_ws`                                          |
-| `internal/events/hub.go`                                     | Kontrak `events.Hub` (`Broadcast` + `HasListeners`)                   |
-| `internal/action/deliver.go`                                 | `NotifyMutation` (generic events) + `DeliverEvents` (declared events) |
-| `renderers/jsonb-persist/event_handler.go`                    | Outbox worker → websocket (listener-gated)                            |
-| `renderers/react-shadcn/src/hooks/useRealtime.ts`            | Hook + singleton `RealtimeClient`                                     |
-| `renderers/react-shadcn/src/kinds/{table,kanban,dashboard,timeline,calendar,approval-inbox,notification-center}/` | Renderer yang memakai realtime                                              |
+| Path                                                                                                              | Peran                                                                 |
+| ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `internal/api/wshub.go`                                                                                           | WSHub, connection manager, subscription filter, read/write pump       |
+| `internal/api/router.go`                                                                                          | Route `/{workspace}/_ui/_ws`                                          |
+| `internal/events/hub.go`                                                                                          | Kontrak `events.Hub` (`Broadcast` + `HasListeners`)                   |
+| `internal/action/deliver.go`                                                                                      | `NotifyMutation` (generic events) + `DeliverEvents` (declared events) |
+| `renderers/jsonb-persist/event_handler.go`                                                                        | Outbox worker → websocket (listener-gated)                            |
+| `renderers/react-shadcn/src/hooks/useRealtime.ts`                                                                 | Hook + singleton `RealtimeClient`                                     |
+| `renderers/react-shadcn/src/kinds/{table,kanban,dashboard,timeline,calendar,approval-inbox,notification-center}/` | Renderer yang memakai realtime                                        |
