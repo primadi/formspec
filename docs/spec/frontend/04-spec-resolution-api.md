@@ -163,6 +163,17 @@ updated | deleted`, payload = field event, selalu tenant/workspace-scoped.
   component custom.
 - Realtime **non-durable by definisi** — client yang reconnect refetch lewat
   `/_meta/ui`/`/_meta/entities/...`, tidak ada replay.
+- **Heartbeat:** satu heartbeat per **sesi** (satu koneksi websocket = satu tab),
+  dimiliki transport — bukan per subscription/komponen. Server mengirim pulse
+  aplikasi `{"op":"hb"}` pada interval tetap dan client membalas
+  `{"op":"hb_ack"}`; pulse-nya frame teks (bukan ping protokol) karena
+  ping/pong level-protokol tidak terlihat JavaScript, sehingga tanpa itu
+  koneksi "sehat tapi sunyi" tak bisa dibedakan dari koneksi mati. Sisi client
+  menutup socket yang diam melewati budget → reconnect.
+- **Indikator status:** Shell boleh menampilkan status koneksi secara
+  non-intrusif (bukan modal/toast) **hanya kalau halaman yang dibuka memang
+  memakai realtime**; halaman yang tidak men-subscribe apa pun tidak boleh
+  diberi tahu tentang koneksi yang putus.
 - **Handshake auth:** browser tidak bisa men-set header `Authorization` pada
   handshake WebSocket, jadi kredensial tidak boleh ditaruh di URL sebagai JWT
   full-lifetime. Client meminta **ticket single-use** lewat
@@ -185,9 +196,9 @@ versi mayor, breaking change menaikkan segmen versi. ETag pada `/_meta/ui`
   hub websocket memfilter per subscription (client mendaftarkan resource/event
   yang diinginkan lewat frame subscribe/unsubscribe) dan per permission
   `{module}.{plural}.view` (2.6.6). Sisa gap yang belum ditutup: target
-  `{scope: user}` (saat ini hanya `{scope: workspace}`) dan heartbeat
-  ping/pong eksplisit — yang terakhir **satu heartbeat, global per sesi**
-  (dimiliki koneksi/sesi, bukan per subscription/komponen; todo 5.8.5).
+  `{scope: user}` (saat ini hanya `{scope: workspace}`). Heartbeat dan
+  indikator status sudah terpasang sesuai §5 (heartbeat satu per sesi; indikator
+  di chrome hanya saat halaman memakai realtime).
 - Endpoint hari ini (§2) sudah sesuai bentuk kontrak ini (bundle per-App, bukan
   per-page `view-spec` seperti draft awal dokumen ini sebelum direvisi).
 

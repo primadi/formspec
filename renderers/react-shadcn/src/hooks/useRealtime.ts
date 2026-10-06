@@ -17,10 +17,20 @@
 // replay, so consumers MUST refetch after a reconnect. This hook surfaces that
 // as a `tick` that increments on every matching event AND on reconnect — a
 // consumer just re-runs its load whenever `tick` changes.
+//
+// Heartbeat: the server emits an application-level `{op:"hb"}` frame every
+// ~25s and this singleton answers `{op:"hb_ack"}`. The timer lives HERE (one
+// per connection = one per session/tab), never in a `useRealtime` subscriber,
+// so N components in a tab still produce one heartbeat. Protocol-level
+// ping/pong is invisible to JavaScript, which is why the pulse is a text
+// frame: without it a quiet-but-healthy workspace is indistinguishable from a
+// dead connection. Status is published to `stores/realtime` for the chrome
+// indicator (shell/RealtimeStatus.tsx).
 
 import { useEffect, useRef, useState } from "react"
 
 import { useSessionStore } from "@/stores/session"
+import { useRealtimeStore, type RealtimeStatus } from "@/stores/realtime"
 import type { RealtimeMessage } from "@/types/events"
 
 interface RealtimeSub {
@@ -29,6 +39,15 @@ interface RealtimeSub {
   onEvent: (msg: RealtimeMessage) => void
   onReconnect?: () => void
 }
+
+/** Server → client frame. Event frames carry resource/event; control frames
+ *  carry `op` (currently only "hb") and MUST NOT be fanned out to subscribers. */
+type WireFrame = Partial<RealtimeMessage> & { op?: string; ts?: number }
+
+/** How long the client tolerates silence before declaring the socket stalled.
+ *  Must comfortably exceed the server's hb interval (25s) — one missed pulse
+ *  is not a failure. */
+const HB_STALL_MS = 45000
 
 // ── Singleton connection manager ──
 
@@ -59,6 +78,103 @@ class RealtimeClient {
    *  connection's subscription state on the server so we can send deltas. */
   private subscribed = new Map<string, Set<string>>()
 
+  /** Liveness watchdog — armed while a socket is open, reset by any inbound
+   *  frame, and disarmed while the tab is hidden (browser timers are throttled
+   *  in the background, which would otherwise look like a stall). */
+  private livenessTimer: number | undefined
+  /** Set when the watchdog gave up on a socket. The close it triggers would
+   *  otherwise be reported as a plain "reconnecting"; keeping the flag makes
+   *  the chrome say "tidak merespons" (the true cause) until a frame arrives. */
+  private stalled = false
+
+  constructor() {
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.onVisibility)
+    }
+  }
+
+  private setStatus(status: RealtimeStatus) {
+    useRealtimeStore.getState().setStatus(status)
+  }
+
+  /** Whether realtime is actually wanted right now. With no subscribers the
+   *  socket is idle-by-design: a dead connection on a non-realtime page is not
+   *  a problem, so the watchdog stays disarmed and the indicator stays hidden. */
+  private hasDemand(): boolean {
+    return this.subs.size > 0
+  }
+
+  /** Republish the demand signal and reconcile the watchdog with it. */
+  private updateDemand() {
+    const active = this.hasDemand()
+    useRealtimeStore.getState().setActive(active)
+    if (!active) {
+      this.clearLiveness()
+      this.stalled = false
+      this.setStatus("idle")
+      return
+    }
+    if (this.ws?.readyState === WebSocket.OPEN) this.armLiveness()
+  }
+
+  /** Back in the foreground: re-evaluate staleness immediately instead of
+   *  making the user wait another full budget. */
+  private onVisibility = () => {
+    if (typeof document === "undefined") return
+    if (document.visibilityState === "hidden") {
+      this.clearLiveness()
+      return
+    }
+    if (!this.hasDemand()) return
+    const ws = this.ws
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    const last = useRealtimeStore.getState().lastMessageAt
+    if (last > 0 && Date.now() - last > HB_STALL_MS) {
+      this.stalled = true
+      this.setStatus("stalled")
+      ws.close()
+      return
+    }
+    this.armLiveness()
+  }
+
+  private armLiveness() {
+    this.clearLiveness()
+    // No demand → nothing to watch; the socket may be down harmlessly.
+    if (!this.hasDemand()) return
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState === "hidden"
+    )
+      return
+    this.livenessTimer = window.setTimeout(() => {
+      this.livenessTimer = undefined
+      // The socket still looks OPEN but nothing has arrived: declare the
+      // heartbeat dead and force the reconnect path (onclose reschedules).
+      this.stalled = true
+      this.setStatus("stalled")
+      this.ws?.close()
+    }, HB_STALL_MS)
+  }
+
+  private clearLiveness() {
+    if (this.livenessTimer !== undefined) {
+      window.clearTimeout(this.livenessTimer)
+      this.livenessTimer = undefined
+    }
+  }
+
+  /** Any inbound frame — event or control — proves the connection is alive. */
+  private markAlive() {
+    useRealtimeStore.getState().markMessage()
+    this.stalled = false
+    // Only a page that wants realtime can be "live"; otherwise stay idle so a
+    // later, unrelated outage is not misreported as a problem here.
+    if (!this.hasDemand()) return
+    this.setStatus("live")
+    this.armLiveness()
+  }
+
   /** (Re)configure the connection URL; closes & reopens on change. */
   configure(url: string, opts?: { ticketUrl?: string; token?: string }) {
     const ticketUrl = opts?.ticketUrl ?? ""
@@ -75,20 +191,29 @@ class RealtimeClient {
     this.gen += 1
     this.retryMs = 1000
     this.clearRetry()
+    this.clearLiveness()
+    this.stalled = false
     if (this.ws) {
       this.ws.close()
       this.ws = null
     }
+    this.setStatus("connecting")
     void this.open()
   }
 
   subscribe(sub: RealtimeSub): () => void {
     this.subs.add(sub)
-    if (!this.ws) void this.open()
+    if (!this.ws) {
+      this.setStatus("connecting")
+      void this.open()
+    }
     this.syncSubscriptions()
+    this.updateDemand()
     return () => {
       this.subs.delete(sub)
       this.syncSubscriptions()
+      // Last subscriber gone → this page does not need realtime any more.
+      this.updateDemand()
     }
   }
 
@@ -230,22 +355,33 @@ class RealtimeClient {
 
     ws.onopen = () => {
       this.retryMs = 1000
+      // The connection is live from the handshake; heartbeats keep it honest.
+      this.markAlive()
       // Non-durable: re-register the full subscription set after (re)connect.
       this.syncSubscriptions()
     }
 
     ws.onmessage = (ev) => {
-      let msg: RealtimeMessage
+      this.markAlive()
+      let msg: WireFrame
       try {
-        msg = JSON.parse(String(ev.data)) as RealtimeMessage
+        msg = JSON.parse(String(ev.data)) as WireFrame
       } catch {
         return
       }
+      // Transport control frames are not events: acknowledge the heartbeat and
+      // stop — never fan them out (a "*" subscriber would otherwise match a
+      // frame that has no resource and fire a spurious refetch).
+      if (typeof msg.op === "string") {
+        if (msg.op === "hb") this.sendFrame({ op: "hb_ack" })
+        return
+      }
+      const event = msg as RealtimeMessage
       for (const s of this.subs) {
-        if (s.resource !== "*" && s.resource !== msg.resource) continue
-        if (s.event && s.event !== msg.event) continue
+        if (s.resource !== "*" && s.resource !== event.resource) continue
+        if (s.event && s.event !== event.event) continue
         try {
-          s.onEvent(msg)
+          s.onEvent(event)
         } catch {
           // never let a consumer error kill the message loop
         }
@@ -257,6 +393,16 @@ class RealtimeClient {
     ws.onclose = () => {
       if (this.ws !== ws) return
       this.ws = null
+      this.clearLiveness()
+      const hasSubs = this.subs.size > 0
+      // A close caused by the watchdog keeps its own, more accurate label;
+      // the retry below still runs, so the connection recovers on its own.
+      // With no subscribers the socket is idle-by-design: report idle, not a
+      // problem the current page should be told about.
+      this.setStatus(
+        this.stalled ? "stalled" : hasSubs ? "reconnecting" : "idle",
+      )
+      if (hasSubs) useRealtimeStore.getState().bumpAttempt()
       // Non-durable: tell every subscriber a reconnect is needed (refetch).
       for (const s of this.subs) {
         try {
@@ -340,4 +486,12 @@ export function subscribeRealtime(
     token: token ?? "",
   })
   return getClient().subscribe({ resource, onEvent })
+}
+
+/**
+ * Test-only: drop the module-level singleton so each test starts from a clean
+ * connection. Not part of the public API — app code never needs it.
+ */
+export function __resetRealtimeClientForTests() {
+  client = null
 }

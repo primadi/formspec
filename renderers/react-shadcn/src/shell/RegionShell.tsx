@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils"
 import type { MenuItem } from "@/types/manifest"
 import { Sidebar } from "./Sidebar"
 import { AuthArea } from "./AuthArea"
+import { RealtimeStatus } from "./RealtimeStatus"
 import { AssetRenderer } from "./AssetRenderer"
 import { OverlayHost } from "./OverlayHost"
 import { buildBreadcrumbs } from "./breadcrumbs"
@@ -218,6 +219,7 @@ function TopbarAutoFill({
         </Button>
         {showBreadcrumbs && <BreadcrumbRow withHome />}
         <div className="flex-1" />
+        <RealtimeStatus />
         {showTheme && <ThemeSwitcher />}
         <AuthArea mode={chrome?.auth} />
       </header>
@@ -256,6 +258,7 @@ function TopbarAutoFill({
               )}
             </nav>
             <div className="flex-1" />
+            <RealtimeStatus />
             {showTheme && <ThemeSwitcher />}
             <AuthArea mode={chrome?.auth} />
           </div>
@@ -306,6 +309,7 @@ function TopbarAutoFill({
             </nav>
           )}
           {showTheme && <ThemeSwitcher />}
+          <RealtimeStatus />
           <AuthArea mode={chrome?.auth} />
         </div>
       </div>

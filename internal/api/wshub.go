@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/primadi/formspec/internal/auth"
@@ -15,12 +16,37 @@ import (
 	"github.com/primadi/formspec/internal/events"
 )
 
+// Heartbeat defaults. The pulse is an APPLICATION-level text frame, not a
+// protocol ping/pong: JavaScript cannot observe protocol pings, so a client
+// could never distinguish "healthy but idle" from "dead". One heartbeat per
+// connection (= per session/tab) — never per subscription.
+const (
+	defaultWSHeartbeatInterval = 25 * time.Second
+	defaultWSHeartbeatTimeout  = 10 * time.Second
+)
+
+// hbFrame is the server→client liveness pulse. It deliberately is NOT an
+// events.EventMessage: it carries no Resource/Event, so it must never reach
+// event subscribers.
+type hbFrame struct {
+	Op string `json:"op"` // always "hb"
+	Ts int64  `json:"ts"` // unix millis, for client-side staleness math
+}
+
 type wsConn struct {
 	id        string
 	workspace string
 	identity  *auth.Identity // nil if no auth validator is configured (see Broadcast)
 	conn      *websocket.Conn
 	send      chan events.EventMessage
+
+	// hb pulses writePump to emit a heartbeat frame. A single heartbeat per
+	// connection (session), owned by heartbeatLoop in HandleWS — never one per
+	// subscription, so N subscribers in a tab still produce one heartbeat.
+	hb chan struct{}
+	// lastSeen is the unix-nano time of the last inbound frame (any op). The
+	// read and heartbeat goroutines are different goroutines, so it is atomic.
+	lastSeen atomic.Int64
 
 	// mu guards the subscription state below. all marks a "*" subscription
 	// (every resource in the workspace); subs maps a subscribed resource
@@ -36,6 +62,12 @@ type wsConn struct {
 
 // allEvents is the sentinel event name meaning "every event on this resource".
 const allEvents = "*"
+
+// touch records an inbound frame as proof of liveness.
+func (c *wsConn) touch() { c.lastSeen.Store(time.Now().UnixNano()) }
+
+// lastSeenAt reports when the last inbound frame arrived (zero time if none).
+func (c *wsConn) lastSeenAt() time.Time { return time.Unix(0, c.lastSeen.Load()) }
 
 // wants reports whether the connection should receive an event. Delivery is
 // subscription-based: no subscription → nothing; a "*" subscription → every
@@ -121,6 +153,11 @@ type WSHub struct {
 	mu          sync.RWMutex
 	byWorkspace map[string]map[string]*wsConn
 	registry    *entity.Registry // resolves EventMessage.Resource → plural for permission checks; nil disables filtering
+
+	// Heartbeat timing (per connection). Fields, not constants, so tests can
+	// shorten them without racing on package globals.
+	hbInterval time.Duration
+	hbTimeout  time.Duration
 }
 
 // NewWSHub creates an empty hub. registry is used by Broadcast (2.6.6) to
@@ -128,7 +165,12 @@ type WSHub struct {
 // permission a connection's identity is checked against; pass nil to skip
 // per-message permission filtering entirely (e.g. in tests with no registry).
 func NewWSHub(registry *entity.Registry) *WSHub {
-	return &WSHub{byWorkspace: make(map[string]map[string]*wsConn), registry: registry}
+	return &WSHub{
+		byWorkspace: make(map[string]map[string]*wsConn),
+		registry:    registry,
+		hbInterval:  defaultWSHeartbeatInterval,
+		hbTimeout:   defaultWSHeartbeatTimeout,
+	}
 }
 
 func (h *WSHub) register(c *wsConn) {
@@ -285,17 +327,31 @@ func (b *RouterBuilder) HandleWS() http.HandlerFunc {
 		}
 		defer func() { _ = c.CloseNow() }()
 
-		conn := &wsConn{id: nextConnID(), workspace: workspaceID, identity: identity, conn: c, send: make(chan events.EventMessage, 32)}
+		conn := &wsConn{
+			id:        nextConnID(),
+			workspace: workspaceID,
+			identity:  identity,
+			conn:      c,
+			send:      make(chan events.EventMessage, 32),
+			hb:        make(chan struct{}, 1),
+		}
+		conn.touch() // liveness starts at accept, not at the first frame
 		b.hub.register(conn)
 		defer b.hub.unregister(conn)
 
 		ctx := r.Context()
 		stop := make(chan struct{})
 		var wg sync.WaitGroup
-		wg.Add(1)
+		wg.Add(2)
 		go func() {
 			defer wg.Done()
 			writePump(ctx, conn, stop)
+		}()
+		// One heartbeat per connection (= per session/tab), owned by the
+		// transport — never one per subscription.
+		go func() {
+			defer wg.Done()
+			heartbeatLoop(ctx, conn, stop, b.hub.hbInterval, b.hub.hbTimeout)
 		}()
 
 		readPump(ctx, conn) // blocks until the client disconnects or errors
@@ -309,6 +365,16 @@ func writePump(ctx context.Context, c *wsConn, stop <-chan struct{}) {
 		select {
 		case <-stop:
 			return
+		case <-c.hb:
+			// Transport control frame — not an event, never fanned out to
+			// subscribers client-side.
+			data, err := json.Marshal(hbFrame{Op: "hb", Ts: time.Now().UnixMilli()})
+			if err != nil {
+				continue
+			}
+			if err := c.conn.Write(ctx, websocket.MessageText, data); err != nil {
+				return
+			}
 		case msg, ok := <-c.send:
 			if !ok {
 				return
@@ -324,11 +390,42 @@ func writePump(ctx context.Context, c *wsConn, stop <-chan struct{}) {
 	}
 }
 
+// heartbeatLoop is the connection's single heartbeat: every interval it asks
+// writePump to emit an `hb` frame, and it closes the socket when no inbound
+// frame (subscribe, unsubscribe, hb_ack) has arrived within interval+timeout.
+// Closing unwinds readPump, which triggers the deferred unregister.
+//
+// Detection bound: because the check rides the ticker, a stalled peer is
+// closed at ~2×interval (≈50s at the defaults) — still far faster than
+// waiting for the browser/OS to notice a half-open connection.
+func heartbeatLoop(ctx context.Context, c *wsConn, stop <-chan struct{}, interval, timeout time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if time.Since(c.lastSeenAt()) > interval+timeout {
+				_ = c.conn.Close(websocket.StatusPolicyViolation, "heartbeat timeout")
+				return
+			}
+			select {
+			case c.hb <- struct{}{}:
+			default:
+				// A pulse is already queued — the next tick supersedes it.
+			}
+		}
+	}
+}
+
 // clientFrame is an inbound subscription-control message. The connection is
 // push-only for event data; the only application frames a client sends are
-// subscribe/unsubscribe directives.
+// subscribe/unsubscribe directives and the heartbeat acknowledgement.
 type clientFrame struct {
-	Op       string `json:"op"`       // "subscribe" | "unsubscribe"
+	Op       string `json:"op"`       // "subscribe" | "unsubscribe" | "hb_ack"
 	Resource string `json:"resource"` // "module/entity" or "*"
 	Event    string `json:"event"`    // optional — empty = all events on the resource
 }
@@ -346,6 +443,8 @@ func readPump(ctx context.Context, c *wsConn) {
 		if typ != websocket.MessageText {
 			continue
 		}
+		// Any inbound frame is proof of liveness (subscribe, unsubscribe, ack).
+		c.touch()
 		var f clientFrame
 		if json.Unmarshal(data, &f) != nil {
 			continue
@@ -359,6 +458,8 @@ func readPump(ctx context.Context, c *wsConn) {
 			if f.Resource != "" {
 				c.unsubscribe(f.Resource, f.Event)
 			}
+		case "hb_ack":
+			// Liveness only — already recorded by touch() above.
 		default:
 			// unknown op — ignore
 		}

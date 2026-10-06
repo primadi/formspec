@@ -69,6 +69,21 @@ saat client putus, `readPump` return → `defer hub.unregister(conn)` membersihk
 koneksi. Tidak ada kebocoran koneksi stale (termasuk saat browser di-refresh:
 koneksi lama terdeteksi putus dan di-unregister).
 
+**Heartbeat (satu per koneksi = per sesi).** Di samping `writePump`, tiap
+koneksi menjalankan satu `heartbeatLoop`: setiap `hbInterval` (default 25 s) ia
+meminta `writePump` mengirim frame aplikasi `{"op":"hb","ts":…}`, dan ia
+**menutup socket** kalau tidak ada frame masuk dalam `hbInterval + hbTimeout`
+(default +10 s) — `wsConn.lastSeen` diperbarui oleh `readPump` pada _setiap_
+frame masuk (`subscribe`, `unsubscribe`, `hb_ack`). Penutupan itu membuat
+`readPump` unwinding → `defer unregister` membersihkan koneksi.
+
+Heartbeat-nya **satu per koneksi, bukan per subscription** — N komponen dalam
+satu tab tetap menghasilkan satu heartbeat. Ia juga **bukan** ping protokol:
+ping/pong level-protokol tidak terlihat JavaScript, jadi client tidak bisa
+membedakan "sehat tapi sunyi" dari "mati". Karena itu pulse-nya frame teks.
+Batas deteksi yang dinyatakan: karena pemeriksaan menempel ke ticker, peer
+macet ditutup dalam **≈2 × hbInterval** (≈50 s pada default).
+
 ### 2.2 Protokol subscription (subscribe / unsubscribe)
 
 Setelah handshake, client mengirim frame JSON:
@@ -79,15 +94,24 @@ Setelah handshake, client mengirim frame JSON:
 { "op": "unsubscribe", "resource": "clinic/visit" }               // lepas resource
 { "op": "unsubscribe", "resource": "clinic/visit", "event": "created" }
 { "op": "subscribe",   "resource": "*" }                          // semua resource di workspace
+{ "op": "hb_ack" }                                                 // jawaban heartbeat
 ```
 
 - `resource` `"*"` = subscribe ke seluruh workspace.
 - `event` kosong = semua event pada resource; terisi = hanya event tersebut.
+- `hb_ack` bukan subscription: ia semata-mata liveness (sudah dicatat
+  `readPump` lewat `touch()`).
 - Frame malformed / `op` tak dikenal diabaikan (koneksi tetap hidup).
 
 `readPump` mem-parse frame teks ini dan memperbarui state subscription
 per-koneksi (`wsConn.subs map[resource]set[event]` + flag `all` untuk `"*"`),
 dilindungi mutex.
+
+Arah sebaliknya, server hanya mengirim dua bentuk frame: `EventMessage`
+(`{event, resource, payload, emitted_at}`) dan heartbeat
+`{"op":"hb","ts":…}`. Frame `hb` **bukan** `EventMessage` — ia tidak punya
+`resource`/`event`, jadi client wajib memfilternya sebelum fan-out; kalau tidak,
+subscriber `"*"` akan mencocokinya dan memicu refetch palsu tiap 25 s.
 
 ### 2.3 Filtering saat broadcast
 
@@ -167,11 +191,18 @@ sebuah `Set`; **tidak membuka koneksi WebSocket sendiri**.
    non-durable, seluruh union dikirim ulang ke server.
 4. **Filter lokal (safety net)** — `onmessage` tetap memfilter `resource`/
    `event` sebelum fan-out ke subscriber; idempotent terhadap filter server.
+   **Frame kontrol dipisahkan lebih dulu**: frame dengan `op` (mis. `hb`)
+   dibalas/diabaikan dan **tidak pernah** difan-out — tanpa ini subscriber
+   `"*"` akan mencocoki frame tanpa `resource` dan memicu refetch tiap 25 s.
 5. **Reconnect otomatis** — `onclose` → retry dengan exponential backoff
    (1s → 2s → … → cap 15s), reset ke 1s saat `onopen`. Setiap close memanggil
    `onReconnect` semua subscriber → `tick` naik → refetch.
 6. **`configure(url)`** — mengganti URL (ganti workspace/token) menutup &
    membuka koneksi baru; no-op kalau URL sama.
+7. **Watchdog liveness + heartbeat** — satu timer per koneksi (bukan per
+   `useRealtime`): di-reset oleh **setiap** frame masuk (event maupun `hb`),
+   dan saat habis → status `stalled` + socket ditutup → reconnect. Timer
+   dimatikan saat tab `hidden` dan saat tidak ada subscriber.
 
 ### 3.3 Perpindahan antar halaman (page navigation)
 
@@ -194,24 +225,60 @@ sebuah `Set`; **tidak membuka koneksi WebSocket sendiri**.
   hilang (non-durable).
 - **Internet putus:** browser men-detect → `onclose` → reconnect otomatis
   (backoff) → begitu `onopen`, resubscribe + semua subscriber `onReconnect` →
-  refetch. Belum ada heartbeat ping/pong eksplisit; deteksi putus bergantung
-  browser/OS (umumnya cukup cepat).
+  refetch.
+- **Heartbeat & watchdog:** server mengirim `hb` tiap 25 s; client membalas
+  `hb_ack` dan menjalankan satu watchdog liveness per koneksi (budget 45 s).
+  Kalau koneksi _half-open_ (kabel dicabut, NAT/proxy membuang state, laptop
+  sleep) websocket di sisi JS masih terlihat `OPEN`, jadi tanpa watchdog diamnya
+  tidak bisa dibedakan dari "sehat tapi sunyi". Watchdog menutup socket saat
+  budget habis → jalur reconnect yang sudah ada mengambil alih.
+- **Tab di background:** watchdog **dimatikan** saat tab `hidden` (browser
+  men-throttle timer, jadi vonis "macet" akan palsu) dan dipasang ulang saat
+  `visible`, dengan pemeriksaan staleness sekali jalan.
+- **Demand gate:** watchdog hanya aktif kalau ada subscriber. Halaman yang tidak
+  memakai realtime **tidak** dianggap bermasalah saat koneksi mati.
+
+### 3.5 Status koneksi di chrome (`RealtimeStatus`)
+
+Status liveness hidup di store `stores/realtime.ts` (`idle`/`connecting`/
+`live`/`stalled`/`reconnecting` + `active` + `lastMessageAt` + `attempt`),
+ditulis oleh `RealtimeClient`. Store itu satu-satunya sumber yang dibaca
+indikator chrome `shell/RealtimeStatus.tsx`, yang ditempel di topbar auto-fill
+ketiga archetype.
+
+Aturan tampil — sengaja **tidak menampilkan apa pun** kecuali benar-benar perlu:
+
+| Status                         | `active` | Tampilan                                                     |
+| ------------------------------ | -------- | ------------------------------------------------------------ |
+| `idle` / `connecting` / `live` | apa pun  | tidak ada                                                    |
+| `stalled`                      | `false`  | **tidak ada** (halaman ini tidak memakai realtime)           |
+| `stalled`                      | `true`   | pill "Realtime tidak merespons" (dot amber, `role="status"`) |
+| `reconnecting`                 | `false`  | **tidak ada**                                                |
+| `reconnecting`                 | `true`   | pill "Menyambung ulang… (n)" (dot amber berdenyut)           |
+
+`active` = ada ≥1 subscriber di tab ini. Konsekuensinya persis yang diinginkan:
+Table/Page tanpa `realtime: true` tidak men-subscribe apa pun → `active`
+`false` → koneksi boleh mati tanpa satu pun tulisan muncul. Pill-nya bukan
+modal/toast, jadi tidak mengganggu; `title` menjelaskan "data mungkin tidak
+terbaru".
 
 ---
 
 ## 4. Optimasi yang Sudah Dilakukan
 
-| #   | Optimasi                                    | Keterangan                                                                                                                                           |
-| --- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Satu WebSocket per tab**                  | Singleton `RealtimeClient` dibagi semua konsumen; bukan satu koneksi per listener                                                                    |
-| 2   | **Server-side subscription filter**         | Server hanya mengirim event sesuai subscription; hemat bandwidth & privasi (tidak bocorkan event entity lain)                                        |
-| 3   | **Filter permission per-pesan** (2.6.6)     | Event tidak diterima koneksi tanpa permission `view` atas resource-nya                                                                               |
-| 4   | **Listener-gated publish** (`HasListeners`) | Tanpa listener → `NotifyMutation`/`DeliverEvents`/outbox-worker websocket tidak menjalankan apa pun, meski spec mendeklarasikan `deliver: websocket` |
-| 5   | **Slow-consumer drop**                      | Channel send buffered (32) + `select default` — socket lambat tidak pernah memblokir hub                                                             |
-| 6   | **Satu writer goroutine per koneksi**       | `writePump` mengisolasi penulisan per socket                                                                                                         |
-| 7   | **Delta subscription sync**                 | Client hanya mengirim perubahan subscription, bukan seluruh state, tiap kali ada perubahan                                                           |
-| 8   | **Exponential backoff reconnect**           | 1s → 15s (cap), reset saat sukses; + refetch on reconnect (non-durable)                                                                              |
-| 9   | **Auto unsubscribe / global persist**       | Lifecycle React: unsubscribe otomatis saat pindah halaman; subscriber global di shell bertahan                                                       |
+| #   | Optimasi                                    | Keterangan                                                                                                                                                             |
+| --- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Satu WebSocket per tab**                  | Singleton `RealtimeClient` dibagi semua konsumen; bukan satu koneksi per listener                                                                                      |
+| 2   | **Server-side subscription filter**         | Server hanya mengirim event sesuai subscription; hemat bandwidth & privasi (tidak bocorkan event entity lain)                                                          |
+| 3   | **Filter permission per-pesan** (2.6.6)     | Event tidak diterima koneksi tanpa permission `view` atas resource-nya                                                                                                 |
+| 4   | **Listener-gated publish** (`HasListeners`) | Tanpa listener → `NotifyMutation`/`DeliverEvents`/outbox-worker websocket tidak menjalankan apa pun, meski spec mendeklarasikan `deliver: websocket`                   |
+| 5   | **Slow-consumer drop**                      | Channel send buffered (32) + `select default` — socket lambat tidak pernah memblokir hub                                                                               |
+| 6   | **Satu writer goroutine per koneksi**       | `writePump` mengisolasi penulisan per socket                                                                                                                           |
+| 7   | **Delta subscription sync**                 | Client hanya mengirim perubahan subscription, bukan seluruh state, tiap kali ada perubahan                                                                             |
+| 8   | **Exponential backoff reconnect**           | 1s → 15s (cap), reset saat sukses; + refetch on reconnect (non-durable)                                                                                                |
+| 9   | **Auto unsubscribe / global persist**       | Lifecycle React: unsubscribe otomatis saat pindah halaman; subscriber global di shell bertahan                                                                         |
+| 10  | **Heartbeat aplikasi + watchdog**           | Satu `hb` per 25 s per koneksi (bukan per subscription); client menutup socket yang diam >45 s → reconnect. Ping protokol tidak terlihat JS, jadi pulse-nya frame teks |
+| 11  | **Demand-gated status & watchdog**          | Tanpa subscriber (halaman non-realtime) watchdog tidak dipasang dan indikator tidak tampil — koneksi mati di sana bukan masalah user                                   |
 
 ---
 
@@ -248,9 +315,11 @@ Client ──► Server (text frame)
   { "op": "unsubscribe", "resource": "clinic/visit" }
   { "op": "unsubscribe", "resource": "clinic/visit", "event": "created" }
   { "op": "subscribe",   "resource": "*" }
+  { "op": "hb_ack" }
 
 Server ──► Client (text frame, push-only)
   { "event": "created", "resource": "clinic/visit", "payload": {...}, "emitted_at": "..." }
+  { "op": "hb", "ts": 1759718400123 }
 ```
 
 Semantik subscription server (`wsConn.wants`):
@@ -265,25 +334,28 @@ Semantik subscription server (`wsConn.wants`):
 
 ## 7. Gap & Pekerjaan ke Depan
 
-- **Heartbeat ping/pong** belum ada (→ todo **5.8.5 ⏸️**) — deteksi putus saat
-  ini bergantung browser/OS. Bentuk yang dituju: **satu heartbeat, global per
-  sesi** — dimiliki transport/koneksi (`RealtimeClient` singleton, satu per
-  tab), bukan per `useRealtime`/subscription, sehingga N komponen dalam satu
-  sesi tidak menghasilkan N heartbeat.
 - **`scope: user`** belum didukung — hanya `{scope: workspace}` (satu-satunya
   target yang dipakai; target `user` adalah penambahan index kedua, bukan
-  redesign).
+  redesign) → todo **5.8.6 ⏸️**.
+- **Indikator status pada topbar custom** — App yang mengganti `regions.topbar`
+  dengan component sendiri tidak ikut menampilkan `RealtimeStatus`; store
+  `stores/realtime.ts` bisa dibaca component itu, tetapi API resmi untuk
+  asset (`formspec.realtimeStatus()`) belum ada.
+- **Heartbeat interval tetap** — 25 s (server) / 45 s (client) adalah konstanta;
+  belum ada knob konfigurasi per-App.
 
 ---
 
 ## 8. File Kunci
 
-| Path                                                                                                              | Peran                                                                 |
-| ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `internal/api/wshub.go`                                                                                           | WSHub, connection manager, subscription filter, read/write pump       |
-| `internal/api/router.go`                                                                                          | Route `/{workspace}/_ui/_ws`                                          |
-| `internal/events/hub.go`                                                                                          | Kontrak `events.Hub` (`Broadcast` + `HasListeners`)                   |
-| `internal/action/deliver.go`                                                                                      | `NotifyMutation` (generic events) + `DeliverEvents` (declared events) |
-| `renderers/jsonb-persist/event_handler.go`                                                                        | Outbox worker → websocket (listener-gated)                            |
-| `renderers/react-shadcn/src/hooks/useRealtime.ts`                                                                 | Hook + singleton `RealtimeClient`                                     |
-| `renderers/react-shadcn/src/kinds/{table,kanban,dashboard,timeline,calendar,approval-inbox,notification-center}/` | Renderer yang memakai realtime                                        |
+| Path                                                                                                              | Peran                                                                    |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `internal/api/wshub.go`                                                                                           | WSHub, connection manager, subscription filter, read/write pump          |
+| `internal/api/router.go`                                                                                          | Route `/{workspace}/_ui/_ws`                                             |
+| `internal/events/hub.go`                                                                                          | Kontrak `events.Hub` (`Broadcast` + `HasListeners`)                      |
+| `internal/action/deliver.go`                                                                                      | `NotifyMutation` (generic events) + `DeliverEvents` (declared events)    |
+| `renderers/jsonb-persist/event_handler.go`                                                                        | Outbox worker → websocket (listener-gated)                               |
+| `renderers/react-shadcn/src/hooks/useRealtime.ts`                                                                 | Hook + singleton `RealtimeClient` (subscription, heartbeat, watchdog)    |
+| `renderers/react-shadcn/src/stores/realtime.ts`                                                                   | Status liveness koneksi (`active`, `status`, `lastMessageAt`, `attempt`) |
+| `renderers/react-shadcn/src/shell/RealtimeStatus.tsx`                                                             | Indikator pill di chrome (hanya saat halaman memakai realtime)           |
+| `renderers/react-shadcn/src/kinds/{table,kanban,dashboard,timeline,calendar,approval-inbox,notification-center}/` | Renderer yang memakai realtime                                           |
