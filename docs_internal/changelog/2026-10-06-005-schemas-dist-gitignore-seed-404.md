@@ -48,7 +48,7 @@ ada di registry.
 ## Sisa
 
 - Verifikasi live (butuh `git push`; tidak bisa dibuktikan lokal): `curl -sI
-  https://schemas.formspec.dev/v1/kinds/Seed.schema.json` → 200 dan
+https://schemas.formspec.dev/v1/kinds/Seed.schema.json` → 200 dan
   `formspec validate --spec examples/kafe/spec` tanpa `--schema` → 0 problem.
   → **3.6.7 ⏸️**.
 

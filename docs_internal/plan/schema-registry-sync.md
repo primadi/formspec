@@ -50,14 +50,14 @@ untuk mereka — sehingga `git add schemas/dist` (persis instruksi di
 `schemas/README.md`) terlihat berhasil, padahal **setiap file kind BARU dilewati
 diam-diam**. Bukti:
 
-| Pemeriksaan | Nilai |
-| --- | --- |
-| file di `schemas/dist/v1/kinds/` (disk) | 34 |
-| file di sana yang tracked git | 33 |
-| selisih | `Seed.schema.json` (v1 **dan** latest) |
-| `git ls-tree -r HEAD \| grep -i seed.schema.json` | hanya `schemas/kinds/...` |
-| `git add --dry-run schemas/dist/v1/kinds/Seed.schema.json` | "paths are ignored" |
-| commit terakhir yang menyentuh `dist` | hanya root schema + `index.json`, tanpa `kinds/` |
+| Pemeriksaan                                                | Nilai                                            |
+| ---------------------------------------------------------- | ------------------------------------------------ |
+| file di `schemas/dist/v1/kinds/` (disk)                    | 34                                               |
+| file di sana yang tracked git                              | 33                                               |
+| selisih                                                    | `Seed.schema.json` (v1 **dan** latest)           |
+| `git ls-tree -r HEAD \| grep -i seed.schema.json`          | hanya `schemas/kinds/...`                        |
+| `git add --dry-run schemas/dist/v1/kinds/Seed.schema.json` | "paths are ignored"                              |
+| commit terakhir yang menyentuh `dist`                      | hanya root schema + `index.json`, tanpa `kinds/` |
 
 Akibatnya `index.json` (tracked) menyebut `Seed` sementara request
 `/v1/kinds/Seed.schema.json` → 404 untuk **setiap** proyek ber-`kind: Seed`.
@@ -72,7 +72,7 @@ Akibatnya `index.json` (tracked) menyebut `Seed` sementara request
   pesan sebab + saran negasi. Kelas kegagalan ini jadi berisik di titik
   kejadiannya, bukan 10 hari kemudian lewat 404.
 - `schemas/README.md`: catatan `dist/` + langkah verifikasi `git status --short
-  schemas/dist`; catatan bahwa per-kind schema **bukan** schema mandiri
+schemas/dist`; catatan bahwa per-kind schema **bukan** schema mandiri
   (`$ref`-nya di-resolve dari `$defs` root `formspec.schema.json` — temuan
   sampingan, bukan cacat generator).
 

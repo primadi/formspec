@@ -265,8 +265,11 @@ Semantik subscription server (`wsConn.wants`):
 
 ## 7. Gap & Pekerjaan ke Depan
 
-- **Heartbeat ping/pong** belum ada — deteksi putus bergantung browser/OS;
-  untuk deteksi lebih agresif bisa ditambah ping interval.
+- **Heartbeat ping/pong** belum ada (→ todo **5.8.5 ⏸️**) — deteksi putus saat
+  ini bergantung browser/OS. Bentuk yang dituju: **satu heartbeat, global per
+  sesi** — dimiliki transport/koneksi (`RealtimeClient` singleton, satu per
+  tab), bukan per `useRealtime`/subscription, sehingga N komponen dalam satu
+  sesi tidak menghasilkan N heartbeat.
 - **`scope: user`** belum didukung — hanya `{scope: workspace}` (satu-satunya
   target yang dipakai; target `user` adalah penambahan index kedua, bukan
   redesign).

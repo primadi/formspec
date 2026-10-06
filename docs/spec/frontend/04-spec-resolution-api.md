@@ -186,7 +186,8 @@ versi mayor, breaking change menaikkan segmen versi. ETag pada `/_meta/ui`
   yang diinginkan lewat frame subscribe/unsubscribe) dan per permission
   `{module}.{plural}.view` (2.6.6). Sisa gap yang belum ditutup: target
   `{scope: user}` (saat ini hanya `{scope: workspace}`) dan heartbeat
-  ping/pong eksplisit.
+  ping/pong eksplisit — yang terakhir **satu heartbeat, global per sesi**
+  (dimiliki koneksi/sesi, bukan per subscription/komponen; todo 5.8.5).
 - Endpoint hari ini (§2) sudah sesuai bentuk kontrak ini (bundle per-App, bukan
   per-page `view-spec` seperti draft awal dokumen ini sebelum direvisi).
 
