@@ -10,6 +10,14 @@ JSON Schema (Draft-07) untuk semua resource kind FormSpec, di-generate dari
 
 Generator: `cmd/formspec-gen-schema/` (dipanggil `make generate-schema`).
 
+> **Per-kind schema bukan schema mandiri.** `schemas/kinds/{Kind}.schema.json`
+> memuat `$ref: "#/$defs/<Tipe>"` yang **tidak** punya `$defs` sendiri — definisi
+> bersama hanya ada di `schemas/formspec.schema.json`. Dipakai langsung, validator
+> (mis. `ajv`) menolak dengan `can't resolve reference #/$defs/Action from id #`.
+> Consumer harus memakai root `formspec.schema.json` (discriminator `kind`), atau
+> menggabungkan per-kind body dengan `$defs` root — persis yang dilakukan
+> `kindSchemaCompiler` di `cmd/formspec/validate.go`.
+
 ## Publikasi ke schemas.formspec.dev
 
 Jalur deploy yang dipakai: **git-based**. `schemas/dist/` ter-commit di repo dan
@@ -19,9 +27,19 @@ dashboard Cloudflare). Alur publish:
 ```bash
 make publish-schemas          # 1. regenerate + stage ke schemas/dist/
 git add schemas/dist          # 2. commit dist (sudah tracked, add normal cukup)
+git status --short schemas/dist   # 2b. PASTIKAN tidak kosong — file kind baru
+                                  #     yang terlewat tampak di sini (lihat catatan)
 git commit -m "..."           # 3. commit
 git push                      # 4. push → Cloudflare auto-build → live update
 ```
+
+> **Catatan `dist/` di `.gitignore`.** `dist/` (root `.gitignore`) dulu juga
+> mencocoki `schemas/dist/`, sehingga `git add schemas/dist` **diam-diam melewati
+> file kind yang baru** — file lama tetap tracked (ignore tidak berlaku untuk file
+> yang sudah tracked), jadi `index.json` bisa menyebut kind yang file skemanya
+> tak pernah ter-commit. Terukur: kind `Seed` (2026-09-25) 404 selama ~10 hari dan
+> `formspec validate` gagal. Sekarang `.gitignore` menambahkan `!schemas/dist/`;
+> langkah 2b tetap dilakukan sebagai jaring pengaman.
 
 > Jalur R2 bucket (`--upload`) tidak dipakai — butuh `CLOUDFLARE_API_TOKEN` +
 > wrangler login, dan tidak memberi traceability git. Script tetap mendukungnya

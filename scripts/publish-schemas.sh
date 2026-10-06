@@ -105,6 +105,30 @@ echo "📎 Membuat alias 'latest' → '$VERSION' ..."
 rm -rf "$DIST_DIR/latest"
 cp -r "$DIST_DIR/$VERSION" "$DIST_DIR/latest"
 
+# ── Guard: tidak ada file ter-stage yang di-ignore git ───────────────────────
+# Kelas kegagalan nyata: `dist/` di .gitignore juga mencocoki `schemas/dist/`,
+# sehingga `git add schemas/dist` DIAM-DIAM melewati file kind BARU — file lama
+# tetap tracked (ignore tidak berlaku untuk yang sudah tracked), jadi `index.json`
+# bisa menyebut kind yang file skemanya tak pernah ter-commit, dan kind itu 404 di
+# registry → `formspec validate` (mode registry) gagal, exit 2. Terukur: kind
+# `Seed` (2026-09-25) 404 selama ~10 hari; `--schema schemas` hijau, mode registry
+# mati. Guard ini membuat kegagalannya berisik di titik kejadiannya.
+ignored=0
+while IFS= read -r -d '' f; do
+  rel="${f#"$REPO_ROOT"/}"
+  if git -C "$REPO_ROOT" check-ignore --no-index -q "$rel"; then
+    echo "   ❌ ter-ignore: $rel"
+    ignored=$((ignored + 1))
+  fi
+done < <(find "$DIST_DIR" -type f -print0)
+if [[ $ignored -gt 0 ]]; then
+  echo "❌ $ignored file di $DIST_DIR ter-ignore .gitignore — tidak akan ikut commit,"
+  echo "   sehingga kind terkait 404 di registry. Perbaiki pola ignore-nya"
+  echo "   (butuh negasi '!schemas/dist/') sebelum men-commit."
+  exit 1
+fi
+echo "✅ Guard: semua file schemas/dist/ terlihat git (tak ada yang ter-ignore)"
+
 # Favicon di root — ikon tab untuk schemas.formspec.dev.
 cat > "$DIST_DIR/favicon.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 64 64" fill="none">
