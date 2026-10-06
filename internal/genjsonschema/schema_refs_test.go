@@ -121,6 +121,45 @@ func TestFormRenderDecl_AcceptsShorthandAndObject(t *testing.T) {
 	}
 }
 
+// TestGuardDecl_AcceptsShorthandAndObject pins the same class of divergence as
+// TestFormRenderDecl_AcceptsShorthandAndObject: GuardDecl has a custom
+// UnmarshalYAML accepting both the canonical inline expression string
+// (`guard: "len(resource.items) > 0"`, Core Extended §14) and the map form
+// (`guard: {expression: "..."}`). The generated schema must accept both, or the
+// editor rejects the documented canonical shape while the loader accepts it —
+// which reads as "the spec is wrong" when the schema is stale.
+func TestGuardDecl_AcceptsShorthandAndObject(t *testing.T) {
+	converter := New(pkgPath)
+	collect, err := converter.Collect()
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	result := converter.Generate(collect)
+
+	def, ok := result.RootSchema.Defs["GuardDecl"]
+	if !ok {
+		t.Fatal("root schema has no GuardDecl definition")
+	}
+	if len(def.OneOf) != 2 {
+		t.Fatalf("GuardDecl should be oneOf [string, object], got %d branches", len(def.OneOf))
+	}
+	var hasString, hasObject bool
+	for _, branch := range def.OneOf {
+		switch branch.Type {
+		case "string":
+			hasString = true
+		case "object":
+			hasObject = true
+		}
+	}
+	if !hasString {
+		t.Error("GuardDecl oneOf is missing the string shorthand branch")
+	}
+	if !hasObject {
+		t.Error("GuardDecl oneOf is missing the object branch")
+	}
+}
+
 // TestDanglingRefs_DetectsMissingDefinition proves the checker above can fail —
 // a guard that cannot fail is not a guard.
 func TestDanglingRefs_DetectsMissingDefinition(t *testing.T) {

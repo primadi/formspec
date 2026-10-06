@@ -284,6 +284,31 @@ func structToSchema(td *TypeDef, collect *CollectResult, sharedDefs map[string]*
 		s.AdditionalProperties = nil
 	}
 
+	// Special handling for GuardDecl which accepts both the canonical inline
+	// expression string (`guard: "len(resource.items) > 0"`, Core Extended §14)
+	// and the map form (`guard: {expression: "...", message: "..."}`) via custom
+	// UnmarshalYAML. Without this the schema rejected the canonical shorthand the
+	// loader accepts — the same loader↔schema divergence as FormRenderDecl
+	// (item 5.4). The `expression` key stays required in the object branch; the
+	// message key is optional.
+	if td.Name == "GuardDecl" {
+		objSchema := &Schema{
+			Type:                 "object",
+			AdditionalProperties: false,
+			Properties:           s.Properties,
+			Required:             s.Required,
+		}
+		strSchema := &Schema{
+			Type:        "string",
+			Description: "Inline guard expression — e.g. \"len(resource.items) > 0 and resource.total > 0\"",
+		}
+		s.OneOf = []*Schema{strSchema, objSchema}
+		s.Type = ""
+		s.Properties = nil
+		s.Required = nil
+		s.AdditionalProperties = nil
+	}
+
 	return s
 }
 

@@ -1898,19 +1898,27 @@
     },
     "GuardDecl": {
       "description": "GuardDecl is a condition that must be met for a transition.\nYAML accepts either an inline expression string (canonical, Core §14)\nor a map with explicit expression/message keys.\n",
-      "type": "object",
-      "properties": {
-        "expression": {
+      "oneOf": [
+        {
+          "description": "Inline guard expression — e.g. \"len(resource.items) \u003e 0 and resource.total \u003e 0\"",
           "type": "string"
         },
-        "message": {
-          "type": "string"
+        {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "expression"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "expression"
-      ],
-      "additionalProperties": false
+      ]
     },
     "HookDecl": {
       "description": "HookDecl attaches handler code to an action's before/after/on_error point,\nor an event's before_deliver/after_deliver point (Core Extended §8). A\nreserved action's own Impl (Action.Impl) is equivalent to one hook scoped\nto that action, running last in the before-phase — hooks: entries let\nother modules/scripts attach additional code to the same points, by name\nor via the \"*\" wildcard, with priority ordering (default 10; lower runs\nfirst).\n",
@@ -6582,19 +6590,27 @@
     },
     "GuardDecl": {
       "description": "GuardDecl is a condition that must be met for a transition.\nYAML accepts either an inline expression string (canonical, Core §14)\nor a map with explicit expression/message keys.\n",
-      "type": "object",
-      "properties": {
-        "expression": {
+      "oneOf": [
+        {
+          "description": "Inline guard expression — e.g. \"len(resource.items) \u003e 0 and resource.total \u003e 0\"",
           "type": "string"
         },
-        "message": {
-          "type": "string"
+        {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "expression"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "expression"
-      ],
-      "additionalProperties": false
+      ]
     },
     "HookDecl": {
       "description": "HookDecl attaches handler code to an action's before/after/on_error point,\nor an event's before_deliver/after_deliver point (Core Extended §8). A\nreserved action's own Impl (Action.Impl) is equivalent to one hook scoped\nto that action, running last in the before-phase — hooks: entries let\nother modules/scripts attach additional code to the same points, by name\nor via the \"*\" wildcard, with priority ordering (default 10; lower runs\nfirst).\n",
