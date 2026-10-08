@@ -52,6 +52,11 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { can as checkPermission, canDoEntityAction } from "@/engine/permissions"
+import {
+  canDoViewTarget,
+  resolveViewTarget,
+  viewTargetTakesId,
+} from "@/engine/viewTarget"
 import { deriveKanbanColumns } from "@/engine/derive"
 import { evalFormSpecExpr, type RuntimeValue } from "@/lib/formspec-expr"
 import { useSurface } from "@/hooks/useSurface"
@@ -632,6 +637,32 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
     ) => {
       if (!me || !entity) return
 
+      // A view-target action NAVIGATES instead of calling the entity action —
+      // same rule as TableRenderer (plan docs_internal/plan/print-row-action.md).
+      // It must come BEFORE the `canDoEntityAction` check, which would reject a
+      // renderer builtin such as `print` (no backing entity action).
+      if (action.view) {
+        if (!canDoViewTarget(me, metaBundle, action.view)) {
+          toast.error("You don't have permission to perform this action")
+          return
+        }
+        const target = resolveViewTarget(metaBundle, action.view)
+        if (!target) {
+          toast.error(`Nothing at ${action.view}`)
+          return
+        }
+        navigate(
+          viewTargetTakesId(target.kind)
+            ? surfacePath(
+                target.kind,
+                target.name,
+                getEntityRouteSegment(entity, record),
+              )
+            : surfacePath(target.kind, target.name),
+        )
+        return
+      }
+
       // Permission check
       if (
         !canDoEntityAction(
@@ -1093,6 +1124,7 @@ function SortableCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const me = useSessionStore((s) => s.me)
+  const metaBundle = useMetaStore((s) => s.bundle)
 
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id })
@@ -1108,11 +1140,13 @@ function SortableCard({
   // menu listed every row action and relied on a click-time toast — an
   // inconsistency with the table, which already filters.
   const visibleRowActions = (rowActions ?? []).filter((a) =>
-    canDoEntityAction(
-      me,
-      { module: entityModule, plural: entityPlural },
-      a.action,
-    ),
+    a.view
+      ? canDoViewTarget(me, metaBundle, a.view)
+      : canDoEntityAction(
+          me,
+          { module: entityModule, plural: entityPlural },
+          a.action,
+        ),
   )
 
   return (

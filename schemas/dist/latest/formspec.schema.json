@@ -4159,6 +4159,10 @@
           "description": "ChunkSizeMB is the client hint for chunked-upload part size (todo",
           "type": "integer"
         },
+        "download_cache_ttl": {
+          "description": "DownloadCacheTTL is how long a browser may reuse a downloaded file without",
+          "type": "string"
+        },
         "max_count": {
           "type": "integer"
         },
@@ -4277,6 +4281,13 @@
         },
         "label": {
           "type": "string"
+        },
+        "view": {
+          "description": "Navigate to a view resource (`\u003ckind\u003e:\u003cname\u003e`, e.g. `print:receipt-thermal`) instead of running the entity action. The record id is appended for kinds whose route takes one.",
+          "type": "string",
+          "examples": [
+            "print:table-tent-card"
+          ]
         }
       },
       "required": [
@@ -9050,6 +9061,10 @@
           "description": "ChunkSizeMB is the client hint for chunked-upload part size (todo",
           "type": "integer"
         },
+        "download_cache_ttl": {
+          "description": "DownloadCacheTTL is how long a browser may reuse a downloaded file without",
+          "type": "string"
+        },
         "max_count": {
           "type": "integer"
         },
@@ -9168,6 +9183,13 @@
         },
         "label": {
           "type": "string"
+        },
+        "view": {
+          "description": "Navigate to a view resource (`\u003ckind\u003e:\u003cname\u003e`, e.g. `print:receipt-thermal`) instead of running the entity action. The record id is appended for kinds whose route takes one.",
+          "type": "string",
+          "examples": [
+            "print:table-tent-card"
+          ]
         }
       },
       "required": [

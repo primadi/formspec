@@ -4281,6 +4281,13 @@
         },
         "label": {
           "type": "string"
+        },
+        "view": {
+          "description": "Navigate to a view resource (`\u003ckind\u003e:\u003cname\u003e`, e.g. `print:receipt-thermal`) instead of running the entity action. The record id is appended for kinds whose route takes one.",
+          "type": "string",
+          "examples": [
+            "print:table-tent-card"
+          ]
         }
       },
       "required": [
@@ -9176,6 +9183,13 @@
         },
         "label": {
           "type": "string"
+        },
+        "view": {
+          "description": "Navigate to a view resource (`\u003ckind\u003e:\u003cname\u003e`, e.g. `print:receipt-thermal`) instead of running the entity action. The record id is appended for kinds whose route takes one.",
+          "type": "string",
+          "examples": [
+            "print:table-tent-card"
+          ]
         }
       },
       "required": [

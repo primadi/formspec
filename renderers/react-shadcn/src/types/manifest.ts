@@ -1063,6 +1063,12 @@ export interface TableAction {
   label: string
   icon?: string
   confirm_msg?: string
+  /** Navigate to a view resource (`<kind>:<name>`, e.g. `print:receipt-thermal`)
+   *  instead of running the entity action. Renderer builtins such as `print`
+   *  have no backing entity action, so `canDoEntityAction` cannot gate them —
+   *  the client dispatches on `view` BEFORE that check. The record id is
+   *  appended for kinds whose route takes one (only `print` today). */
+  view?: string
 }
 
 export interface FilterSpec {

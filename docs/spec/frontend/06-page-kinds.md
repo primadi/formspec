@@ -413,6 +413,28 @@ spec:
 ([`04-spec-resolution-api.md`](04-spec-resolution-api.md) §5). `row_actions`/
 `bulk_actions` permission-gated otomatis, sama seperti action Form.
 
+**Navigasi dari row action (`view:`).** Satu entri `row_actions` boleh
+**membuka view resource** alih-alih memanggil action entity:
+
+```yaml
+row_actions:
+  - {
+      action: print,
+      label: "Cetak Kartu",
+      icon: printer,
+      view: "print:table-tent-card",
+    }
+```
+
+`view` memakai kosakata `<kind>:<name>` yang sama dengan `MenuItem.view`; id
+record disertakan bila rute kind itu menerima `:id` (mis. `print`, yang
+mendaftarkan `/print/<name>` **dan** `/print/<name>/:id`). Ini jalur pemicu
+untuk view yang routable tetapi **bukan** action entity — `print` dan `export`
+adalah builtin renderer (tidak punya permission entity), sehingga gatingnya
+memakai izin `view` atas entity sumber view itu. `formspec validate` menolak
+`view` yang tidak me-resolve ke view terdaftar: target yang menuju ke mana-mana
+lebih buruk daripada tombol yang tidak ada.
+
 ### 3.1 Prioritas & Overflow Kolom (derivasi — normatif)
 
 Table tanpa `columns:` eksplisit menderivasi kolomnya dari entity. Derivasi

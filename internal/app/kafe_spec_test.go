@@ -212,3 +212,78 @@ func TestDerivePublicGrants_KafeQR(t *testing.T) {
 		t.Fatalf("order scope = %#v, want a single guest_token row scope from the route", orderScope)
 	}
 }
+
+// TestResolve_KafeSpec_PrintTrigger pins the kafe half of the print row action
+// (plan docs_internal/plan/print-row-action.md): the kartu-nomor-meja Print and
+// the table row action that opens it.
+//
+// The claim this backs is "no App config change was needed" — the print ships
+// because its MODULE is mounted (bundle prints are filtered per module,
+// internal/ui/meta.go), not because it was registered as a view. That is a
+// structural precondition, so it is checked here rather than assumed.
+func TestResolve_KafeSpec_PrintTrigger(t *testing.T) {
+	const specPath = "../../examples/kafe/spec"
+
+	loaded, err := manifest.NewLoader(specPath).LoadAll()
+	if err != nil {
+		t.Fatalf("load kafe spec tree: %v", err)
+	}
+	uiReg := ui.NewRegistry()
+	if errs := uiReg.LoadDir(specPath); len(errs) > 0 {
+		t.Fatalf("load kafe UI manifests: %v", errs)
+	}
+	apps, err := Resolve(loaded.Manifests, uiReg)
+	if err != nil {
+		t.Fatalf("resolve kafe apps: %v", err)
+	}
+
+	// The Print exists and targets the table entity.
+	card, ok := uiReg.Prints["table-tent-card"]
+	if !ok {
+		t.Fatal("Print `table-tent-card` is not registered")
+	}
+	if card.Module != "cafe-master" {
+		t.Errorf("Print module = %q, want cafe-master", card.Module)
+	}
+	if card.Spec.Entity != "cafe-master.dining-table" {
+		t.Errorf("Print entity = %q, want cafe-master.dining-table", card.Spec.Entity)
+	}
+	// The QR payload must reach the LIVE check-in page, not a stray path.
+	var payload string
+	for _, item := range card.Spec.Body {
+		if item.Qrcode != nil {
+			payload = item.Qrcode.Payload
+		}
+	}
+	if payload != "/kafe/t/{qr_token}" {
+		t.Errorf("QR payload = %q, want /kafe/t/{qr_token}", payload)
+	}
+
+	// The row action exists and names the Print via `view`.
+	table, ok := uiReg.Tables["dining-table-table"]
+	if !ok {
+		t.Fatal("Table `dining-table-table` is not registered")
+	}
+	var found bool
+	for _, a := range table.Spec.RowActions {
+		if a.Action == "print" {
+			found = true
+			if a.View != "print:table-tent-card" {
+				t.Errorf("print row action view = %q, want print:table-tent-card", a.View)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("dining-table-table has no `print` row action (got %v)", table.Spec.RowActions)
+	}
+
+	// kafe-pos mounts cafe-master, so the Print's module is allowed and the
+	// catalog ships — this is why no `registered_views` entry is needed.
+	pos := apps["kafe-pos"]
+	if pos == nil {
+		t.Fatal("kafe-pos not resolved")
+	}
+	if !pos.Modules["cafe-master"] {
+		t.Errorf("kafe-pos must mount cafe-master for the card Print to ship (got %v)", pos.Modules)
+	}
+}

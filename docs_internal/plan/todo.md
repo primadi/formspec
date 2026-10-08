@@ -1,4 +1,6 @@
-**Last Updated**: 2026-10-08 (**Brotli q11 pre-compress post-build — 8.4.4 ditutup.** Sidecar `.br` dibuat `formspec spa compress` dari `make build-spa`/`web-build` (setelah `npm run build`, sebelum tiga `cp -r dist/*`); serving br → gzip → identity, ETag ber-sufiks, sidecar 404. **Terukur:** raw 1.839.789 → gzip 608.324 → **brotli 438.994 (−27,8%)**; warm boot 90 → 19 ms. Dua bug ketemu: `Elapsed` selalu 0 + sidecar mode `0600`. Plan `brotli-precompress-build.md`, changelog `2026-10-08-004`. Sisa: — )
+**Last Updated**: 2026-10-08 (**Pemicu cetak deklaratif `row_action.view` + kartu nomor meja kafe — 5.25.9 & kafe 2.15 ditutup.**
+`kind: Print` routable tetapi tak punya pemicu UI: `print` **sudah** builtin server (`internal/ui/validate.go` `builtinRowActions`), yang hilang hanya dispatch navigasi klien (+ cara menyatakan tujuan). Ditutup dengan `TableAction.View` (`view: "<kind>:<name>"`, kosakata yang sama dengan `MenuItem.view`): `engine/viewTarget.ts` + cabang `action.view` **sebelum** `canDoEntityAction` di `TableRenderer`/`KanbanRenderer` (cabang di belakang guard = kode mati, sebab `print` tak punya permission entity); validator `validateActionView` menolak target yang tak resolve lewat `resolveViewRouteLocked`. Kafe memakainya untuk kartu nomor meja (`prints/table-tent-card.yaml` A5 + QR `/kafe/t/{qr_token}`, `tables/dining-table-table.yaml` hanya menambah `row_actions`). **Bukti:** kafe `validate` **90/0** · `check` 0/0 · `go test ./...` hijau · lint **0 issues** · `tsc -b` bersih · `vitest` **695** (2 file test baru, keduanya **dibuktikan gagal** saat fix disuntik-keluar lalu dipulihkan; file asli di-`cp` ke `/tmp`, bukan `git checkout`). Plan `print-row-action.md`, changelog `2026-10-08-005`. Sisa → **5.25.11 ⏸️** (cetak struk), kafe **10.83 ⏸️** (`qr_token` tanpa generator). )
+**Last Updated (sebelumnya)**: 2026-10-08 (**Brotli q11 pre-compress post-build — 8.4.4 ditutup.** Sidecar `.br` dibuat `formspec spa compress` dari `make build-spa`/`web-build` (setelah `npm run build`, sebelum tiga `cp -r dist/*`); serving br → gzip → identity, ETag ber-sufiks, sidecar 404. **Terukur:** raw 1.839.789 → gzip 608.324 → **brotli 438.994 (−27,8%)**; warm boot 90 → 19 ms. Dua bug ketemu: `Elapsed` selalu 0 + sidecar mode `0600`. Plan `brotli-precompress-build.md`, changelog `2026-10-08-004`. Sisa: — )
 **Last Updated (sebelumnya)**: 2026-10-08 (**Parity dev `registry-dev`: SPA asli tersaji, banner jujur, redirect `GET /`.**
 `make registry-dev` menjalankan `go run` tanpa `-tags formspec_spa`, jadi `web/embed.go` (SPA asli) tak ikut dikompilasi dan `embed_stub.go` yang menjawab "SPA tidak ter-embed" — padahal `renderers/react-shadcn/dist` ada. Banner-nya juga mencetak `http://localhost:8080` (tanpa prefix workspace → **404**) dan menunjuk `/default/_admin`, permukaan yang panel entity-nya pensiun (D4). Ditutup: resolusi SPA `--web-dir` → `devserver.FindWebDist()` → embedded (auto-detect dilewati bila embed berisi dist asli, supaya UI binary tidak ditentukan checkout di atas CWD-nya), banner dari `App.UIAppURLs()` (URL diturunkan dari App, bukan literal slug/mount), dan redirect dev `GET /` → `/{ws}/` (gate `!ProdMode` + tepat satu App; `RouterBuilder` tak punya `ProdMode` jadi dihitung di `resource/formspec.go`). **Bukti:** `GET /` → **302** `location=/default/`; mengikutinya → `src="/assets/index-hxPnax6q.js"` (bukan `SPA tidak ter-embed`); `/default/` → 200 `text/html`; **setelah hot-reload** redirect tetap 302 (re-wire jalur `ReloadSpec`); di luar repo → banner `⚠ placeholder` + `Fix: …`.
 Guard dibuktikan menggigit (`SetRootRedirect("")` → 2 test FAIL) lalu dipulihkan. Sisa dipisah ke item bernomor: klaim `/_admin` basi di `docs/`+`examples/` → **13.5.8 ⏸️**, hardcode slug di SPA → **5.22.9 ⏸️**. Plan `docs_internal/plan/registry-dev-ui-parity.md`, changelog `2026-10-08-002`.)
@@ -2780,32 +2782,34 @@ icon: clock}` sehingga derived table menawarkannya sebagai row action
       `src/kinds/table/wizard-row-action.test.ts` (3) — **dibuktikan gagal** saat
       cabang wizard disuntik-keluar. Changelog `2026-10-02-004`. Effort selesai: small.
 
-- [⏸️] 5.25.9 **View yang routable tetapi tanpa pemicu di UI — SEBAGIAN ditutup
-  2026-10-04.** `registered_views` membuat route-nya **ada** (SPA tidak 404),
-  bukan **terjangkau** — pembedaan yang sama dengan yang sudah dicatat untuk
-  wizard di 5.25.4.
-  **Yang sudah landing:** `supervisor-inbox` kini punya entri menu authored di
-  `kafe-pos` (grup "Persetujuan" → "Antrean Void"), jadi jalurnya nyata dan
-  entri `registered_views`-nya dihapus. Menulis entri itu memaksa perbaikan
-  `viewKinds` (`cmd/formspec/validate_dangling.go`) yang tertinggal empat kind —
-  lihat changelog `2026-10-04-003`.
-  **Yang belum:** `kind: Print` (`receipt-thermal`, `receipt-digital`) **tetap
-  tanpa pemicu apa pun**. Route-nya ada (`buildRoutes` mendaftarkan
-  `{basePath}/print/{name}` dan `.../print/{name}/:id`), `PrintRenderer` sudah
-  menerima `useParams().id`, dan `roles.yaml` sudah memberi grant
-  `print:receipt-thermal` — tetapi **tidak ada satu pun** `print/...` di
-  `renderers/react-shadcn/src/kinds/**` maupun `src/engine/**`: tidak ada tombol
-  "Cetak struk" di `DetailPage`/`TableRenderer`, tidak ada yang menautkan dari
-  record pesanan. Jadi kasir masih mengetik
-  `/kafe/app/pos/print/receipt-thermal/<order-id>` sendiri, dan tidak ada test
-  yang gagal karenanya.
-  **Teramati:** `grep -rn 'print/' renderers/react-shadcn/src/kinds renderers/react-shadcn/src/engine`
-  → 0 hasil; `grep -rn 'print' src/shell/` → hanya `router.tsx` (registrasi route).
-  Yang terbuka: keputusan bentuk pemicunya — (a) aksi baris/record yang
-  menavigasi ke `surfacePath("print", name) + "?" + id`, atau (b) `ui.print:`
-  deklaratif pada entity/action (pola yang sama dengan `ui.button_label` pada
-  transisi, 5.25.8). Effort: medium (pemicu + test yang **dibuktikan gagal** bila
-  cabangnya disuntik-keluar).
+- [x] 5.25.9 ✅ **2026-10-08** **View yang routable tetapi tanpa pemicu di UI —
+      MEKANISME + KAFE KARTU MEJA ditutup.** Sejak 2026-10-04 sebagian ditutup
+      (`supervisor-inbox` dapat entri menu), tetapi `kind: Print` tetap tanpa pemicu
+      apa pun.
+      **Yang landing:** satu field deklaratif generik `TableAction.View`
+      (`view: "<kind>:<name>"`), memakai kosakata `{kind}:{name}` yang sudah dipakai
+      `MenuItem.view`/`registered_views`/grants. `print` memang **sudah** builtin di
+      server (`internal/ui/validate.go` `builtinRowActions`) — yang hilang hanya
+      dispatch navigasi di klien, dan itu yang ditambahkan: `engine/viewTarget.ts` +
+      cabang `action.view` **sebelum** `canDoEntityAction` di `TableRenderer` &
+      `KanbanRenderer` (action `print` tak punya permission entity, jadi cabang di
+      belakang guard = kode mati). Validator `validateActionView` menolak target yang
+      tidak resolve lewat `resolveViewRouteLocked` (bukan salinan kelima konvensi).
+      Kafe memakainya untuk **kartu nomor meja** (`cafe-master/prints/table-tent-card.yaml`
+  - `tables/dining-table-table.yaml`) — ini juga menutup kafe **2.15**.
+    **Bukti:** kafe `validate` **90/0** · `check` 0/0 · `go test ./...` hijau · lint
+    **0 issues** · `tsc -b` bersih · `vitest` **695** (2 file test baru: 12+6, dua-duanya
+    **dibuktikan gagal** saat cabang/validasi disuntik-keluar lalu dipulihkan).
+    Plan `docs_internal/plan/print-row-action.md`, changelog `2026-10-08-005`.
+    **Sisa:** pemicu cetak untuk **struk** belum dipasang → **5.25.11 ⏸️**.
+- [⏸️] 5.25.11 **Pemicu cetak struk (`receipt-thermal`/`receipt-digital`) belum
+  terpasang.** Mekanisme `row_action.view` (5.25.9) sudah ada, tetapi
+  `cafe-order/tables/order-table-pos.yaml` belum punya entri `{ action: print,
+view: "print:receipt-thermal" }`, jadi kasir tetap mengetik URL struk manual.
+  Kenapa ditunda: menyentuh table POS yang sedang berjalan (aksi cepat
+  lunas/void) — perubahan perilaku POS lebih baik dipisah agar kalau ada regresi
+  ia bisa diatribusikan. Teramati: `grep -n 'print' examples/kafe/spec/modules/cafe-order/tables/order-table-pos.yaml`
+  → 0 hasil. Effort: small.
 - [⏸️] 5.25.10 **Grant per-inbox belum bisa — `navigationFootprint` tidak
   mengenal `approval-inbox:` / `notification-center:`.** Akibatnya supervisor
   tidak bisa diberi hak atas inbox sebagai inbox; ia hanya boleh approve karena

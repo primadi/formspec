@@ -499,6 +499,22 @@ type TableAction struct {
 	Label      string `yaml:"label" json:"label"`
 	Icon       string `yaml:"icon,omitempty" json:"icon,omitempty"`
 	ConfirmMsg string `yaml:"confirm_msg,omitempty" json:"confirm_msg,omitempty"`
+	// View turns the action into a NAVIGATION to a view resource instead of a
+	// call to the entity action. It names the target with the same
+	// `{kind}:{name}` vocabulary used by MenuItem.view / registered_views /
+	// grants, so an action is not limited to the entity's own CRUD routes.
+	//
+	// The record id is appended when the target's route takes one — `Print`
+	// registers both `/print/{name}` and `/print/{name}/:id`, so a print row
+	// action opens the document for THAT record. Kinds without an `:id` route
+	// (Report, Kanban, …) ignore the id.
+	//
+	// It exists because `print`/`export` are renderer builtins
+	// (internal/ui/validate.go builtinRowActions) with no backing entity
+	// action, so an action that carries `view` must be dispatched BEFORE the
+	// `canDoEntityAction` check — which would otherwise reject it.
+	// @schema {example: "print:table-tent-card", description: "Navigate to a view resource (`<kind>:<name>`, e.g. `print:receipt-thermal`) instead of running the entity action. The record id is appended for kinds whose route takes one."}
+	View string `yaml:"view,omitempty" json:"view,omitempty"`
 }
 
 // FilterSpec is a generic filter declaration shared by every data kind that

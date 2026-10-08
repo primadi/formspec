@@ -1,0 +1,29 @@
+apiVersion: formspec.dev/v1
+kind: Table
+metadata:
+  name: dining-table-table
+  module: cafe-master
+  description: "Daftar meja — tambah aksi cetak kartu nomor meja"
+spec:
+  entity: cafe-master.dining-table
+  # Table ini SENGAJA hanya menambah `row_actions`. `TableRenderer` memakai
+  # authored spec bila ada, dan di sini `columns`/`filters`/`search`/`page_size`
+  # dibiarkan KOSONG supaya tetap diwarisi dari `deriveTable(entity)` — daftar
+  # meja karena itu tampak persis seperti sebelumnya, hanya bertambah satu
+  # tombol. Menulis ulang kolom di sini akan membekukan tampilan ke satu
+  # snapshot dan menghilangkan pewarisan itu tanpa alasan.
+  #
+  # `action: print` adalah renderer builtin (`internal/ui/validate.go`
+  # `builtinRowActions`) yang tidak punya backing entity action; `view:` yang
+  # menentukan TUJUAN-nya dengan kosakata `{kind}:{name}` yang sama seperti
+  # `MenuItem.view`. Klien menavigasi (bukan POST) dan menambahkan id record
+  # karena rute Print menerima `/:id`.
+  #
+  # Daftar action di bawah WAJIB lengkap: authored `row_actions` menggantikan
+  # (bukan menambah) hasil derived, jadi view/edit/delete harus ditulis lagi —
+  # kalau tidak, tombolnya hilang dari daftar meja.
+  row_actions:
+    - { action: view, label: "Lihat" }
+    - { action: edit, label: "Ubah" }
+    - { action: print, label: "Cetak Kartu", icon: printer, view: "print:table-tent-card" }
+    - { action: delete, label: "Hapus", confirm_msg: "Hapus meja ini?" }

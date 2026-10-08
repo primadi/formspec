@@ -1,0 +1,37 @@
+apiVersion: formspec.dev/v1
+kind: Print
+metadata:
+  name: table-tent-card
+  module: cafe-master
+  description: "Kartu nomor meja — nomor + QR pemesanan mandiri (ditempel di meja)"
+spec:
+  entity: cafe-master.dining-table
+  # `html` dirender di browser (`window.print()` + CSS @media print) — kartu
+  # dicetak dari back-office, bukan dari pipeline server. A5 = kartu tent yang
+  # berdiri sendiri di meja.
+  output:
+    format: html
+    paper: { size: A5, margin: 10mm }
+  header:
+    logo: false
+    # {code} = `dining-table.code` (mis. "A-01").
+    title: "MEJA {code}"
+    subtitle: "{branch.name}"
+  body:
+    # Nomor meja dalam bentuk teks, supaya kartu tetap terbaca bila QR rusak.
+    - fields: [code, area, seats]
+    # QR menuju halaman masuk tamu (`cafe-order/table-open`, route /t/:qr_token).
+    # `absolute: true` menambahkan origin dokumen yang dicetak, dan `/kafe/`
+    # adalah prefix workspace + `root_url: /` milik App publik `kafe-qr` —
+    # jalur itu terbukti hidup (tamu anonim `GET .../dining-table/JKT-A01-DEMO`
+    # → 200 me-resolve lewat `qr_token` sebagai natural key).
+    #
+    # Payload memakai token, BUKAN id record: kartu bisa dicetak ulang tanpa
+    # berubah, dan tamu tidak perlu tahu UUID meja.
+    - qrcode:
+        payload: "/kafe/t/{qr_token}"
+        label: "Pindai untuk memesan"
+        absolute: true
+        size_mm: 60
+  footer:
+    text: "{branch.name}"

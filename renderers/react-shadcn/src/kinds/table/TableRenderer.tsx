@@ -49,6 +49,11 @@ import { useMetaStore } from "@/stores/meta"
 import { findWizardForTransition } from "@/engine/wizardCommit"
 import { canDoEntityAction } from "@/engine/permissions"
 import {
+  canDoTableAction,
+  resolveViewTarget,
+  viewTargetTakesId,
+} from "@/engine/viewTarget"
+import {
   deriveTable,
   deriveForm,
   DERIVED_TABLE_VISIBLE_COLUMNS,
@@ -547,6 +552,9 @@ export default function TableRenderer({
   //
   // Rows that fail are reported individually (409 → stale, so the badge shows).
   const canRunBulk = (action: TableAction): string | null => {
+    if (action.view) {
+      return `"${action.label}" membuka satu dokumen — pakai aksi baris, bukan aksi massal`
+    }
     if (action.action === "view" || action.action === "edit") {
       return `"${action.label}" butuh satu baris — pakai aksi baris, bukan aksi massal`
     }
@@ -810,6 +818,33 @@ export default function TableRenderer({
     inputs?: Record<string, unknown>,
   ) => {
     if (!me) return
+
+    // A view-target action NAVIGATES instead of calling the entity action.
+    // `print`/`export` are renderer builtins with no backing entity action, so
+    // the `canDoEntityAction` check below would reject them — this branch must
+    // come first (plan docs_internal/plan/print-row-action.md).
+    if (action.view) {
+      if (!canDoTableAction(me, metaBundle, entity, action)) {
+        toast.error("You don't have permission to perform this action")
+        return
+      }
+      const target = resolveViewTarget(metaBundle, action.view)
+      if (!target) {
+        toast.error(`Nothing at ${action.view}`)
+        return
+      }
+      navigate(
+        viewTargetTakesId(target.kind)
+          ? surfacePath(
+              target.kind,
+              target.name,
+              getEntityRouteSegment(entity, row),
+            )
+          : surfacePath(target.kind, target.name),
+      )
+      return
+    }
+
     if (!canDoEntityAction(me, entity, action.action)) {
       toast.error("You don't have permission to perform this action")
       return
@@ -1182,7 +1217,7 @@ export default function TableRenderer({
                           <div className="flex items-center justify-end gap-1">
                             {tableSpec.row_actions
                               .filter((a) =>
-                                canDoEntityAction(me, entity, a.action),
+                                canDoTableAction(me, metaBundle, entity, a),
                               )
                               .filter((action) =>
                                 isActionAllowedForRow(

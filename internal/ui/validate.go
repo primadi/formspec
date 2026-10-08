@@ -117,6 +117,7 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 				addf("%s: Table %q: action %q not on entity %q and not a builtin (view|edit|delete|export|print), nor a transition `via`",
 					e.Source, name, a.Action, e.Spec.Entity)
 			}
+			r.validateActionView(addf, e.Source, fmt.Sprintf("Table %q", name), a)
 		}
 		if s := strings.TrimPrefix(e.Spec.DefaultSort, "-"); s != "" {
 			if !fieldPathExists(resolve, e.Module, es, s) {
@@ -251,6 +252,9 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 			if !fieldPathExists(resolve, e.Module, es, f.Field) {
 				addf("%s: Kanban %q: fixed_filters field %q not on entity %q", e.Source, name, f.Field, e.Spec.Entity)
 			}
+		}
+		for _, a := range e.Spec.RowActions {
+			r.validateActionView(addf, e.Source, fmt.Sprintf("Kanban %q", name), a)
 		}
 	}
 
@@ -441,4 +445,105 @@ func actionExists(es *spec.EntitySpec, name string) bool {
 		}
 	}
 	return spec.IsReservedAction(name) // implicit reserved actions exist unless disabled
+}
+
+// validateActionView checks a TableAction's `view` navigation target
+// (`<kind>:<name>`), used by renderer builtins such as `print` that have no
+// backing entity action. A target that does not resolve here is a link to
+// nowhere: the client would register no route for it and the click would land
+// on the SPA's 404.
+//
+// It reuses the SAME resolver the menu uses (resolveViewRouteLocked), so this
+// is not a fifth copy of the kind → route convention — a target accepted here
+// is one the client's buildRoutes registers.
+func (r *Registry) validateActionView(addf func(string, ...any), src, owner string, a spec.TableAction) {
+	if a.View == "" {
+		return
+	}
+	kind, name, ok := strings.Cut(a.View, ":")
+	if !ok || kind == "" || name == "" {
+		addf("%s: %s: action %q: view %q must be \"<kind>:<name>\" (e.g. \"print:receipt-thermal\")",
+			src, owner, a.Action, a.View)
+		return
+	}
+	mod, found := r.viewTargetModule(kind, name)
+	if !found {
+		addf("%s: %s: action %q: view %q does not resolve to a registered view",
+			src, owner, a.Action, a.View)
+		return
+	}
+	if _, err := r.resolveViewRouteLocked(mod, name); err != nil {
+		addf("%s: %s: action %q: view %q would navigate nowhere: %v",
+			src, owner, a.Action, a.View, err)
+	}
+}
+
+// viewTargetModule returns the owning module of a `<kind>:<name>` navigation
+// target for the kinds that carry an independently-routable view — the same
+// vocabulary resolveViewRouteLocked knows. It is the EXISTENCE check; the
+// caller follows it with resolveViewRouteLocked for ROUTABILITY, so the two
+// steps together mean "the client registers a route for this".
+//
+// Called from Validate, which already holds r.mu — that is why it touches the
+// maps directly rather than going through a locked accessor.
+func (r *Registry) viewTargetModule(kind, name string) (string, bool) {
+	switch kind {
+	case "page":
+		if e, ok := r.Pages[name]; ok {
+			return e.Module, true
+		}
+	case "dashboard":
+		if e, ok := r.Dashboards[name]; ok {
+			return e.Module, true
+		}
+	case "widget":
+		if e, ok := r.Widgets[name]; ok {
+			return e.Module, true
+		}
+	case "report":
+		if e, ok := r.Reports[name]; ok {
+			return e.Module, true
+		}
+	case "wizard":
+		if e, ok := r.Wizards[name]; ok {
+			return e.Module, true
+		}
+	case "kanban":
+		if e, ok := r.Kanbans[name]; ok {
+			return e.Module, true
+		}
+	case "timeline":
+		if e, ok := r.Timelines[name]; ok {
+			return e.Module, true
+		}
+	case "calendar":
+		if e, ok := r.Calendars[name]; ok {
+			return e.Module, true
+		}
+	case "listing":
+		if e, ok := r.Listings[name]; ok {
+			return e.Module, true
+		}
+	case "print":
+		if e, ok := r.Prints[name]; ok {
+			return e.Module, true
+		}
+	case "form":
+		if e, ok := r.Forms[name]; ok {
+			return e.Module, true
+		}
+	case "table":
+		if e, ok := r.Tables[name]; ok {
+			return e.Module, true
+		}
+	case "approval-inbox":
+		if e, ok := r.ApprovalInboxes[name]; ok {
+			return e.Module, true
+		}
+	case "notification-center":
+		if e, ok := r.NotificationCenters[name]; ok {
+			return e.Module, true
+		}
+	}
+	return "", false
 }
