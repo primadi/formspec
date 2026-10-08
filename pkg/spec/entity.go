@@ -84,6 +84,138 @@ type ScopeDecl struct {
 	Field string `yaml:"field" json:"field"`
 	// @schema {description: "Every row must carry a dimension value; requires the field itself to be required"}
 	Required bool `yaml:"required,omitempty" json:"required,omitempty"`
+	// Enforced states WHO keeps every read inside this dimension, which is what
+	// makes a `scope` declaration checkable rather than decorative.
+	//
+	// A `scope` on its own is only a statement about the data: it names the
+	// field that carries the dimension, but nothing about the declaration makes
+	// the server filter by it. "Declared dimension, no enforcement" is exactly
+	// how multi-outlet isolation silently leaks, so the absence of enforcement
+	// must be VISIBLE — as an explicit value here — instead of indistinguishable
+	// from having forgotten `row_scope`.
+	//
+	//   - `session` (default, i.e. absent): a session attribute carries the value
+	//     (`row_scope: [{field: <field>, from: session}]`). Required for every
+	//     ordinary branch-scoped entity.
+	//   - `route`: a request parameter carries it (`from: route`) — the shape a
+	//     public surface needs, where there is no session to read from.
+	//   - `none`: the dimension is genuinely cross-cutting on this entity (e.g. a
+	//     promo whose empty `branch_id` means "all branches"). No filter is
+	//     correct here, and saying so is the point.
+	//   - `external`: enforced outside the entity — a public grant's `scope`
+	//     (derived from the surface) or `create_scope` on the write path. Used by
+	//     entities that a public App reads or writes with a token instead of a
+	//     session.
+	//
+	// Validation couples the value to the declaration it claims: `session`
+	// demands a matching `row_scope`, `route` demands `from: route`, and
+	// `none`/`external` are accepted as deliberate exemptions. The value is a
+	// declaration, not a runtime switch — enforcement is always whatever the
+	// referenced `row_scope`/grant says.
+	// @schema {description: "Who keeps reads inside the dimension: session (default), route, none (cross-cutting by design), external (public grant / create_scope).", enum: ["session", "route", "none", "external"]}
+	Enforced string `yaml:"enforced,omitempty" json:"enforced,omitempty"`
+}
+
+// ScopeEnforcement is the closed set of values `scope.enforced` accepts.
+var ScopeEnforcement = map[string]bool{
+	"session": true, "route": true, "none": true, "external": true,
+}
+
+// ValidateScopeEnforcement checks that a `scope` declaration and the row
+// restriction it claims to have agree.
+//
+// The rule exists because the two halves were previously independent: an entity
+// could declare `scope: {dimension: branch, field: branch_id}` and simply never
+// write a `row_scope`, and nothing said whether that was a deliberate
+// cross-branch entity or a forgotten filter. Reading the manifest could not
+// answer the question, so the only trustworthy answer was "audit the code".
+//
+// `filters` is the entity's `row_scope` (nil/empty when absent). `field` is the
+// dimension-carrying field: this is the field the filter must restrict, because
+// a `row_scope` on some OTHER field does not keep readers inside the dimension.
+func ValidateScopeEnforcement(d *ScopeDecl, filters []FilterSpec) error {
+	enforced := d.Enforced
+	if enforced == "" {
+		enforced = "session"
+	}
+	if !ScopeEnforcement[enforced] {
+		return fmt.Errorf("scope: enforced %q is not one of session, route, none, external", enforced)
+	}
+	if enforced == "none" {
+		// Cross-cutting by design. A filter would be wrong here (it would hide
+		// the global rows), so none is expected — but a filter that IS present
+		// contradicts the declaration and would silently narrow reads.
+		if len(filters) > 0 {
+			return fmt.Errorf("scope: enforced \"none\" says the dimension is cross-cutting, but a row_scope on %q is declared — remove one of the two", d.Field)
+		}
+		return nil
+	}
+	if enforced == "external" {
+		// Enforced by a public grant's `scope`/`create_scope` rather than by
+		// this entity, so a `row_scope` here is unnecessary — but if one IS
+		// declared it must still name the dimension field, else the entity is
+		// claiming two different restricitions.
+		for i := range filters {
+			if filters[i].Field == d.Field {
+				return nil
+			}
+		}
+		return nil
+	}
+
+	// session / route: the entity itself must carry the restriction.
+	wantFrom := enforced
+	for i := range filters {
+		f := &filters[i]
+		if f.Field != d.Field {
+			continue
+		}
+		from := f.From
+		if from == "" {
+			// A literal is a constant, which cannot carry a per-request
+			// dimension value — it would pin every caller to one value.
+			return fmt.Errorf("scope: enforced %q but row_scope on %q uses a literal value — a constant cannot carry the caller's own %s",
+				enforced, d.Field, d.Dimension)
+		}
+		if from != wantFrom {
+			return fmt.Errorf("scope: enforced %q but row_scope on %q reads from %q — a caller would be filtered by a value the declaration does not claim",
+				enforced, d.Field, from)
+		}
+		return nil
+	}
+	return fmt.Errorf("scope: dimension %q is declared enforced by %q, but no row_scope on %q says so — add `row_scope: [{field: %s, from: %s}]`, or declare `enforced: none|external` if the dimension is deliberately not enforced here",
+		d.Dimension, enforced, d.Field, d.Field, wantFrom)
+}
+
+// CreateScopeSpec pins a dimension field on CREATE from a record the payload
+// references — the write-side counterpart of `row_scope`.
+//
+// `row_scope` answers "which rows may this caller READ". It cannot answer the
+// write question, because a row that does not exist yet has no stored value to
+// filter: `create` is not row-scoped anywhere in the storage layer (InsertParams
+// carries no predicates). So the only place to state "the branch of a new order
+// is the branch of the table session it belongs to" is the create path itself.
+//
+// The rule is CONDITIONAL on the reference: when the payload carries a value for
+// RefField, the dimension field must equal the referenced record's ViaField.
+// When it does not (a cashier creating a walk-in order with no table session),
+// there is nothing to derive from and the rule does not apply — which is
+// deliberate, so one declaration serves both surfaces without a mode switch.
+//
+// A MISMATCH IS REJECTED (403), never silently overwritten. Overwriting would
+// make the payload lie about what was stored, and the caller would have no way
+// to learn that their input was discarded.
+type CreateScopeSpec struct {
+	// @schema {description: "Dimension field on THIS entity that the create must pin", example: "branch_id"}
+	Field string `yaml:"field" json:"field"`
+	// @schema {description: "Where the expected value comes from at request time. Only `record` is defined: a record the payload references.", enum: ["record"]}
+	From string `yaml:"from,omitempty" json:"from,omitempty"`
+	// @schema {description: "Relation field on this entity holding the reference (id or natural key) to the record to read from", example: "table_session_id"}
+	RefField string `yaml:"ref_field" json:"ref_field"`
+	// @schema {description: "The referenced record's entity, as \"<module>.<entity>\"", example: "cafe-order.table-session"}
+	Via string `yaml:"via" json:"via"`
+	// @schema {description: "Field on `via` holding the expected value", example: "branch_id"}
+	ViaField string `yaml:"via_field" json:"via_field"`
 }
 
 // AssignmentDecl declares that an entity records a principal→dimension mapping
@@ -223,6 +355,20 @@ type EntitySpec struct {
 	// Renamed from `scope` when S5 (item 1.8) introduced the `scope:` dimension
 	// descriptor — one name cannot be both a filter list and a declaration.
 	RowScope []FilterSpec `yaml:"row_scope,omitempty" json:"row_scope,omitempty"`
+	// CreateScope pins a dimension field on CREATE from a record the payload
+	// references — the write-side counterpart of `row_scope`.
+	//
+	// A row that does not exist yet cannot be row-filtered, so `create` had no
+	// scope at all: a caller could POST a record claiming any dimension value
+	// (measured on kafe: an anonymous QR guest could create an order in another
+	// branch, because `order.branch_id` carries no `required_permission` and
+	// InsertParams has no predicates). This declaration closes that gap.
+	//
+	// `{field, ref_field, via, via_field}`: when the payload carries `ref_field`,
+	// `field` must equal `<via>.<via_field>` — a mismatch is refused, not
+	// overwritten. Absent `ref_field` means there is nothing to derive from, so
+	// the rule does not apply (cashier walk-in orders have no table session).
+	CreateScope []CreateScopeSpec `yaml:"create_scope,omitempty" json:"create_scope,omitempty"`
 	// Scope declares that this entity's rows are partitioned along a named
 	// dimension (S5) — e.g. `{dimension: branch, field: branch_id}`. It states a
 	// fact about the data (consumed by natural-key scoping and, from item 3.5, by
@@ -1088,6 +1234,17 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		}
 	}
 
+	// create_scope: the write-side dimension pin (see CreateScopeSpec). Checked
+	// with the same field-existence rule as row_scope, because a declaration
+	// naming an unknown field would silently pin nothing.
+	if len(d.CreateScope) > 0 {
+		if err := ValidateCreateScopeFilters("create_scope", d.CreateScope, func(name string) bool {
+			return byName[name] != nil
+		}); err != nil {
+			return err
+		}
+	}
+
 	// scope (S5): the entity is partitioned along a named dimension. This is a
 	// statement about the data, not a filter — `row_scope` is what filters. It is
 	// validated tightly because a scoped-looking entity without a dimension
@@ -1109,6 +1266,13 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		if d.Scope.Required && !f.Required {
 			return fmt.Errorf("scope: dimension %q is declared required, but field %q is not required — every row would still be allowed to omit it",
 				d.Scope.Dimension, d.Scope.Field)
+		}
+		// The enforcement half: a declared dimension with no visible owner is
+		// how multi-outlet isolation leaks. Checking it HERE means reading the
+		// manifest can answer "who keeps readers inside this dimension", instead
+		// of requiring an audit of the code.
+		if err := ValidateScopeEnforcement(d.Scope, d.RowScope); err != nil {
+			return err
 		}
 	}
 
@@ -1195,7 +1359,7 @@ func ValidateEntitySpec(d *EntitySpec) error {
 			for what, target := range map[string]string{
 				"map.ref_field":      f.Child.Picker.Map.RefField,
 				"map.name_field":     f.Child.Picker.Map.NameField,
-				"map.price_field":    f.Child.Picker.Map.PriceField,
+				"map.lookup_field":   f.Child.Picker.Map.LookupField,
 				"map.quantity_field": f.Child.Picker.Map.QuantityField,
 				"map.note_field":     f.Child.Picker.Map.NoteField,
 			} {
@@ -1679,6 +1843,19 @@ type Action struct {
 	Conditions     []ConditionDecl  `yaml:"conditions,omitempty" json:"conditions,omitempty"`
 	UI             *ActionUIHint    `yaml:"ui,omitempty" json:"ui,omitempty"`                 // Backend §5.1 — button rendering hints (confirm, icon, style, etc.)
 	RateLimit      *RateLimitSpec   `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"` // 1.4.1 per-action override (02-core-extended.md §17)
+	// Challenge opts this action into its App's anonymous-intake
+	// proof-of-work gate (plan docs_internal/plan/intake-challenge-pow.md).
+	//
+	// It is a BOOLEAN by design: the App owns the policy (difficulty, when to
+	// escalate, TTL, binding), the action only says "I participate". A second
+	// place to state the tuning would let the two drift, and no layer could
+	// tell which one governs.
+	//
+	// The gate applies only to ANONYMOUS callers (a public grant, no identity),
+	// so a signed-in caller or an API-key caller on the same route is never
+	// asked to solve. Declaring it with no App policy is a validation error, not
+	// a silent no-op.
+	Challenge bool `yaml:"challenge,omitempty" json:"challenge,omitempty"`
 }
 
 // ActionUIHint carries frontend rendering hints for an action button (Backend §5.1).
@@ -2918,6 +3095,16 @@ type StorageSpec struct {
 	// MaxDownloadMB caps the size of a file served via download/link routes
 	// (todo 7.17.7). Effective limit = min(global, per-field).
 	MaxDownloadMB int `yaml:"max_download_mb,omitempty" json:"max_download_mb,omitempty"`
+	// DownloadCacheTTL is how long a browser may reuse a downloaded file without
+	// revalidating (todo 7.17.11). Go duration, e.g. "60s", "10m". Overrides
+	// the global FORMSPEC_DOWNLOAD_CACHE_TTL (default 5m).
+	//
+	// Set "0s" to answer `no-cache`: the browser must always revalidate with the
+	// ETag (cheap — the validator comes from the object key, no body read), and
+	// never shows a stale object. Use it for a field whose content must be seen
+	// fresh; `immutable` is never appropriate here because the download URL is
+	// stable while the record can be repointed at a new object key.
+	DownloadCacheTTL string `yaml:"download_cache_ttl,omitempty" json:"download_cache_ttl,omitempty"`
 }
 
 // StorageTransform declares an image transformation preset for a file field.

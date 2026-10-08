@@ -3,8 +3,39 @@
 ## Mode Dev (POC)
 
 ```bash
-formspec dev --spec cmd/formspec-registry/app-spec/spec
+make registry-dev          # = scripts/run-registry.sh
 ```
+
+Script menjalankan `go run ./cmd/formspec-registry` dengan config
+`cmd/formspec-registry/formspec-app.yaml`. Semua permukaan di-prefix slug
+workspace (D50), jadi UI dibuka di **`http://localhost:8080/default/`** —
+`/` sendiri bukan route (URL yang dicetak saat boot adalah yang benar).
+
+Sumber SPA yang disajikan, berurutan:
+
+| #   | Sumber                           | Kapan                                                                                               |
+| --- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | `--web-dir <dir>`                | eksplisit; menang atas semuanya                                                                     |
+| 2   | `renderers/react-shadcn/dist`    | di-_auto-detect_ dari CWD ke atas — sumber renderer, paling segar (`npm run build` menulis ke sini) |
+| 3   | `cmd/formspec-registry/web/dist` | salinan tersinkron untuk `//go:embed` (`make build-registry`); dipakai bila (2) tidak ada           |
+| 4   | embedded `web/dist`              | deploy: `make build-registry` (SPA di-embed via `-tags formspec_spa`) — bekerja tanpa checkout repo |
+
+Auto-detect (2 dan 3) **dilewati** bila embed sudah berisi dist asli, dan sebuah
+direktori hanya dianggap bundle bila memuat `index.html`: kedua produsennya tidak
+atomik (`rm -rf` lalu `cp -r`), dan menyajikan dist setengah jadi memberi halaman
+kosong tanpa sebab yang terlihat dari browser.
+
+Kenapa auto-detect ada: `go run` dikompilasi **tanpa** `-tags formspec_spa`,
+sehingga `web/embed.go` — file embed SPA asli — tidak ikut build dan
+`embed_stub.go` yang menjawab dengan halaman placeholder. "Ada `embed.go`"
+tidak berarti embed-nya dipakai: **build tag** yang menentukan. Bila hasilnya
+tetap placeholder (mis. binary `go install` dijalankan di luar checkout),
+banner menyatakannya eksplisit beserta cara memperbaikinya.
+
+Dengan satu App ber-`root_url`, boot non-produksi juga mengalihkan `GET /` →
+`/{ws}/` supaya nama host polos tidak menjawab `404 page not found`. Di
+production redirect itu tidak dipasang — segmen root milik edge (subdomain per
+workspace / aturan ingress).
 
 Registry adalah FormSpec app biasa (`cmd/formspec-registry/app-spec/spec/`): App `registry` + Module
 `registry` + entities `Vendor`/`Module`/`ModuleVersion`. Data di SQLite lokal,

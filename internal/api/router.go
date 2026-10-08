@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
-	"net/url"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/primadi/formspec/internal/action"
@@ -40,6 +39,8 @@ type RouterBuilder struct {
 	cfgReg        *config.Registry // kind: Config manifests (public key exposure, custom-screens plan Phase 3)
 	webDir        string           // static SPA root (renderers/react-shadcn/dist); empty = no static serving
 	webFS         fs.FS            // embedded SPA (embed.FS); empty = no static serving
+	assets        *spaAssets       // serves webDir/webFS with caching + gzip; nil = no static serving
+	rootRedirect  string           // dev-only "GET /" → this workspace-relative path; empty = no redirect
 	hub           *WSHub
 	wsTickets     *wsTicketStore                       // single-use WS handshake tickets (todo 5.8.4)
 	apps          map[string]*formspec_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
@@ -51,6 +52,13 @@ type RouterBuilder struct {
 	// registry, and isPublicAction asks for the map on every entity route.
 	publicGrantsOnce  sync.Once
 	publicGrantsCache map[string]map[string]bool
+
+	// intakePoliciesOnce/intakePoliciesCache memoize the resolved anonymous
+	// intake gates (plan docs_internal/plan/intake-challenge-pow.md). Resolution
+	// walks every public App and its derived grants; enforcement asks on every
+	// request to an opted-in action.
+	intakePoliciesOnce  sync.Once
+	intakePoliciesCache map[string]IntakePolicy
 	// enableAPIAuth mounts /api/v1/auth/* (login/refresh) on the external
 	// surface. Default false — auth lives on the UI surface (/_ui/auth/*),
 	// which is always available; /api/v1 is deny-by-default for external
@@ -198,6 +206,13 @@ func (b *RouterBuilder) SetDownloadLimitMB(mb int) {
 	b.factory.SetDownloadLimitMB(mb)
 }
 
+// SetDownloadCacheTTL wires the global download cache lifetime
+// (FORMSPEC_DOWNLOAD_CACHE_TTL, todo 7.17.11). Per-field download_cache_ttl
+// overrides it; "0s" on a field means `no-cache`.
+func (b *RouterBuilder) SetDownloadCacheTTL(d time.Duration) {
+	b.factory.SetDownloadCacheTTL(d)
+}
+
 // SetLinkStore wires the storage-link store used by the link issue/consume
 // routes (todo 7.17.6). When nil, link routes return 503.
 func (b *RouterBuilder) SetLinkStore(s *db.StorageLinkStore) {
@@ -222,6 +237,53 @@ func (b *RouterBuilder) SetUIRegistry(r *ui.Registry) {
 // by the `app` query param / their own root_url (Core §4.4).
 func (b *RouterBuilder) SetApps(apps map[string]*formspec_app.ResolvedApp) {
 	b.apps = apps
+}
+
+// AppMountPaths returns the SPA mount prefixes owned by `kind: App` manifests,
+// workspace-relative and sorted — "/" for an App that owns the workspace root,
+// "/barbershop" for a free-form mount.
+//
+// The fixed workspace-level mounts (/_admin, /app) are deliberately excluded:
+// they carry no App, and /_admin holds only framework auth routes since the
+// derived admin panel was retired (plan app-scoped-login.md D4) — advertising
+// it as an application surface is what made the registry banner point at a
+// "Page not found". Callers build user-facing URLs from this instead of
+// hardcoding a slug or a mount.
+func (b *RouterBuilder) AppMountPaths() []string {
+	if len(b.apps) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(b.apps))
+	for _, a := range b.apps {
+		if a == nil || a.Spec == nil {
+			continue
+		}
+		path := a.Spec.RootURL
+		if path == "" {
+			path = "/"
+		}
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		out = append(out, path)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// SetRootRedirect enables the dev-only workspace-root redirect: GET /
+// answers 302 to target (a workspace-relative path such as "/demo/")
+// instead of 404. Empty disables it.
+//
+// The gate is NOT decided here. "Dev only" belongs to the caller that knows
+// ProdMode and how many Apps are mounted (resource/formspec.go): the router
+// has no ProdMode of its own, and a redirect that appears in production would
+// silently change the root contract for every deployment. Call before
+// BuildHTTP.
+func (b *RouterBuilder) SetRootRedirect(target string) {
+	b.rootRedirect = target
 }
 
 // SetSettings wires the resolved global settings namespace (spec §10). It is
@@ -371,11 +433,77 @@ func (b *RouterBuilder) isPublicEntity(module, entity string) bool {
 	return false
 }
 
+// intakePolicies resolves the effective anonymous intake gate for every
+// (module, entity, action) a public App's intake policy covers (plan
+// docs_internal/plan/intake-challenge-pow.md).
+//
+// The gate is DECLARED on the App — the reviewed unit of "what may an anonymous
+// caller touch" — and OPTED INTO by the action (`challenge: true`). Both must
+// be present, which is why resolution needs the derived grants: only an action
+// the App actually exposes anonymously is a candidate. An opt-in no App covers
+// is a validation error (see the cross-manifest check in formspec validate),
+// never a silent no-op.
+//
+// Where more than one public App covers the same (entity, action) the
+// STRICTEST policy wins. Two Apps sharing a route must not weaken each other's
+// protection, and "the first one" would make the outcome depend on map
+// iteration order.
+//
+// It is keyed by (module, entity, action) rather than by App because an
+// anonymous request carries no App: AppFromContext is empty without an
+// identity, `_ui/entity` sends no `?app=`, and publicGrants() has already
+// merged every public App into one module/entity map. Letting the client name
+// the App would put the gate behind a value it can delete.
+func (b *RouterBuilder) intakePolicies() map[string]IntakePolicy {
+	b.intakePoliciesOnce.Do(func() {
+		out := map[string]IntakePolicy{}
+		derived := b.derivedPublicGrants()
+		for name, app := range b.apps {
+			if app.Spec == nil || app.Spec.Access != spec.AppAccessPublic || app.Spec.Intake == nil {
+				continue
+			}
+			c := app.Spec.Intake.Challenge
+			if c == nil {
+				continue
+			}
+			pol := resolveIntakePolicy(c)
+			for _, decl := range derived[name] {
+				entityKey, ok := spec.NormalizeEntityRef(decl.Entity)
+				if !ok {
+					continue
+				}
+				module, entity, _ := strings.Cut(entityKey, "/")
+				info, ok := b.registry.GetEntity(module, entity)
+				if !ok || info.EntitySpec == nil {
+					continue
+				}
+				for _, actionName := range decl.Actions {
+					if !entityActionOptedIn(info.EntitySpec, actionName) {
+						continue
+					}
+					key := intakeKey(module, entity, actionName)
+					if existing, ok := out[key]; ok && !stricterIntake(pol, existing) {
+						continue
+					}
+					out[key] = pol
+				}
+			}
+		}
+		b.intakePoliciesCache = out
+	})
+	return b.intakePoliciesCache
+}
+
 // SetWebDir enables static SPA serving from dir (typically renderers/react-shadcn/dist) at
 // /{ws}/_admin and /{ws}/app with an index.html fallback for client-side
 // routes. Call before BuildHTTP.
 func (b *RouterBuilder) SetWebDir(dir string) {
 	b.webDir = dir
+	// webFS takes precedence (see SetWebFS), so a directory only becomes the
+	// served tree when no embedded SPA has been set.
+	if b.webFS == nil {
+		b.assets = newSPAAssetsFromDir(dir)
+	}
 }
 
 // SetWebFS enables static SPA serving from an embed.FS (or any fs.FS) at
@@ -383,6 +511,21 @@ func (b *RouterBuilder) SetWebDir(dir string) {
 // over SetWebDir. Call before BuildHTTP.
 func (b *RouterBuilder) SetWebFS(spaFS fs.FS) {
 	b.webFS = spaFS
+	// The source is explicit (never inferred from the fs.FS type): an embedded
+	// tree is frozen for the process lifetime, a directory is not — and that
+	// difference decides which assets Warm may pre-compress.
+	b.assets = newSPAAssets(spaFS, spaSourceEmbed)
+}
+
+// WarmStaticAssets pre-compresses the immutable SPA assets (gzip) in the
+// background. Non-blocking and safe to call at any point, including before the
+// router serves its first request: the warm pass only makes a later request
+// cheaper and never changes what it is answered with. No-op without a SPA tree.
+func (b *RouterBuilder) WarmStaticAssets() {
+	if b.assets == nil {
+		return
+	}
+	go b.assets.Warm()
 }
 
 // Hub returns the websocket hub backing /_ws, so callers (resource/formspec.go)
@@ -461,6 +604,11 @@ func (b *RouterBuilder) BuildRoutes() {
 func (b *RouterBuilder) BuildHTTP() http.Handler {
 	r := chi.NewRouter()
 
+	// Anonymous intake challenges (plan docs_internal/plan/intake-challenge-pow.md):
+	// resolved once here, from the App declarations, so enforcement never has to
+	// work out which App governed a request it cannot identify.
+	b.factory.SetIntakePolicies(b.intakePolicies())
+
 	// Global middleware stack
 	r.Use(RecoveryMiddleware)
 	if b.logger != nil {
@@ -475,6 +623,19 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 	}
 	r.Use(WorkspaceMiddleware)
 	r.Use(AuthMiddleware)
+
+	// Static SPA tree (renderer). Built once here — rather than inside the
+	// workspace route below — so the shell mounts and the root-level /assets/*
+	// routes share one instance, and with it one gzip/ETag memo.
+	assets := b.assets
+	if assets == nil {
+		switch {
+		case b.webFS != nil:
+			assets = newSPAAssets(b.webFS, spaSourceEmbed)
+		case b.webDir != "":
+			assets = newSPAAssetsFromDir(b.webDir)
+		}
+	}
 
 	// Workspace-prefixed API routes — two surfaces (§8):
 	//   /{ws}/_ui/...        → UI (always available, session auth)
@@ -687,13 +848,9 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 		// mount at every App's root_url (docs/plan/flexible-root-url.md) —
 		// root_url is a free-form prefix inside the workspace, so a
 		// single-App workspace can mount at "/" or "/barbershop".
-		// Priority: webFS (embed) > webDir (file system) > none.
 		var spa http.HandlerFunc
-		switch {
-		case b.webFS != nil:
-			spa = spaHandlerFS(b.webFS)
-		case b.webDir != "":
-			spa = spaHandler(b.webDir)
+		if assets != nil {
+			spa = assets.ShellHandler()
 		}
 		if spa != nil {
 			// mount prefix → owning App (nil = workspace-level mount, no
@@ -734,18 +891,25 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 
 	// Root-level static assets (Vite generates /assets/... absolute paths).
 	// These need to be accessible at the root so the SPA index.html can find them.
-	if b.webFS != nil {
-		assetHandler := spaAssetHandler(b.webFS)
+	if assets != nil {
+		assetHandler := assets.AssetHandler()
 		r.Get("/assets/*", assetHandler)
 		r.Get("/favicon.svg", assetHandler)
 		r.Get("/icons.svg", assetHandler)
 		r.Get("/manifest.json", assetHandler)
-	} else if b.webDir != "" {
-		assetHandler := spaAssetHandlerDir(b.webDir)
-		r.Get("/assets/*", assetHandler)
-		r.Get("/favicon.svg", assetHandler)
-		r.Get("/icons.svg", assetHandler)
-		r.Get("/manifest.json", assetHandler)
+
+		// Dev-only: a bare "/" has no workspace segment, so no route matches and
+		// the visitor gets chi's plain-text "404 page not found". Everything the
+		// engine serves is workspace-prefixed (D50), and the caller only sets
+		// rootRedirect for non-production boots with exactly one App mounted.
+		// Gated on `assets != nil`: without an SPA the redirect would only lead
+		// to a JSON 404 one hop later.
+		if b.rootRedirect != "" {
+			target := b.rootRedirect
+			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target, http.StatusFound)
+			})
+		}
 	}
 
 	// Health check — machine-readable when a health registry is wired
@@ -1077,127 +1241,4 @@ func sortedAppMounts(m map[string]*formspec_app.ResolvedApp) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// spaHandler serves static renderer assets from dir with an index.html
-// fallback: any path that doesn't match a real file gets index.html, so
-// client-side routes (/{ws}/app/orders/42) survive a hard refresh.
-func spaHandler(dir string) http.HandlerFunc {
-	fs := http.FileServer(http.Dir(dir))
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Strip /{workspace}/_admin or /{workspace}/app → asset path.
-		path := chi.URLParam(r, "*")
-		if path == "" {
-			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
-			return
-		}
-
-		clean := filepath.Clean("/" + path) // confine to dir (no ..)
-		full := filepath.Join(dir, clean)
-		if info, err := os.Stat(full); err != nil || info.IsDir() {
-			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
-			return
-		}
-
-		// Serve the real asset with the request path rewritten for FileServer.
-		r2 := new(http.Request)
-		*r2 = *r
-		r2.URL = new(url.URL)
-		*r2.URL = *r.URL
-		r2.URL.Path = clean
-		fs.ServeHTTP(w, r2)
-	}
-}
-
-// spaHandlerFS serves static renderer assets from an embed.FS with an
-// index.html fallback for client-side routing.
-func spaHandlerFS(spaFS fs.FS) http.HandlerFunc {
-	fsrv := http.FileServer(http.FS(spaFS))
-	return func(w http.ResponseWriter, r *http.Request) {
-		path := chi.URLParam(r, "*")
-		if path == "" {
-			serveFileFS(w, r, spaFS, "index.html")
-			return
-		}
-
-		clean := filepath.Clean("/" + path)
-		clean = strings.TrimPrefix(clean, "/")
-		if _, err := fs.Stat(spaFS, clean); err != nil {
-			serveFileFS(w, r, spaFS, "index.html")
-			return
-		}
-
-		r2 := new(http.Request)
-		*r2 = *r
-		r2.URL = new(url.URL)
-		*r2.URL = *r.URL
-		r2.URL.Path = "/" + clean
-		fsrv.ServeHTTP(w, r2)
-	}
-}
-
-// serveFileFS serves a single file from an fs.FS (like http.ServeFile for embed).
-func serveFileFS(w http.ResponseWriter, _ *http.Request, spaFS fs.FS, name string) {
-	data, err := fs.ReadFile(spaFS, name)
-	if err != nil {
-		http.Error(w, "Not Found", http.StatusNotFound)
-		return
-	}
-	// Guess content type based on extension
-	ct := mimeTypeByExtension(name)
-	w.Header().Set("Content-Type", ct)
-	_, _ = w.Write(data)
-}
-
-// mimeTypeByExtension returns a MIME type for common web file extensions.
-func mimeTypeByExtension(name string) string {
-	switch {
-	case strings.HasSuffix(name, ".html"):
-		return "text/html; charset=utf-8"
-	case strings.HasSuffix(name, ".css"):
-		return "text/css; charset=utf-8"
-	case strings.HasSuffix(name, ".js"):
-		return "application/javascript; charset=utf-8"
-	case strings.HasSuffix(name, ".svg"):
-		return "image/svg+xml"
-	case strings.HasSuffix(name, ".png"):
-		return "image/png"
-	case strings.HasSuffix(name, ".woff2"):
-		return "font/woff2"
-	case strings.HasSuffix(name, ".json"):
-		return "application/json"
-	default:
-		return "application/octet-stream"
-	}
-}
-
-// spaAssetHandler serves static assets from an embed.FS at root level
-// (/assets/*, /favicon.svg, etc.) for Vite-generated absolute paths.
-// Uses serveFileFS to ensure correct Content-Type headers.
-func spaAssetHandler(spaFS fs.FS) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		path := chi.URLParam(r, "*")
-		if path == "" {
-			// /favicon.svg or /icons.svg — serve from root of FS
-			name := strings.TrimPrefix(r.URL.Path, "/")
-			serveFileFS(w, r, spaFS, name)
-			return
-		}
-		// /assets/index-xxx.js — chi strips /assets/, so path is the filename
-		serveFileFS(w, r, spaFS, "assets/"+path)
-	}
-}
-
-// spaAssetHandlerDir serves static assets from a file system directory at root level.
-func spaAssetHandlerDir(dir string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		path := chi.URLParam(r, "*")
-		if path == "" {
-			// /favicon.svg or /icons.svg — serve from root of directory
-			http.ServeFile(w, r, filepath.Join(dir, filepath.Base(r.URL.Path)))
-			return
-		}
-		// /assets/index-xxx.js
-		http.ServeFile(w, r, filepath.Join(dir, "assets", path))
-	}
 }

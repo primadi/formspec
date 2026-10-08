@@ -3,6 +3,7 @@ package spec
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // Workspace is a platform-level kind: it declares a named workspace — the
@@ -68,6 +69,26 @@ var ReservedWorkspaceSlugs = map[string]bool{
 // DefaultWorkspaceSlug is the workspace seeded/assumed when no explicit
 // workspace is configured (dev mode, CLI flags, frontend fallback).
 const DefaultWorkspaceSlug = "default"
+
+// SurfaceURL builds the workspace-relative URL of an App surface — the path a
+// human should open, complete with the trailing slash that is the mount.
+//
+// Everything the engine serves lives under the workspace slug (D50), so an
+// unprefixed origin ("http://localhost:8080") is always a 404 and must never be
+// printed as "where the UI is". rootURL "/" means the App owns the workspace
+// root; its surface is "/{ws}/" — NOT "/{ws}" (chi registers the mount and its
+// splat, so the slashed form is the one that matches). A free-form mount is
+// served EXACTLY at "/{ws}{rootURL}" (no trailing slash: "/{ws}/barbershop/"
+// is not registered).
+func SurfaceURL(slug, rootURL string) string {
+	if slug == "" {
+		slug = DefaultWorkspaceSlug
+	}
+	if rootURL == "" || rootURL == "/" {
+		return "/" + slug + "/"
+	}
+	return "/" + slug + "/" + strings.Trim(rootURL, "/")
+}
 
 // EffectiveSlug returns the registry slug of the workspace: spec.slug when
 // set, otherwise metadata.name.

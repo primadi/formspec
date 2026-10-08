@@ -38,8 +38,8 @@ visual sudah difilter permission, bundle CRUD) lewat kontrak
 [Spec Resolution API](../spec/frontend/04-spec-resolution-api.md); bagaimana
 data itu dirender sepenuhnya urusan Shell (`docs/renderers/shadcn-shell/`).
 Satu-satunya kode yang tahu bentuk visual di paket ini adalah static-file
-serving SPA (`spaHandler`/`spaHandlerFS`, `internal/api/router.go:277-398`) —
-itu pun cuma file server dengan fallback `index.html`, bukan rendering.
+serving SPA (`spaAssets`, `internal/api/spaassets.go`) — itu pun cuma file
+server dengan fallback `index.html`, bukan rendering.
 
 Penegakan permission yang **mengikat** selalu terjadi di paket ini
 (`RequirePermission`, §2) atau di `internal/action` saat action dieksekusi —
@@ -63,8 +63,76 @@ Router dibangun `chi` (`internal/api/router.go`), workspace-scoped seluruhnya:
 /{workspace}/api/v1/{module}/{plural}/{id}/{action}   (custom action, POST-only)
 /{workspace}/_admin, /{workspace}/_admin/*            (static SPA, kalau webDir/webFS di-set)
 /{workspace}/app, /{workspace}/app/*                  (static SPA)
+/assets/*, /favicon.svg, /icons.svg, /manifest.json   (aset root, di luar prefix workspace)
 /health                                               (di luar prefix workspace)
 ```
+
+### 2.2 Static SPA — caching & kompresi
+
+Aset renderer disajikan satu implementasi untuk dua sumber: `embed.FS`
+(binary rilis) dan `--web-dir` (folder `renderers/react-shadcn/dist`).
+Sumbernya parameter eksplisit, bukan ditebak dari tipe `fs.FS` — sebabnya
+perilaku pre-compress berbeda (lihat bawah).
+
+Kontrak header, dipilih per file:
+
+| Berkas                     | `Cache-Control`                       | `ETag`        |
+| -------------------------- | ------------------------------------- | ------------- |
+| `assets/*-<hash8>.<ext>`   | `public, max-age=31536000, immutable` | —             |
+| `assets/*` tanpa hash      | `no-cache`                            | ada (SHA-256) |
+| shell SPA (`index.html`)   | `no-cache`                            | ada (SHA-256) |
+| `favicon.svg`, `icons.svg` | `public, max-age=604800`              | ada           |
+| `manifest.json`            | `public, max-age=3600`                | ada           |
+
+Predikat fingerprint (`assets/` + `-[A-Za-z0-9_-]{8}\.`) adalah penentu
+`immutable`. Default-nya konservatif: nama yang tidak cocok direvalidate,
+jadi predikat yang salah hanya menghilangkan cache — tidak pernah menyajikan
+konten basi. Berkas root yang namanya kebetulan terlihat ber-hash
+(`report-20240101.js`) **tidak** dianggap fingerprinted; hanya di bawah
+`assets/` polanya berlaku.
+
+Gzip (`compress/gzip`, memo LRU ber-byte-budget) hanya dieksekusi bila
+seluruh gerbang lolos: klien menerima gzip dengan q>0, `len(raw) ≥ 1024` byte,
+tipe kompresibel (html/css/js/json/svg/txt/map), bukan request `Range`, dan
+hasilnya lebih kecil dari aslinya. Di bawah ambang itu respons identity.
+`Vary: Accept-Encoding` diset untuk semua tipe yang _bisa_ dikompres,
+termasuk respons identity, supaya cache bersama tidak mencampur representasi;
+etiap representasi punya ETag sendiri (sufiks `-br` / `-gzip`).
+
+**Preferensi encoding per request: brotli → gzip → identity.** Brotli datang
+dari sidecar `<file>.br` yang dibuat **saat build** (`formspec spa compress`,
+dijalankan `make build-spa` setelah `npm run build`), bukan saat request:
+encoder q11 ≈ 1,7 s/MiB, dan biaya itu dibayar sekali. Kualitas tinggi **tidak**
+membebani klien — `q` adalah knob _encode_; decode q11 terukur setara q5
+(~6,0 ms vs 6,2 ms untuk bundle 1,6 MB) karena decoder tidak mengulang
+pencarian match. Terukur pada bundle kafe: 1.839.789 byte raw → **438.994 byte
+brotli** vs 608.324 byte gzip (−27,8%). Sidecar `.br`/`.gz` **tidak** dapat
+diunduh langsung (404) — ia dipilih lewat `Accept-Encoding`, bukan lewat nama.
+
+Padanan di sisi runtime: aset yang _immutable_ di-precompress gzip di latar saat
+boot (goroutine, tidak memblokir): seluruh aset kompresibel untuk `embed.FS`,
+hanya nama fingerprinted untuk `webDir`. Memo-nya diberi kunci
+`(nama, ukuran, mtime)`, jadi rebuild setelah boot hanya memicu kompres ulang
+on-demand — warm tidak pernah membekukan konten lama. Bila sidecar `.br` ada,
+warm hanya **membacanya** (tanpa CPU), sehingga boot lebih murah, bukan lebih
+mahal.
+
+**Unduhan berkas** (`file` field, dan `GET /storage/link/{token}`) mengikuti
+kontrak cache terpisah: `ETag` diturunkan dari object key (bukan hash body),
+`Content-Length` selalu diset, dan `Cache-Control: private, max-age=N` untuk
+`public`/`private` — `private` karena respons bergantung permission pemanggil,
+`max-age` pendek karena URL unduhan stabil sementara record bisa di-repoint ke
+object key baru (unggah ulang), sehingga `immutable` justru bug di sini. `N`
+datang dari `storage.download_cache_ttl` per-field → `FORMSPEC_DOWNLOAD_CACHE_TTL`
+(default 5m); **`0s` berarti `no-cache`** (ETag tetap ada, jadi revalidasinya
+304, bukan unduh ulang). `visibility: signed` dan link consume dijawab
+`no-store` tanpa validator (kredensial sekali-pakai). Detail normatif:
+[`docs/spec/backend/05-field-types.md` §Storage Spec](../spec/backend/05-field-types.md).
+
+**Batas yang disengaja:** `/api/v1/*` dan `/_ui/entity/*` **tidak** di-cache.
+Respons JSON di sana bergantung identity/permission, sehingga cache HTTP tanpa
+`Vary`/kunci sadar-auth adalah kelas kebocoran lintas-pengguna. Satu-satunya
+payload API ber-ETag adalah bundle `/_meta/ui` (5.12.1).
 
 Route CRUD dan custom action digenerate dari spec, bukan didaftarkan manual:
 `GenerateRoutes` membaca `Expose: [{type: rest, actions: [...]}]` tiap entity

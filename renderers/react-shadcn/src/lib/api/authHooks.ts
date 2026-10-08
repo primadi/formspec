@@ -16,6 +16,8 @@
 import ky from "ky"
 import { notifySessionExpired, SessionExpiredError } from "./sessionEvents"
 import { buildFormaApiError, type ApiErrorEnvelope } from "./errors"
+import { INTAKE_HEADER } from "@/lib/intake/pow"
+import type { IntakeChallenge } from "@/types/manifest"
 
 export interface AuthHooksOptions {
   /** Read the current access token (live from the session store). */
@@ -30,6 +32,21 @@ export interface AuthHooksOptions {
    * away a working refresh token and force a full re-login.
    */
   needsContext?: () => boolean
+  /**
+   * Read the current anonymous intake solution ("<token>:<solution>"), or null
+   * when there is none / it has expired. Attached as `X-Forma-Intake`
+   * (plan docs_internal/plan/intake-challenge-pow.md). Optional: clients that
+   * never touch an anonymous surface do not need it.
+   */
+  getIntakeSolution?: () => string | null
+  /**
+   * Called when the server demands a proof-of-work for this request. Solving
+   * is asynchronous — it may take seconds of CPU — and the request retries
+   * once a solution is available. Optional: without it a 403
+   * `CHALLENGE_REQUIRED` surfaces as a normal error, which is the right
+   * behaviour for a non-browser client that cannot solve at all.
+   */
+  onChallengeRequired?: (challenge: IntakeChallenge) => Promise<void>
 }
 
 export function createAuthHooks(opts: AuthHooksOptions) {
@@ -41,10 +58,22 @@ export function createAuthHooks(opts: AuthHooksOptions) {
           if (token) {
             request.headers.set("Authorization", `Bearer ${token}`)
           }
+          const intake = opts.getIntakeSolution?.()
+          if (intake) {
+            request.headers.set(INTAKE_HEADER, intake)
+          }
         },
       ],
       beforeRetry: [
         async ({ request }: { request: Request }) => {
+          // Attach the intake solution BEFORE the refresh branch below: the
+          // retry forced by a 403 CHALLENGE_REQUIRED must not be routed through
+          // token refresh, which would abort it as a dead session.
+          const intake = opts.getIntakeSolution?.()
+          if (intake) {
+            request.headers.set(INTAKE_HEADER, intake)
+            return
+          }
           const ok = await opts.onUnauthorized()
           if (!ok) {
             // A 409 CONTEXT_REQUIRED is not an expired session — the caller
@@ -72,6 +101,13 @@ export function createAuthHooks(opts: AuthHooksOptions) {
           retryCount: number
         }) => {
           if (!response.ok) {
+            // ky hands this hook a freshly cloned response, so its body is
+            // still unread here — unlike `HTTPError.response`, whose body ky
+            // consumes to populate `error.data` before throwing (reading that
+            // one would throw "Response body is already used").
+            const body = (await response.json().catch(() => undefined)) as
+              | ApiErrorEnvelope
+              | undefined
             if (response.status === 401 && retryCount === 0) {
               // First 401: force a retry — beforeRetry refreshes the token.
               return ky.retry()
@@ -80,18 +116,21 @@ export function createAuthHooks(opts: AuthHooksOptions) {
               // Retry with a fresh token still rejected — session is gone.
               notifySessionExpired()
             }
-            // ky hands this hook a freshly cloned response, so its body is
-            // still unread here — unlike `HTTPError.response`, whose body ky
-            // consumes to populate `error.data` before throwing (reading that
-            // one would throw "Response body is already used").
-            const body = (await response
-              .json()
-              .catch(() => undefined)) as ApiErrorEnvelope | undefined
-            throw buildFormaApiError(
-              response.status,
-              response.statusText,
-              body,
-            )
+            // Anonymous intake gate: the server asks for proof-of-work on a
+            // request under pressure. Solve it and retry ONCE — `beforeRetry`
+            // puts the solution on the wire. A second challenge (retryCount > 0)
+            // falls through to the error rather than looping.
+            if (
+              response.status === 403 &&
+              retryCount === 0 &&
+              body?.error?.code === "CHALLENGE_REQUIRED" &&
+              body.error.challenge &&
+              opts.onChallengeRequired
+            ) {
+              await opts.onChallengeRequired(body.error.challenge)
+              return ky.retry()
+            }
+            throw buildFormaApiError(response.status, response.statusText, body)
           }
         },
       ],

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // ─── Backend Kind Specs ───
@@ -125,6 +126,12 @@ type AppSpec struct {
 	AppRenderer string `yaml:"app_renderer,omitempty" json:"app_renderer,omitempty"` // chrome archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav
 	// @schema {example: "private", enum: ["private", "public"], description: "Auth axis: private (default, secure by default) | public — orthogonal to app_renderer"}
 	Access AppAccess `yaml:"access,omitempty" json:"access,omitempty"` // auth: private (default) | public — orthogonal to app_renderer
+	// Intake declares protection for this App's ANONYMOUS intake surface
+	// (plan docs_internal/plan/intake-challenge-pow.md). Authored here because
+	// the App is the reviewed unit of "what may an anonymous caller touch";
+	// an Action opts in with `challenge: true`. Absent = no intake protection.
+	// @schema {description: "Anonymous intake protection for this App (proof-of-work challenge). Actions opt in with `challenge: true`"}
+	Intake *IntakeSpec `yaml:"intake,omitempty" json:"intake,omitempty"`
 	// @schema {example: "react-shadcn", description: "Shell implementation (frontend/03-renderer-kind.md), e.g. react-shadcn"}
 	StackFamily string `yaml:"stack_family,omitempty" json:"stack_family,omitempty"` // shell implementation (frontend/03-renderer-kind.md)
 	// @schema {example: "jsonb-persist", description: "Entity persist backend (backend/04-persist-backend.md), e.g. jsonb-persist"}
@@ -280,6 +287,79 @@ type AppConfirm struct {
 	// @schema {example: "Hapus data ini?", description: "Confirm message before delete — absent = off; {name} interpolates the entity display name"}
 	Delete *string `yaml:"delete,omitempty" json:"delete,omitempty"`
 }
+
+// IntakeSpec declares protection for an App's ANONYMOUS intake surface — the
+// endpoints an unauthenticated caller can reach through this App's derived
+// public grants (plan docs_internal/plan/intake-challenge-pow.md).
+//
+// Authored on the App because the App is the reviewed unit of "what may an
+// anonymous caller touch"; an Action opts in with `challenge: true`, and the
+// policy (how hard, when, how long) lives here so it has one owner. An opt-in
+// with no policy is a validation error rather than a silent no-op.
+//
+// Enforcement is keyed by (module, entity, action), NOT by App: an anonymous
+// `_ui/entity` request carries no App (AppFromContext is empty without an
+// identity, and publicGrants() already merges every public App into a single
+// module/entity map). Where several public Apps declare a policy the
+// STRICTEST wins — sharing a route must never weaken protection.
+type IntakeSpec struct {
+	Challenge *IntakeChallenge `yaml:"challenge,omitempty" json:"challenge,omitempty"`
+}
+
+// IntakeChallenge configures the browser proof-of-work gate.
+type IntakeChallenge struct {
+	// Provider is the challenge mechanism. Only "pow" is implemented; empty
+	// defaults to "pow".
+	// @schema {example: "pow", enum: ["pow"], description: "Challenge mechanism — only \"pow\" (self-hosted proof-of-work) is implemented"}
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty"`
+	// Mode is "escalate" (default — the gate turns on only under pressure) or
+	// "always" (every anonymous request to an opted-in action must solve).
+	// @schema {example: "escalate", enum: ["escalate", "always"], description: "escalate (default, on only under pressure) | always"}
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+	// ActivateAt is the fraction (0..1) of the `global` budget at which the gate
+	// turns on under mode: escalate. Absent means 0.7; an explicit 0 activates
+	// the gate from the first request (useful for testing), which is why this is
+	// a pointer — "unset" and "zero" must not mean the same thing.
+	// @schema {example: "0.7", description: "Fraction (0..1) of the global budget that activates the gate (mode: escalate); absent = 0.7, 0 = activate immediately"}
+	ActivateAt *float64 `yaml:"activate_at,omitempty" json:"activate_at,omitempty"`
+	// Global is the pressure signal: a rate limit measured across ALL anonymous
+	// callers of the action (scope is forced to global). It is deliberately
+	// global rather than per-IP — a distributed flood keeps every single IP
+	// under its own threshold, so per-IP pressure would never trip.
+	Global *RateLimitSpec `yaml:"global,omitempty" json:"global,omitempty"`
+	// Difficulty is the proof-of-work range in leading zero bits of SHA-256.
+	// The gate picks a value between Min (idle) and Max (saturated).
+	Difficulty *PowDifficulty `yaml:"difficulty,omitempty" json:"difficulty,omitempty"`
+	// TTL is how long an issued challenge stays verifiable (e.g. "90s"). It
+	// bounds the replay window: the challenge is stateless, so one solution is
+	// reusable until it expires.
+	// @schema {example: "90s", description: "Challenge lifetime (Go duration string) — bounds the replay window"}
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty"`
+	// Bind lists extra request attributes folded into the challenge signature,
+	// so a solution cannot be moved to another value (e.g. handed to a client on
+	// a different IP). Subset of: ip. Empty binds NOTHING beyond the action,
+	// which is always bound — binding to IP is opt-in because a phone that
+	// changes networks mid-flow would otherwise be asked to solve again.
+	// @schema {example: "[ip]", description: "Extra bound attributes (subset of: ip); empty binds only the action"}
+	Bind []string `yaml:"bind,omitempty" json:"bind,omitempty"`
+}
+
+// PowDifficulty is the proof-of-work difficulty range (leading zero bits of
+// SHA-256). Max is capped at 32 in validation: past that the gate is an
+// outage, not a filter.
+type PowDifficulty struct {
+	// @schema {example: "16", description: "Leading zero bits when idle (lower bound)"}
+	Min int `yaml:"min" json:"min"`
+	// @schema {example: "22", description: "Leading zero bits when saturated (upper bound)"}
+	Max int `yaml:"max" json:"max"`
+}
+
+// Intake provider/mode closed sets.
+const (
+	IntakeProviderPow  = "pow"
+	IntakeModeEscalate = "escalate"
+	IntakeModeAlways   = "always"
+)
 
 // Chrome element values (frontend/05-app-kinds.md §4.1). "auto" means the
 // archetype's own default; the rest are explicit overrides.
@@ -1530,6 +1610,68 @@ func ValidateAppSpec(a *AppSpec) error {
 		}
 		if err := validatePageRef("auth.chrome_auth", a.Auth.ChromeAuth); err != nil {
 			return err
+		}
+	}
+	if a.Intake != nil {
+		if err := validateIntake(a.Intake); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateIntake checks the App's anonymous-intake policy
+// (plan docs_internal/plan/intake-challenge-pow.md). The rules exist to keep a
+// declared gate from being an inert one: an "escalate" gate with no pressure
+// signal can never turn on, and a difficulty that is absurd in either
+// direction is either no gate at all or an outage.
+func validateIntake(in *IntakeSpec) error {
+	c := in.Challenge
+	if c == nil {
+		return nil
+	}
+	if c.Provider != "" && c.Provider != IntakeProviderPow {
+		return fmt.Errorf("intake.challenge.provider %q is invalid (implemented: %s)", c.Provider, IntakeProviderPow)
+	}
+	if c.Mode != "" && c.Mode != IntakeModeEscalate && c.Mode != IntakeModeAlways {
+		return fmt.Errorf("intake.challenge.mode %q is invalid (enum: %s, %s)", c.Mode, IntakeModeEscalate, IntakeModeAlways)
+	}
+	if c.ActivateAt != nil && (*c.ActivateAt < 0 || *c.ActivateAt > 1) {
+		return fmt.Errorf("intake.challenge.activate_at %.2f is out of range (0..1)", *c.ActivateAt)
+	}
+	// mode: escalate (the default) needs a pressure signal to escalate ON; with
+	// no `global` budget nothing can ever trip the gate, so the declaration
+	// would be inert — refuse it rather than ship a gate that never runs.
+	if c.Mode != IntakeModeAlways && c.Global == nil {
+		return fmt.Errorf("intake.challenge.global is required when mode is escalate (the default) — there is no pressure signal to escalate on; set mode: %s for an unconditional gate", IntakeModeAlways)
+	}
+	if c.Global != nil {
+		if c.Global.Max <= 0 {
+			return fmt.Errorf("intake.challenge.global.max must be > 0")
+		}
+		if c.Global.Per == "" {
+			return fmt.Errorf("intake.challenge.global.per is required (e.g. 1m)")
+		}
+	}
+	if c.TTL != "" {
+		if d, err := time.ParseDuration(c.TTL); err != nil || d <= 0 {
+			return fmt.Errorf("intake.challenge.ttl %q is invalid (Go duration, e.g. 90s)", c.TTL)
+		}
+	}
+	if c.Difficulty != nil {
+		if c.Difficulty.Min < 1 {
+			return fmt.Errorf("intake.challenge.difficulty.min must be >= 1")
+		}
+		if c.Difficulty.Max < c.Difficulty.Min {
+			return fmt.Errorf("intake.challenge.difficulty.max (%d) must be >= min (%d)", c.Difficulty.Max, c.Difficulty.Min)
+		}
+		if c.Difficulty.Max > 32 {
+			return fmt.Errorf("intake.challenge.difficulty.max %d is too high (<= 32 — a solve beyond 2^32 hashes is an outage, not a gate)", c.Difficulty.Max)
+		}
+	}
+	for i, b := range c.Bind {
+		if b != "ip" {
+			return fmt.Errorf("intake.challenge.bind[%d] %q is invalid (supported: ip)", i, b)
 		}
 	}
 	return nil

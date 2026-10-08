@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -190,20 +191,138 @@ func (f *HandlerFactory) filterSpecsToPredicates(r *http.Request, es *spec.Entit
 			out = append(out, db.RowPredicate{Field: sc.Field, Op: op, Value: value})
 
 		case "route":
-			param := sc.Param
-			if param == "" {
-				param = sc.Field
-			}
-			value := r.URL.Query().Get(param)
-			if value == "" {
-				return nil, fmt.Errorf(
-					"%s on %s: missing %q request parameter",
-					origin, sc.Field, param)
+			value, err := f.resolveRouteScopeValue(r, sc)
+			if err != nil {
+				return nil, fmt.Errorf("%s on %s: %w", origin, sc.Field, err)
 			}
 			out = append(out, db.RowPredicate{Field: sc.Field, Op: op, Value: value})
 		}
 	}
 	return out, nil
+}
+
+// enforceCreateScope applies an entity's `create_scope` declarations to a
+// create payload (kafe 10.76 family; plan public-scope-enforcement.md).
+//
+// Why this exists at all: every other scope in the system restricts a READ, and
+// a read can be restricted because the row already exists. A create has no row
+// to filter yet — `db.InsertParams` carries no predicates — so a caller could
+// simply write the dimension value of their choice. Measured on kafe: an
+// anonymous QR guest could create an order with another branch's `branch_id`,
+// because `order.branch_id` declares no `required_permission` and
+// `denyForbiddenFieldWrites` only guards fields that do.
+//
+// The rule is CONDITIONAL on the reference: the check fires only when the
+// payload carries a value for `ref_field`. That is deliberate — a cashier
+// creating a walk-in order passes no `table_session_id`, so there is no record
+// to derive the branch from, and the rule must not turn into "every create needs
+// a table session".
+//
+// A MISMATCH IS REFUSED, never overwritten: silently replacing the value would
+// make the request and the stored row disagree, and the caller would have no way
+// to notice that their input was discarded.
+//
+// It returns the HTTP status alongside the error because the two failure modes
+// are different CLASSES, and collapsing them was a real defect (measured: a
+// broken `dining_table_id` started answering 403 "cannot verify" instead of the
+// 422 the relation check had always produced):
+//
+//   - a mismatch is an AUTHORIZATION refusal (403): the caller is asking to
+//     write outside the dimension they are confined to;
+//   - an unresolvable reference is bad INPUT (422), the same class as any other
+//     dangling reference — the caller is allowed, the payload is wrong. Answering
+//     403 there would mislabel a client-fault as a permission problem and break
+//     each surface's error handling.
+//
+// The status is 0 when err is nil.
+func (f *HandlerFactory) enforceCreateScope(ctx context.Context, module, entity string, es *spec.EntitySpec, body map[string]any) (int, error) {
+	if es == nil || len(es.CreateScope) == 0 {
+		return 0, nil
+	}
+
+	for i := range es.CreateScope {
+		cs := &es.CreateScope[i]
+
+		refValue := createScopeString(body[cs.RefField])
+		if refValue == "" {
+			// No reference in the payload: nothing to derive the dimension from,
+			// so the declaration does not apply to this request.
+			continue
+		}
+
+		want, err := f.resolveViaValue(ctx, cs.Via, cs.ViaField, refValue)
+		if err != nil {
+			// Refused here rather than left to the foreign-key check, so the rule
+			// cannot be skipped by referencing something that does not exist
+			// (fail closed). Classified as bad input, because that is what it is.
+			return http.StatusUnprocessableEntity, fmt.Errorf("create scope on %s: %w", cs.Field, err)
+		}
+		got := createScopeString(body[cs.Field])
+		if got != "" && got != want {
+			return http.StatusForbidden, fmt.Errorf("create scope on %s: payload says %q but %s (%s) says %q — the %s of a new record must match the record it references",
+				cs.Field, got, cs.Via, refValue, want, cs.Field)
+		}
+	}
+	return 0, nil
+}
+
+// errViaNotFound marks a `via` reference that resolves to no record, so callers
+// can classify it (bad input) instead of treating it as an authorization denial.
+var errViaNotFound = errors.New("the referenced record does not exist")
+
+// resolveViaValue resolves a scope value THROUGH a record (kafe 10.76).
+//
+// `ref` is an id or natural key of `via` (`"<module>.<entity>"`); the returned
+// value is that record's `viaField`. A caller-supplied reference that does not
+// resolve, or a record that carries no value for the field, is an ERROR — never
+// an empty scope, which would fail open.
+//
+// One implementation serves both directions on purpose: the read scope
+// (`from: route, via: …`) and the write pin (`create_scope`) ask the same
+// question — "what does this reference say the value is?" — and two copies of
+// that question would drift, with the drifting copy being the one that stops
+// enforcing.
+func (f *HandlerFactory) resolveViaValue(ctx context.Context, via, viaField, ref string) (string, error) {
+	normalized, ok := spec.NormalizeEntityRef(via)
+	if !ok {
+		return "", fmt.Errorf("via %q is not a valid entity reference", via)
+	}
+	viaModule, viaEntity, _ := strings.Cut(normalized, "/")
+	store, err := f.registry.GetEntityStore(viaModule, viaEntity)
+	if err != nil {
+		return "", fmt.Errorf("cannot resolve %s: %w", via, err)
+	}
+	// GetByID handles both UUID v7 ids and natural keys, so a reference written
+	// as a human-readable code resolves the same way as an id.
+	rec, err := store.GetByID(ctx, db.GetByIDParams{
+		WorkspaceID: workspaceFromContext(ctx),
+		ID:          ref,
+	})
+	if err != nil || rec == nil {
+		return "", fmt.Errorf("%s %q: %w", via, ref, errViaNotFound)
+	}
+	value := createScopeString(rec.Data[viaField])
+	if value == "" {
+		return "", fmt.Errorf("%s %q carries no %q", via, ref, viaField)
+	}
+	return value, nil
+}
+
+// createScopeString renders a payload/map value as the string used for scope
+// comparison. Scopes compare identifiers (ids, codes, natural keys), which are
+// strings on the wire; a number is rendered so an integer-coded dimension still
+// compares instead of silently reading as absent.
+func createScopeString(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(t)
+	case fmt.Stringer:
+		return strings.TrimSpace(t.String())
+	default:
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
 }
 
 // grantRowPredicates resolves the row scope a ROLE GRANT attaches to one action
@@ -406,6 +525,40 @@ func publicScopeFromContext(ctx context.Context) []spec.FilterSpec {
 	return scope
 }
 
+// resolveRouteScopeValue turns a `from: route` scope's declared parameter into
+// the value the caller is filtered by.
+//
+// It is the ONE place that answers "what value does this route scope produce",
+// shared by both readers of a route scope: the predicate path
+// (filterSpecsToPredicates, which serves entity `row_scope` and grant scopes) and
+// the public-grant path (applyPublicScope). Two copies of this question already
+// drifted once — `applyPublicScope` kept taking the raw parameter after the
+// predicate path learned about `via`, so a price list scoped by a session
+// resolved to "the current branch" on one path and to "the literal session id"
+// on the other. The second reading matched nothing, which is at least visible;
+// the same drift with a token-derived scope would have matched everything.
+//
+// A missing parameter is an error, never an empty filter: the failure mode of a
+// scope must be "denied", not "unscoped".
+func (f *HandlerFactory) resolveRouteScopeValue(r *http.Request, sc *spec.FilterSpec) (string, error) {
+	param := sc.Param
+	if param == "" {
+		param = sc.Field
+	}
+	value := r.URL.Query().Get(param)
+	if value == "" {
+		return "", fmt.Errorf("missing %q request parameter", param)
+	}
+	// `via` turns the parameter into a REFERENCE: the value is read from the
+	// named record rather than trusted from the query string (kafe 10.76). The
+	// caller states which session it is — already visible in the URL — and never
+	// which branch it may see.
+	if sc.Via != "" {
+		return f.resolveViaValue(r.Context(), sc.Via, sc.ViaField, value)
+	}
+	return value, nil
+}
+
 // applyPublicScope merges a public grant's row scope into a list query (#45).
 //
 // The grant says WHICH entity an anonymous caller may read; this says WHICH ROWS.
@@ -438,19 +591,26 @@ func (f *HandlerFactory) applyPublicScope(r *http.Request, filters map[string]db
 		if op == "" {
 			op = "eq"
 		}
-		param := sc.Param
-		if param == "" {
-			param = sc.Field
-		}
-		value := r.URL.Query().Get(param)
-		if value == "" {
+		// Same resolution as the predicate path — including a `via` lookup, so a
+		// scope derived from a reference is enforced identically whichever path
+		// carries it.
+		value, err := f.resolveRouteScopeValue(r, sc)
+		if err != nil {
 			return nil, fmt.Errorf(
 				"this entity is readable anonymously only together with a %q request parameter — refusing to list every row",
-				param)
+				routeScopeParam(sc))
 		}
 		filters[sc.Field] = db.FilterOp{Op: op, Value: value}
 	}
 	return filters, nil
+}
+
+// routeScopeParam names the parameter a route scope reads (default: the field).
+func routeScopeParam(sc *spec.FilterSpec) string {
+	if sc.Param != "" {
+		return sc.Param
+	}
+	return sc.Field
 }
 
 // scopeAttrLabel renders an attribute name for error messages.

@@ -18,8 +18,8 @@ export interface PickedRow {
   ref: string
   /** Snapshot of the source display name — written into `map.name_field`. */
   name: string
-  /** Snapshot of the source price — written into `map.price_field`. */
-  price?: unknown
+  /** Looked-up value — written into `map.lookup_field`. */
+  lookup?: unknown
   /** How many — written into `map.quantity_field` when declared. */
   quantity: number
   /** Free-text note — written into `map.note_field` when declared. */
@@ -46,7 +46,7 @@ export function clampQuantity(
  */
 export function pickRow(
   rows: PickedRow[],
-  source: { ref: string; name: string; price?: unknown },
+  source: { ref: string; name: string; lookup?: unknown },
   map: PickerMap,
 ): PickedRow[] {
   const existing = rows.find((r) => r.ref === source.ref)
@@ -60,7 +60,7 @@ export function pickRow(
   }
   return [
     ...rows,
-    { ref: source.ref, name: source.name, price: source.price, quantity: 1 },
+    { ref: source.ref, name: source.name, lookup: source.lookup, quantity: 1 },
   ]
 }
 
@@ -96,13 +96,13 @@ export function pickedCount(rows: PickedRow[]): number {
   return rows.reduce((n, r) => n + r.quantity, 0)
 }
 
-/** One row's total: price × quantity. Undefined for a non-money price. */
+/** One row's total: looked-up value × quantity. Undefined for a non-money value. */
 export function rowTotal(row: PickedRow): number | undefined {
-  const unit = moneyAmount(row.price)
+  const unit = moneyAmount(row.lookup)
   return unit === undefined ? undefined : unit * row.quantity
 }
 
-/** Running total for display. Rows without a money price contribute nothing. */
+/** Running total for display. Rows without a money value contribute nothing. */
 export function pickedTotal(rows: PickedRow[]): number {
   return rows.reduce((sum, r) => sum + (rowTotal(r) ?? 0), 0)
 }
@@ -111,7 +111,7 @@ export function pickedTotal(rows: PickedRow[]): number {
 
 /**
  * Turn a picked row into the child record the form submits. Field names come
- * from `map`, never hardcoded — the snapshots (`name_field`, `price_field`) are
+ * from `map`, never hardcoded — the snapshots (`name_field`, `lookup_field`) are
  * what keep an old record readable after the source changes.
  */
 export function buildRow(
@@ -120,7 +120,7 @@ export function buildRow(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { [map.ref_field]: row.ref }
   if (map.quantity_field) out[map.quantity_field] = row.quantity
-  if (map.price_field) out[map.price_field] = row.price
+  if (map.lookup_field) out[map.lookup_field] = row.lookup
   if (map.name_field) out[map.name_field] = row.name
   if (map.note_field && row.note) out[map.note_field] = row.note
   return out
@@ -197,6 +197,54 @@ export function interpolateFilter(
 }
 
 /**
+ * Query parameters a SERVER-ENFORCED lookup scope needs on the lookup request.
+ *
+ * The scope says `param: <name>` (optionally with `via`) — the parameter is a
+ * REFERENCE to a record, and the server reads the scope value from that record.
+ * For the request to resolve, the client must send the reference, and the only
+ * place it exists is the route (`/menu/:session_id`). So the value is read back
+ * from `route.params` instead of being computed from a resolved record: the
+ * client states WHICH referenced record it is (already visible in the URL),
+ * never which dimension value it may see.
+ *
+ * An unresolvable reference returns `{}` rather than a literal `{...}` template:
+ * sending the template would reach the server as a reference that cannot
+ * resolve, which fails closed with a 403 whose message is about a missing record
+ * instead of a page that never declared the parameter.
+ */
+export function lookupScopeParams(
+  scope:
+    | {
+        field: string
+        from?: string
+        param?: string
+        via?: string
+        via_field?: string
+        op?: string
+        value?: string
+      }[]
+    | undefined,
+  ctx: Record<string, unknown>,
+): Record<string, string> {
+  if (!scope || scope.length === 0) return {}
+  const routeParams = (ctx.route as { params?: Record<string, unknown> })
+    ?.params
+  const out: Record<string, string> = {}
+  // A scope may carry several entries; only route-sourced ones need a parameter
+  // from the client. Literal and session-sourced entries are resolved entirely
+  // on the server, so there is nothing to send for them.
+  for (const entry of scope) {
+    if (entry.from !== "route") continue
+    const param = entry.param || entry.field
+    if (!param) continue
+    const value = routeParams?.[param]
+    if (value === undefined || value === null || value === "") continue
+    out[param] = String(value)
+  }
+  return out
+}
+
+/**
  * Seed values for every field declaring `default_from` — what the Form uses to
  * carry values the user does not type (branch, session, timestamp).
  */
@@ -214,61 +262,63 @@ export function seedDefaults(
   return out
 }
 
-// ── Pricing (source rows may read prices from a separate entity) ──
+// ── Lookup (a picked row may read a value from a related entity) ──
 
 /**
- * Build a lookup of source id → price from a price entity's rows.
+ * Build an index of key → value from the lookup entity's rows.
  *
- * Per-branch price lists put the price in its own entity
- * (`menu-item-price.{branch_id, menu_item_id, price}`), so the tile price is a
- * client-side join. A source row with no matching price row has no price — and
- * therefore cannot be picked (there is nothing to sell).
+ * A picker may declare `lookup` to read one value per picked row from a related
+ * entity — a per-outlet price, a per-region tax rate, a per-warehouse stock
+ * level. The tile shows that value, and a row with no matching lookup row has
+ * none — so it cannot be picked (there is nothing to take).
+ *
+ * Generic on purpose: the same shape serves any "value per row from a keyed
+ * table" pattern; nothing here knows what the value means.
  */
-export function priceIndex(
+export function lookupIndex(
   rows: Record<string, unknown>[],
-  matchField: string,
-  priceField: string,
+  keyField: string,
+  valueField: string,
 ): Map<string, unknown> {
   const index = new Map<string, unknown>()
   for (const row of rows) {
-    const key = row[matchField]
+    const key = row[keyField]
     if (key == null || key === "") continue
-    const price = row[priceField]
-    if (price == null) continue
-    index.set(String(key), price)
+    const value = row[valueField]
+    if (value == null) continue
+    index.set(String(key), value)
   }
   return index
 }
 
-/** A pickable tile: identity, display data, price, pickability. */
+/** A pickable tile: identity, display data, looked-up value, pickability. */
 export interface PickerTile {
   id: string
   name: string
-  price: unknown
-  /** False when the source row has no resolvable price (cannot be picked). */
+  lookup: unknown
+  /** False when the source row has no resolvable lookup value (not pickable). */
   pickable: boolean
 }
 
-/** Project source rows into tiles, resolving prices via {@link priceIndex}. */
+/** Project source rows into tiles, resolving values via {@link lookupIndex}. */
 export function pickerTiles(opts: {
   rows: Record<string, unknown>[]
   nameField: string
-  priceField: string
-  prices?: Map<string, unknown>
+  valueField: string
+  lookups?: Map<string, unknown>
 }): PickerTile[] {
-  const { rows, nameField, priceField, prices } = opts
+  const { rows, nameField, valueField, lookups } = opts
   return rows.map((row) => {
     const id = String(row.id ?? "")
-    const price = prices ? prices.get(id) : row[priceField]
+    const lookup = lookups ? lookups.get(id) : row[valueField]
     return {
       id,
       name: String(row[nameField] ?? ""),
-      price,
-      // Only enforce a price when the picker says where one comes from.
-      pickable:
-        prices || priceField
-          ? price != null && moneyAmount(price) !== undefined
-          : true,
+      lookup,
+      // Pickability is only restricted when the picker declares where a value
+      // comes from: then a row without one has nothing to take, so it cannot be
+      // picked. A picker that reads no value accepts every row.
+      pickable: lookups ? lookup != null : true,
     }
   })
 }

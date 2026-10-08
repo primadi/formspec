@@ -29,7 +29,12 @@ func TestKafe_CreateCannotBeBornPaid(t *testing.T) {
 	create := func(t *testing.T, status string) (int, map[string]any) {
 		t.Helper()
 		body := map[string]any{
-			"transaction_date": "2026-10-03T00:00:00Z",
+			// `recentDate()` (defined in uses_enforcement_e2e_test.go) instead of
+			// a literal date: a hardcoded value silently crosses the default
+			// 3-day backdate limit as the calendar moves, which turned this test
+			// into a time bomb (it failed from 2026-10-07 with
+			// FORMSPEC.TXN.BACKDATE_EXCEEDED on a date that used to be "today").
+			"transaction_date": recentDate(),
 			"branch_id":        ids.branchID,
 			"channel":          "cashier",
 			"lines": []any{

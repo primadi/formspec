@@ -44,6 +44,9 @@ type PickerDecl struct {
 	Filter map[string]string `yaml:"filter,omitempty" json:"filter,omitempty"`
 	// Display describes how a source record is presented as a tile.
 	Display PickerDisplay `yaml:"display" json:"display"`
+	// Lookup enriches each picked row with a value read from a related entity
+	// (see PickerLookup). Optional: a picker that only chooses rows needs none.
+	Lookup *PickerLookup `yaml:"lookup,omitempty" json:"lookup,omitempty"`
 	// Map describes what gets written into the row.
 	Map PickerMap `yaml:"map" json:"map"`
 }
@@ -58,23 +61,60 @@ type PickerDisplay struct {
 	DescriptionField string `yaml:"description_field,omitempty" json:"description_field,omitempty"`
 	// @schema {description: "Source relation/enum field rendered as filter chips.", example: "menu_category_id"}
 	CategoryField string `yaml:"category_field,omitempty" json:"category_field,omitempty"`
-	// PriceEntity reads the price from a separate entity — the per-branch price
-	// list case. The client joins it onto the source rows; a row with no price
-	// is shown but cannot be picked (no price = nothing to sell).
-	// @schema {example: "cafe-master.menu-item-price"}
-	PriceEntity string `yaml:"price_entity,omitempty" json:"price_entity,omitempty"`
-	// @schema {description: "Field on `price_entity` holding the source id (required with price_entity).", example: "menu_item_id"}
-	PriceMatchField string `yaml:"price_match_field,omitempty" json:"price_match_field,omitempty"`
-	// @schema {description: "Money field on `price_entity` (required with price_entity).", example: "price"}
-	PriceField string `yaml:"price_field,omitempty" json:"price_field,omitempty"`
-	// @schema {description: "Narrows the price rows (typically the branch). Values interpolate like `filter`.", example: "{\"branch_id\": \"{session.branch_id}\"}"}
-	PriceFilter map[string]string `yaml:"price_filter,omitempty" json:"price_filter,omitempty"`
 	// @schema {description: "Tile grid columns, 2–4 (default 3).", example: "3"}
 	Columns int `yaml:"columns,omitempty" json:"columns,omitempty"`
 	// @schema {description: "Client-side search over the tile title."}
 	Search bool `yaml:"search,omitempty" json:"search,omitempty"`
 	// @schema {example: "Belum ada data"}
 	EmptyText string `yaml:"empty_text,omitempty" json:"empty_text,omitempty"`
+}
+
+// PickerLookup enriches a picked row with a value read from a RELATED entity —
+// one record per picked row, matched by a key.
+//
+// Generic on purpose, and that is the whole point: "read one value per row from
+// a table keyed by that row" is one shape, not a food-ordering feature. Change
+// the nouns and it is a per-outlet price, a per-region tax rate, a per-warehouse
+// stock level, a per-clinic fee, a per-tenant quota or a localized label. The
+// picker's own entity supplies the ROWS; the lookup supplies the VALUE that goes
+// with each row.
+//
+// It is declared on the picker (not on the entity) because the picker is what
+// causes the fetch, so the declaration and the enforcement cannot come from two
+// different places.
+type PickerLookup struct {
+	// Entity is the related entity the value is read from (`module.entity` or a
+	// bare name resolved against the owning module).
+	// @schema {example: "cafe-master.menu-item-price"}
+	Entity string `yaml:"entity" json:"entity"`
+	// Key is the field on `entity` matched against the picked row's source id
+	// (the value written into `map.ref_field`).
+	// @schema {example: "menu_item_id"}
+	Key string `yaml:"key" json:"key"`
+	// Field is the field on `entity` whose value is used.
+	// @schema {example: "price"}
+	Field string `yaml:"field" json:"field"`
+	// Filter narrows the lookup list IN THE BROWSER. Values interpolate
+	// `{dotted.path}` / `{now}` / `{today}` against the render context, exactly
+	// like the picker's `filter`.
+	//
+	// It is NOT a boundary: any client can omit or widen it. Use `scope` for a
+	// narrowing the server must enforce (the same split as a kind's `filters`
+	// versus an entity's `row_scope`).
+	// @schema {example: "{\"is_active\": \"true\"}"}
+	Filter map[string]string `yaml:"filter,omitempty" json:"filter,omitempty"`
+	// Scope is the SERVER-ENFORCED row scope for reads of `entity` caused by this
+	// lookup. Same shape as `row_scope` (including `from: route` with `via`), so a
+	// value can be DERIVED from a record the request references instead of being
+	// taken from the request itself.
+	//
+	// Why it exists: a lookup is a read of another entity, and on a public surface
+	// that read is anonymous. Narrowing it with `filter` looks like protection
+	// while providing none — the value is computed by the client, so any caller
+	// can widen it and read rows outside their dimension. Declaring `scope` puts
+	// the same intent where the server can enforce it: the derived public grant
+	// for `entity` inherits it (internal/ui, `visitField`).
+	Scope []FilterSpec `yaml:"scope,omitempty" json:"scope,omitempty"`
 }
 
 // PickerMap is the write half of a picker: which row field receives what.
@@ -85,9 +125,15 @@ type PickerMap struct {
 	// NameField receives the source record's display name (snapshot).
 	// @schema {example: "name_snapshot"}
 	NameField string `yaml:"name_field,omitempty" json:"name_field,omitempty"`
-	// PriceField receives the source record's price (snapshot).
+	// LookupField receives `lookup.field` for the picked row (snapshot).
+	//
+	// When declared, the value is DERIVED — the server reads it from the lookup
+	// entity itself rather than accepting it from the request, the same rule that
+	// applies to `computed` ("a derived value is never the caller's to set").
+	// A caller-supplied value is replaced, and a row the lookup cannot price is
+	// refused rather than stored with an amount nobody authorized.
 	// @schema {example: "unit_price_snapshot"}
-	PriceField string `yaml:"price_field,omitempty" json:"price_field,omitempty"`
+	LookupField string `yaml:"lookup_field,omitempty" json:"lookup_field,omitempty"`
 	// QuantityField accumulates the picked amount. When omitted, a picked row
 	// is quantity-less (one row per pick — e.g. a checklist item).
 	// @schema {example: "quantity"}
@@ -97,8 +143,8 @@ type PickerMap struct {
 	NoteField string `yaml:"note_field,omitempty" json:"note_field,omitempty"`
 	// @schema {description: "Upper bound per row (default 99).", example: "20"}
 	MaxQuantity int `yaml:"max_quantity,omitempty" json:"max_quantity,omitempty"`
-	// SourceNameField / SourcePriceField override which *source* field the name
-	// and price snapshots read from (defaults "name" / the display price field).
+	// SourceNameField overrides which *source* field the name snapshot reads from
+	// (default "name").
 	// @schema {example: "title"}
 	SourceNameField string `yaml:"source_name_field,omitempty" json:"source_name_field,omitempty"`
 }
@@ -127,16 +173,39 @@ func ValidatePickerDecl(p *PickerDecl, fieldName, where string) error {
 	if p.Display.Columns != 0 && (p.Display.Columns < 2 || p.Display.Columns > 4) {
 		return fmt.Errorf("%s: child field %q picker.display.columns must be 2–4, got %d", where, fieldName, p.Display.Columns)
 	}
-	if p.Display.PriceEntity != "" {
-		if p.Display.PriceMatchField == "" {
-			return fmt.Errorf("%s: child field %q picker.display.price_match_field is required with price_entity", where, fieldName)
+	// The lookup names where a value comes from, so all three parts are needed
+	// for it to resolve: the entity, the key that matches a picked row, and the
+	// field read out of it. A half-declared lookup would render tiles with no
+	// value and (when `map.lookup_field` is set) refuse every submit.
+	if p.Lookup != nil {
+		lk := p.Lookup
+		if lk.Entity == "" {
+			return fmt.Errorf("%s: child field %q picker.lookup.entity is required (the entity the value is read from)", where, fieldName)
 		}
-		if p.Display.PriceField == "" {
-			return fmt.Errorf("%s: child field %q picker.display.price_field is required with price_entity", where, fieldName)
+		if lk.Key == "" {
+			return fmt.Errorf("%s: child field %q picker.lookup.key is required (the field on %s matching the picked row)", where, fieldName, lk.Entity)
+		}
+		if lk.Field == "" {
+			return fmt.Errorf("%s: child field %q picker.lookup.field is required (the field on %s whose value is used)", where, fieldName, lk.Entity)
+		}
+		// `scope` is a SERVER-enforced narrowing, so it is held to the same shape
+		// rule as any other row scope — including the `via` pairing that lets the
+		// value be derived from a record the request references.
+		if len(lk.Scope) > 0 {
+			if err := ValidateRowScopeFilters(
+				fmt.Sprintf("%s: child field %q picker.lookup.scope", where, fieldName),
+				lk.Scope, nil); err != nil {
+				return err
+			}
 		}
 	}
 	if p.Map.MaxQuantity < 0 {
 		return fmt.Errorf("%s: child field %q picker.map.max_quantity must be positive, got %d", where, fieldName, p.Map.MaxQuantity)
+	} // A receiving field with no lookup to fill it is a declaration that can never
+	// work: the value would stay empty and (because the server resolves it) the
+	// submit would be refused with no way for the manifest author to tell why.
+	if p.Map.LookupField != "" && p.Lookup == nil {
+		return fmt.Errorf("%s: child field %q picker.map.lookup_field is declared without picker.lookup — nothing would fill it", where, fieldName)
 	}
 	// A quantity field with no ceiling is a footgun on a shared device: a stuck
 	// key orders a hundred. Require the bound to be considered, not defaulted.

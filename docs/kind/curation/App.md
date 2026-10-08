@@ -102,6 +102,7 @@ spec:
 | `datastores` | map | — | db: pg-main | Datastores is the App-level App Registry selection — the App Registry |
 | `app_renderer` | enum (sidebar-nav · topnav · no-nav) | — | no-nav | Chrome archetype (frontend/05-app-kinds.md): sidebar-nav \| topnav \| no-nav — no-nav means truly no navigation |
 | `access` | enum (private · public) | — | private | Auth axis: private (default, secure by default) \| public — orthogonal to app_renderer |
+| `intake` | `IntakeSpec` | — |  | Anonymous intake protection for this App (proof-of-work challenge). Actions opt in with `challenge: true` |
 | `stack_family` | `string` | — | react-shadcn | Shell implementation (frontend/03-renderer-kind.md), e.g. react-shadcn |
 | `persist_backend` | `string` | — | jsonb-persist | Entity persist backend (backend/04-persist-backend.md), e.g. jsonb-persist |
 | `theme_ref` | `string` | — | ocean-blue | Theme kind name applied per-App (frontend/05-app-kinds.md §6) |

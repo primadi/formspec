@@ -147,6 +147,11 @@ func runValidate(args []string) {
 	// navigates nowhere, silently.
 	danglingRejects := validateDanglingRefs(res.Manifests)
 
+	// ── Layer 1.5: cross-manifest intake opt-in ownership ──
+	// `challenge: true` on an action without an `intake` policy on the public App
+	// that exposes it is a gate that can never turn on — declared, and inert.
+	intakeRejects := validateIntakeOptIns(res.Manifests)
+
 	// ── Layer 1.6: Starlark honesty scan (todo 3.1.1a) ──
 	// Static analysis of script impls vs their declared `uses:` block:
 	// undeclared usage → error, declared-but-unused → warning,
@@ -261,6 +266,9 @@ func runValidate(args []string) {
 		}
 		if errMsg, ok := danglingRejects[m.Source]; ok {
 			msgs = append(msgs, "reference: "+errMsg)
+		}
+		if errMsg, ok := intakeRejects[m.Source]; ok {
+			msgs = append(msgs, "intake: "+errMsg)
 		}
 		if errMsg, ok := subscriptionRejects[m.Source]; ok {
 			msgs = append(msgs, "subscription: "+errMsg)

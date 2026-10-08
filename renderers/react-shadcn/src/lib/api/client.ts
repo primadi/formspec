@@ -11,6 +11,7 @@ import {
   type SingleResponse,
   type ListResponse,
   type ListParams,
+  type IntakeChallenge,
 } from "@/types/manifest"
 
 // ── Factory ──
@@ -28,6 +29,17 @@ export interface ApiClientConfig {
    * assignment) rather than a dead session — see AuthHooksOptions.
    */
   needsContext?: () => boolean
+  /**
+   * Read the current anonymous intake solution, or null — attached as
+   * `X-Forma-Intake` (plan docs_internal/plan/intake-challenge-pow.md).
+   */
+  getIntakeSolution?: () => string | null
+  /**
+   * Solve a proof-of-work challenge demanded by a 403 `CHALLENGE_REQUIRED`; the
+   * request retries once a solution is available. Omitted = such a response
+   * surfaces as a normal error (correct for a client that cannot solve).
+   */
+  onChallengeRequired?: (challenge: IntakeChallenge) => Promise<void>
 }
 
 /**
@@ -46,6 +58,8 @@ export function createApiClient(config: ApiClientConfig): KyInstance {
     getToken: config.getToken ?? (() => config.token ?? ""),
     onUnauthorized: config.onUnauthorized ?? (async () => false),
     needsContext: config.needsContext,
+    getIntakeSolution: config.getIntakeSolution,
+    onChallengeRequired: config.onChallengeRequired,
   })
   const api = ky.create({
     prefix,

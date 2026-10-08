@@ -28,7 +28,8 @@ import {
   pickedCount,
   pickedTotal,
   pickerTiles,
-  priceIndex,
+  lookupIndex,
+  lookupScopeParams,
   removeRow,
   rowTotal,
   setNote,
@@ -80,7 +81,7 @@ function readRows(
     rows.push({
       ref,
       name: map.name_field ? String(row[map.name_field] ?? "") : "",
-      price: map.price_field ? row[map.price_field] : undefined,
+      lookup: map.lookup_field ? row[map.lookup_field] : undefined,
       quantity: map.quantity_field ? Number(row[map.quantity_field] ?? 1) : 1,
       note: map.note_field ? String(row[map.note_field] ?? "") : undefined,
     })
@@ -114,7 +115,7 @@ export default function PickerPanel({
   const sourceMeta = getEntity(sourceModule, sourceEntity)
 
   const [rows, setRows] = useState<Record<string, unknown>[]>([])
-  const [prices, setPrices] = useState<Map<string, unknown> | undefined>(
+  const [lookups, setLookups] = useState<Map<string, unknown> | undefined>(
     undefined,
   )
   const [loading, setLoading] = useState(true)
@@ -125,9 +126,11 @@ export default function PickerPanel({
   const picked = useMemo(() => readRows(value, decl), [value, decl])
   const pickedRefs = useMemo(() => new Set(picked.map((r) => r.ref)), [picked])
 
-  // ── Source fetch (+ optional price join) ──
+  // ── Source fetch (+ optional lookup join) ──
   const filterKey = JSON.stringify(decl.filter ?? {})
-  const priceFilterKey = JSON.stringify(display.price_filter ?? {})
+  const lookup = decl.lookup
+  const lookupFilterKey = JSON.stringify(lookup?.filter ?? {})
+  const lookupScopeKey = JSON.stringify(lookup?.scope ?? [])
   const ctxKey = JSON.stringify(context ?? {})
   useEffect(() => {
     let cancelled = false
@@ -145,33 +148,30 @@ export default function PickerPanel({
         if (cancelled) return
         setRows(items)
 
-        if (
-          display.price_entity &&
-          display.price_match_field &&
-          display.price_field
-        ) {
-          const [priceModule, priceEntity] = resolveEntityRef(
-            display.price_entity,
+        if (lookup?.entity && lookup.key && lookup.field) {
+          const [lookupModule, lookupEntity] = resolveEntityRef(
+            lookup.entity,
             module ?? "",
           )
-          const priceRows = await apiList<Record<string, unknown>>(
+          // A server-enforced scope needs the REFERENCE the server resolves the
+          // value from — e.g. the session id from the route, not a
+          // client-computed dimension value. Without it the request fails closed
+          // (403), which is the point: the alternative is a client filter that
+          // lets any caller read rows outside their dimension.
+          const scopeParams = lookupScopeParams(lookup.scope, ctx)
+          const lookupRows = await apiList<Record<string, unknown>>(
             client,
-            `${priceModule}/${priceEntity}`,
+            `${lookupModule}/${lookupEntity}`,
             {
               per_page: "500",
-              ...interpolateFilter(JSON.parse(priceFilterKey), ctx),
+              ...interpolateFilter(JSON.parse(lookupFilterKey), ctx),
+              ...scopeParams,
             },
           )
           if (cancelled) return
-          setPrices(
-            priceIndex(
-              priceRows.items,
-              display.price_match_field,
-              display.price_field,
-            ),
-          )
+          setLookups(lookupIndex(lookupRows.items, lookup.key, lookup.field))
         } else {
-          setPrices(undefined)
+          setLookups(undefined)
         }
       } catch (err) {
         if (!cancelled)
@@ -185,7 +185,14 @@ export default function PickerPanel({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceModule, sourceEntity, filterKey, priceFilterKey, ctxKey])
+  }, [
+    sourceModule,
+    sourceEntity,
+    filterKey,
+    lookupFilterKey,
+    lookupScopeKey,
+    ctxKey,
+  ])
 
   // ── Category chips (display only) ──
   const categoryField = display.category_field
@@ -223,10 +230,10 @@ export default function PickerPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, search, category, nameField, categoryField])
 
-  const priceField = display.price_field ?? "price"
+  const valueField = lookup?.field ?? ""
   const tiles = useMemo(
-    () => pickerTiles({ rows: visible, nameField, priceField, prices }),
-    [visible, nameField, priceField, prices],
+    () => pickerTiles({ rows: visible, nameField, valueField, lookups }),
+    [visible, nameField, valueField, lookups],
   )
 
   /** Rows in the child field the picker cannot address (added manually). */
@@ -338,7 +345,7 @@ export default function PickerPanel({
         {tiles.map((tile) => {
           const row = visible.find((r) => String(r.id ?? "") === tile.id)
           const image = row ? imageUrl(row) : undefined
-          const price = moneyAmount(tile.price)
+          const price = moneyAmount(tile.lookup)
           const pickedRow = picked.find((r) => r.ref === tile.id)
           return (
             <button
@@ -346,7 +353,9 @@ export default function PickerPanel({
               type="button"
               disabled={!tile.pickable}
               title={
-                tile.pickable ? undefined : "Belum ada harga untuk item ini"
+                tile.pickable
+                  ? undefined
+                  : "Belum ada nilai untuk baris ini — tidak bisa dipilih"
               }
               onClick={() => {
                 if (!tile.pickable) return
@@ -359,7 +368,7 @@ export default function PickerPanel({
                 writeBack(
                   pickRow(
                     picked,
-                    { ref: tile.id, name: tile.name, price: tile.price },
+                    { ref: tile.id, name: tile.name, lookup: tile.lookup },
                     map,
                   ),
                 )
@@ -405,7 +414,7 @@ export default function PickerPanel({
                     {String(row[display.description_field])}
                   </span>
                 ) : null}
-                {map.price_field && (
+                {map.lookup_field && (
                   <span className="mt-auto pt-1 text-sm font-semibold tabular-nums">
                     {price === undefined ? "—" : formatter.money(price)}
                   </span>
@@ -445,7 +454,7 @@ export default function PickerPanel({
                     <span className="text-sm leading-snug font-medium">
                       {line.name}
                     </span>
-                    {map.price_field && (
+                    {map.lookup_field && (
                       <span className="text-sm tabular-nums text-muted-foreground">
                         {rowTotal(line) === undefined
                           ? "—"
@@ -550,7 +559,7 @@ export default function PickerPanel({
             </ul>
           )}
 
-          {map.price_field && picked.length > 0 && (
+          {map.lookup_field && picked.length > 0 && (
             <div className="flex items-center justify-between border-t pt-3 text-sm font-semibold">
               <span>Total</span>
               <span className="tabular-nums">

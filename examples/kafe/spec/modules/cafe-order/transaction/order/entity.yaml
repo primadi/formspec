@@ -22,6 +22,22 @@ spec:
   # pada Table block halaman status) — lihat `api.applyRowScope`.
   row_scope:
     - { field: branch_id, op: eq, from: session }
+  # Write-side dimension pin. `row_scope` di atas menjaga BACAAN, tetapi baris
+  # yang belum ada tidak bisa difilter (`db.InsertParams` tidak punya predikat) —
+  # sehingga tanpa deklarasi ini seorang tamu anonim dari QR bisa mem-POST
+  # pesanan dengan `branch_id` cabang lain: `order.branch_id` tidak punya
+  # `required_permission`, jadi `denyForbiddenFieldWrites` tidak menjaganya.
+  #
+  # Aturannya KONDISIONAL pada rujukannya: diperiksa hanya bila payload membawa
+  # `table_session_id`. Pesanan kasir (walk-in/takeaway) tidak punya sesi meja,
+  # jadi tidak ada record untuk menurunkan cabangnya — dan aturan ini tidak
+  # boleh berubah menjadi "setiap create wajib punya sesi meja".
+  #
+  # Nilai yang BERBEDA ditolak (403), bukan ditimpa: menimpa diam-diam membuat
+  # permintaan dan baris tersimpan tidak sepakat tanpa cara bagi pemanggil untuk
+  # mengetahuinya.
+  create_scope:
+    - { field: branch_id, from: record, ref_field: table_session_id, via: cafe-order.table-session, via_field: branch_id }
   fields:
     # Nomor pesanan per CABANG (scope_field) — bukan deret global.
     # Jalur script kini juga ber-scope
@@ -163,7 +179,14 @@ spec:
     - name: manual_discount_reason
       type: string
       title: "Alasan Diskon Manual"
-      # Wajib bila diskon manual melebihi batas di Config (aturan bisnis #8).
+      # Wajib bila ada diskon manual (aturan bisnis #8).
+      #
+      # Dinyatakan di ENTITY, bukan hanya di Form: `required_when` di Form hanya
+      # menandai kontrol di browser, sehingga pemanggil API langsung bisa
+      # melewatinya (terukur: diskon manual 90% diterima tanpa alasan). Sejak
+      # 2026-10-07 server menegakkannya di jalur tulis (`enforceConditionalRequired`),
+      # jadi satu deklarasi ini berlaku untuk semua permukaan.
+      required_when: "fields.manual_discount_amount != null"
       description: "Alasan diskon ini diberikan."
     - name: points_redeemed
       type: integer
@@ -246,24 +269,49 @@ spec:
         picker:
           entity: cafe-master.menu-item
           filter: { is_available: "true" }
+          # Harga per CABANG ada di entity terpisah, jadi tiap baris yang dipilih
+          # perlu satu nilai dari sana: `lookup` membaca SATU nilai per baris dari
+          # entity terkait, dicocokkan lewat `key`. Bentuknya generik — tukar
+          # katanya dan ia menjadi tarif pajak per region, stok per gudang, atau
+          # tarif per klinik; tidak ada kosakata khusus satu contoh di spec.
+          lookup:
+            entity: cafe-master.menu-item-price
+            key: menu_item_id
+            field: price
+            filter: { is_active: "true" }
+            # `scope` = pembatas yang DITEGAKKAN SERVER untuk pembacaan entity
+            # harga ini (10.76). Cabangnya diambil dari MEJA, bukan dari klien:
+            # `param` adalah RUJUKAN (sesi tamu, sudah ada di URL
+            # `/menu/:session_id`) dan nilainya dibaca dari record itu
+            # (`table-session.branch_id`). Grant publik `menu-item-price`
+            # mewarisi scope ini (internal/ui `visitField`).
+            #
+            # Sebelumnya di sini ada `price_filter: {branch_id:
+            # "{session.branch_id}"}` — HANYA filter klien, sehingga pemanggil
+            # mana pun bisa menghilangkan atau melebarkannya (terukur: tamu
+            # anonim membaca harga SEMUA cabang). Di POS pun ia tidak bekerja —
+            # `order-form-pos` tidak punya context `session`, jadi token itu
+            # terkirim verbatim dan tak ada harga yang cocok.
+            scope:
+              - { field: branch_id, from: route, param: session_id, via: cafe-order.table-session, via_field: branch_id }
           display:
             name_field: name
             image_field: photo
             description_field: description
             category_field: menu_category_id
-            # Harga per CABANG ada di entity terpisah → join client-side.
-            price_entity: cafe-master.menu-item-price
-            price_match_field: menu_item_id
-            price_field: price
-            price_filter: { branch_id: "{session.branch_id}" }
             columns: 3
             search: true
             empty_text: "Menu belum tersedia"
           map:
             ref_field: menu_item_id
-            # Snapshot D2: nama & harga dibekukan saat dipilih.
+            # Snapshot D2: nama & harga dibekukan saat dipilih. `lookup_field`
+            # NILAI TURUNAN — server membacanya dari katalog (bukan menerima
+            # kiriman klien), sama seperti `computed`, sehingga harga baris tidak
+            # bisa dikarang oleh tamu anonim (10.79). Baris yang sudah ada
+            # mempertahankan nilainya (beku), jadi mengubah jumlah tidak menulis
+            # ulang harga yang sudah disetujui.
             name_field: name_snapshot
-            price_field: unit_price_snapshot
+            lookup_field: unit_price_snapshot
             quantity_field: quantity
             note_field: note
             max_quantity: 20
@@ -451,6 +499,18 @@ spec:
     # Koreksi lewat pembatalan (cancel-order / void-order), bukan delete.
     - { name: delete, disabled: true }
     - { name: submit, disabled: true }
+    # Opt-in ke gate intake anonim App `kafe-qr` (plan
+    # docs_internal/plan/intake-challenge-pow.md). `create` adalah satu-satunya
+    # action yang dibuka anonim yang menulis data — dan memang yang paling
+    # mahal (baris + `emit` → outbox + jurnal). `list` (halaman status tamu)
+    # tidak di-opt-in: ia hanya membaca, dan menghalangi tamu melihat status
+    # pesanannya sendiri akan lebih merugikan daripada menguntungkan.
+    #
+    # Flag-nya BOOLEAN dengan sengaja: policy (kesulitan, kapan menyala, TTL)
+    # milik App, di sini hanya "saya ikut". Menuliskan tuning di dua tempat
+    # membuat keduanya bisa menyimpang tanpa ada lapisan yang tahu mana yang
+    # berlaku. `challenge: true` tanpa policy App = error validasi.
+    - { name: create, challenge: true }
     # ── submit-order / abandon ──
     #
     # Gate-nya hidup di TRANSISI (2026-09-27). `required_permission` pada action

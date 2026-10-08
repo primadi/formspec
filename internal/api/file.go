@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,6 +39,19 @@ const (
 	// DefaultLinkTTL is the validity window when a link is issued without
 	// an explicit signed_url_ttl.
 	DefaultLinkTTL = 15 * time.Minute
+
+	// DefaultDownloadCacheTTL is the browser-side freshness window for a
+	// downloaded file when neither the field's `download_cache_ttl` nor
+	// FORMSPEC_DOWNLOAD_CACHE_TTL is set.
+	//
+	// It is deliberately short, and `immutable` is never appropriate for these
+	// responses: the object's BYTES never change under a given key (ObjectKey
+	// embeds a fresh UUID at upload time), but the URL does not change with
+	// them — a re-upload repoints the record at a new key while
+	// `.../{id}/{field}` stays the same. A long lifetime would pin a stale
+	// photo; a short window plus an ETag gets the cheap repeat view (304, no
+	// body) without that risk.
+	DefaultDownloadCacheTTL = 5 * time.Minute
 
 	// Link modes returned by the issue-link route: "token" = app-issued
 	// link consumed via /storage/link/{token}; "presigned" = MinIO/S3
@@ -128,6 +143,22 @@ func (f *HandlerFactory) effectiveDownloadLimitMB(field *spec.Field) int {
 		limit = field.Storage.MaxDownloadMB
 	}
 	return limit
+}
+
+// effectiveDownloadCacheTTL resolves the browser-side freshness window for a
+// download: the field's `download_cache_ttl` when declared, else the global
+// FORMSPEC_DOWNLOAD_CACHE_TTL, else DefaultDownloadCacheTTL.
+//
+// A declared "0s" resolves to 0, which serveFileBody reports as `no-cache` —
+// the escape hatch for content that must always be seen fresh. Note the
+// difference from "unset", which means "use the default window".
+func (f *HandlerFactory) effectiveDownloadCacheTTL(field *spec.Field) time.Duration {
+	if field != nil && field.Storage != nil && field.Storage.DownloadCacheTTL != "" {
+		if d, err := time.ParseDuration(field.Storage.DownloadCacheTTL); err == nil && d >= 0 {
+			return d
+		}
+	}
+	return f.downloadCacheTTL
 }
 
 // parseLinkTTL resolves the link validity window from a field's
@@ -448,11 +479,13 @@ func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", contentTypeFor(key))
-		w.Header().Set("Content-Disposition",
-			`inline; filename="`+filepath.Base(key)+`"`)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(data)
+		// Objects under a `public` field are served anonymously, and a `private`
+		// field's response depends on the caller's permissions — both must stop a
+		// shared cache from reusing one caller's response for another. Hence
+		// `private`, never a shared-cache directive.
+		f.serveFileBody(w, r, key, data,
+			`inline; filename="`+filepath.Base(key)+`"`, true,
+			f.effectiveDownloadCacheTTL(field))
 
 		// One-time download (todo 7.17.6): the link budget was exhausted by
 		// this download — remove the object after serving.
@@ -460,6 +493,84 @@ func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 			_ = caps.del.Delete(ctx, key)
 		}
 	}
+}
+
+// ─── Download response headers ───
+
+// fileETag derives a strong validator from the object key alone.
+//
+// Deriving it from the key (rather than hashing the bytes) is what makes
+// revalidation free: the key already names a unique object, and a re-upload
+// writes a NEW key, so the validator changes exactly when the bytes do. It also
+// keeps the promise the client relies on: nothing needs to be read to answer a
+// 304.
+func fileETag(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return `"` + hex.EncodeToString(sum[:16]) + `"`
+}
+
+// etagMatches reports whether an If-None-Match header selects the given ETag,
+// per RFC 9110 §13.1.2: `*` matches anything, and the value may be a
+// comma-separated list of candidates (each optionally weak-prefixed).
+func etagMatches(header, etag string) bool {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return false
+	}
+	if header == "*" {
+		return true
+	}
+	for _, cand := range strings.Split(header, ",") {
+		cand = strings.TrimPrefix(strings.TrimSpace(cand), "W/")
+		if cand == etag {
+			return true
+		}
+	}
+	return false
+}
+
+// serveFileBody writes a downloaded object with the caching contract described
+// in docs_internal/plan/file-download-caching.md.
+//
+// cacheable=false is for token-scoped responses (a signed link, a one-time
+// download): those are answered `no-store` and get no validator, because the
+// body is reachable only through a credential that will not be presented again.
+//
+// This is deliberately the ONE place that sets these headers. The route and the
+// link-consume handler used to each write their own Content-Type/
+// Content-Disposition pair by hand, and that duplication is exactly how both
+// ended up with no cache headers at all.
+func (f *HandlerFactory) serveFileBody(w http.ResponseWriter, r *http.Request, key string, data []byte, disposition string, cacheable bool, maxAge time.Duration) {
+	tag := fileETag(key)
+
+	if !cacheable {
+		w.Header().Set("Cache-Control", "no-store")
+	} else {
+		w.Header().Set("ETag", tag)
+		if maxAge <= 0 {
+			// A declared "0s" means: never reuse without asking. The ETag is
+			// still sent, so the revalidation it forces is a cheap 304 rather
+			// than a re-download.
+			w.Header().Set("Cache-Control", "no-cache")
+		} else {
+			w.Header().Set("Cache-Control",
+				fmt.Sprintf("private, max-age=%d", int(maxAge.Seconds())))
+		}
+		if etagMatches(r.Header.Get("If-None-Match"), tag) {
+			// The validator is known without touching the body, so answering 304
+			// costs nothing — cheaper than the download it replaces.
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", contentTypeFor(key))
+	if disposition != "" {
+		w.Header().Set("Content-Disposition", disposition)
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 // permName builds the fully qualified permission for an entity action using the
@@ -771,11 +882,12 @@ func (f *HandlerFactory) HandleLinkConsume() http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", contentTypeFor(row.Path))
-		w.Header().Set("Content-Disposition",
-			`attachment; filename="`+filepath.Base(row.Path)+`"`)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(data)
+		// Token-scoped and possibly one-time: the credential will not be
+		// presented again, so the response must not be stored. no-store, and no
+		// ETag (a validator would invite a conditional request that can only
+		// fail the next Consume).
+		f.serveFileBody(w, r, row.Path, data,
+			`attachment; filename="`+filepath.Base(row.Path)+`"`, false, 0)
 
 		// One-time download exhausted — remove the object (delete-on-download).
 		if deleteNow && caps.del != nil {

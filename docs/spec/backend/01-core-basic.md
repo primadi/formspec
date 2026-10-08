@@ -165,22 +165,31 @@ dari entity lain** alih-alih mengetik satu per satu:
     picker:
       entity: cafe-master.menu-item # sumber baris (relatif ke module, atau "module.entity")
       filter: { is_available: "true" } # pre-filter; nilainya boleh template {token}
-      display: # apa yang dilihat user (tile)
+      lookup: # OPSIONAL — baca SATU nilai per baris dari entity terkait
+        entity: cafe-master.menu-item-price # dari mana nilainya dibaca
+        key: menu_item_id # field di `entity` yang dicocokkan ke record sumber
+        field: price # field di `entity` yang nilainya dipakai
+        filter: { is_active: "true" } # narrowing KLIEN (template {token})
+        scope: # narrowing yang DITEGAKKAN SERVER (bentuk `row_scope`)
+          - {
+              field: branch_id,
+              from: route,
+              param: session_id,
+              via: cafe-order.table-session,
+              via_field: branch_id,
+            }
+      display: # apa yang dilihat user (tile); murni presentasi
         name_field: name
         image_field: photo
         description_field: description
         category_field: menu_category_id # chip filter
-        price_entity: cafe-master.menu-item-price # harga dari entity lain (mis. per cabang)
-        price_match_field: menu_item_id
-        price_field: price
-        price_filter: { branch_id: "{session.branch_id}" }
         columns: 3
         search: true
         empty_text: "Menu belum tersedia"
       map: # apa yang DITULIS ke baris
         ref_field: menu_item_id # WAJIB — relasi kembali ke record sumber
         name_field: name_snapshot # snapshot
-        price_field: unit_price_snapshot # snapshot
+        lookup_field: unit_price_snapshot # menerima `lookup.field` (turunan)
         quantity_field: quantity
         note_field: note
         max_quantity: 20
@@ -196,6 +205,21 @@ dari entity lain** alih-alih mengetik satu per satu:
       - { name: note, type: string }
 ```
 
+**`lookup` — nilai per baris dari entity terkait.** Bentuknya generik dan itu
+memang tujuannya: "baca satu nilai per baris dari tabel yang di-key oleh baris
+itu" adalah satu pola, bukan fitur satu domain. Ganti kata bendanya dan ia
+menjadi harga per outlet, tarif pajak per region, stok per gudang, tarif per
+klinik, atau kuota per tenant. Entity picker memasok **baris**; `lookup`
+memasok **nilai** yang menyertai tiap baris.
+
+Tiga pasangan yang harus dibedakan, karena keduanya terlihat serupa:
+
+| Deklarasi      | Sifat                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| `filter`       | Narrowing **klien** (di-merge browser). Bukan batas — klien mana pun bisa menghilangkan   |
+| `lookup.scope` | **Ditegakkan server**; `filter` di atas boleh dilebarkan, `scope` tidak                   |
+| `lookup_field` | Nilai **turunan**: server membacanya dari `lookup.entity`, jadi kiriman klien **diganti** |
+
 Alasan deklarasinya ada **di field child**, bukan di kind/halaman:
 
 - **Berlaku di mana saja.** Form apa pun (dan langkah Wizard) yang mengedit
@@ -209,16 +233,21 @@ Alasan deklarasinya ada **di field child**, bukan di kind/halaman:
 
 Aturan normatif:
 
-| Aturan                                                            | Konsekuensi                                                                                                         |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `map.ref_field` wajib                                             | Tanpa relasi kembali ke sumber, baris tidak bisa dipetakan ulang                                                    |
-| Field di `map` wajib ada di `child.fields`                        | Snapshot yang menunjuk field tak ada akan hilang diam-diam — ditolak saat `formspec apply`                          |
-| `quantity_field` wajib disertai `map.max_quantity`                | Batas per baris harus **dipilih**, tidak boleh tak terbatas (salah ketik di perangkat bersama = jumlah tak sengaja) |
-| Tanpa `quantity_field` → satu baris per pilih                     | Kasus daftar (mis. baris jurnal memilih akun; checklist memilih item)                                               |
-| `price_entity` wajib disertai `price_match_field` + `price_field` | Join harga dinyatakan, tidak ditebak                                                                                |
-| Baris tanpa harga → tampil, **tidak bisa dipilih**                | Tidak ada harga = tidak ada yang dijual; lebih baik tidak bisa dipilih daripada terkirim sebagai `0`                |
-| Snapshot (`name_field`/`price_field`)                             | Denormalisasi finansial (D2): record lama tetap terbaca setelah sumber berubah                                      |
-| Nilai `filter`/`price_filter` boleh template                      | `{dotted.path}` dari render context, plus `{now}`/`{today}`; token yang tak terselesaikan dibiarkan verbatim        |
+| Aturan                                                          | Konsekuensi                                                                                                                                  |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `map.ref_field` wajib                                           | Tanpa relasi kembali ke sumber, baris tidak bisa dipetakan ulang                                                                             |
+| Field di `map` wajib ada di `child.fields`                      | Snapshot yang menunjuk field tak ada akan hilang diam-diam — ditolak saat `formspec apply`                                                   |
+| `quantity_field` wajib disertai `map.max_quantity`              | Batas per baris harus **dipilih**, tidak boleh tak terbatas (salah ketik di perangkat bersama = jumlah tak sengaja)                          |
+| Tanpa `quantity_field` → satu baris per pilih                   | Kasus daftar (mis. baris jurnal memilih akun; checklist memilih item)                                                                        |
+| `lookup` wajib disertai `entity` + `key` + `field`              | Sumber nilai dinyatakan, tidak ditebak                                                                                                       |
+| `map.lookup_field` tanpa `lookup` ditolak                       | Field penerima tanpa pengisi tidak akan pernah berisi — dan karena server yang mengisinya, submit akan ditolak                               |
+| Baris tanpa nilai lookup → tampil, **tidak bisa dipilih**       | Tidak ada nilai = tidak ada yang diambil; lebih baik tidak bisa dipilih daripada terkirim kosong                                             |
+| Tidak ada baris lookup / lebih dari satu → **422**              | Fail closed: nilai tidak boleh jatuh ke kiriman klien, dan katalog harus tidak ambigu                                                        |
+| `map.lookup_field` selalu **digantikan** server saat baris baru | Nilai turunan bukan milik pemanggil (aturan yang sama dengan `computed`)                                                                     |
+| Baris yang sudah ada mempertahankan nilai tersimpan             | Beku, bukan dihitung ulang: mengedit jumlah tidak boleh mengubah nilai yang sudah disetujui                                                  |
+| Snapshot (`name_field`/`lookup_field`)                          | Denormalisasi finansial (D2): record lama tetap terbaca setelah sumber berubah                                                               |
+| Nilai `filter`/`lookup.filter` boleh template                   | `{dotted.path}` dari render context, plus `{now}`/`{today}`; token yang tak terselesaikan dibiarkan verbatim                                 |
+| `lookup.scope` dengan `from: route` + `via` memakai RUJUKAN     | Nilainya dibaca dari record yang ditunjuk param, bukan dari param itu sendiri — klien menyebut SESI-nya, bukan dimensi yang ingin dilihatnya |
 
 Pickernya **tidak** menghitung atau menyimpan total apa pun: total tetap urusan
 `computed` field entity ([`05-field-types.md`](05-field-types.md) §2.1). Tampilan
@@ -450,17 +479,18 @@ Untuk approval multi-level (gate pada transisi `state_machine`), lihat
 [`02-core-extended.md`](02-core-extended.md) §2 — field `approval` pada transisi,
 bukan kind terpisah.
 
-### 1.7 `scope` / `row_scope` / `assignments` — Isolasi Baris (Normatif)
+### 1.7 `scope` / `row_scope` / `create_scope` / `assignments` — Isolasi Baris (Normatif)
 
-Tiga konstruk terpisah menjawab tiga pertanyaan berbeda. Ketiganya **tidak bisa
-digantikan** satu sama lain, dan mencampurnya adalah sumber kebocoran
+Empat konstruk terpisah menjawab empat pertanyaan berbeda. Keempatnya **tidak
+bisa digantikan** satu sama lain, dan mencampurnya adalah sumber kebocoran
 multi-outlet:
 
-| Konstruk      | Menjawab                         | Sifat                                  |
-| ------------- | -------------------------------- | -------------------------------------- |
-| `scope`       | "Entity ini dipartisi oleh apa?" | Fakta model data — **tidak** memfilter |
-| `row_scope`   | "Apa yang ditegakkan saat baca?" | Ditegakkan server-side, fail closed    |
-| `assignments` | "Dari mana nilai itu berasal?"   | Sumber nilai untuk `from: session`     |
+| Konstruk       | Menjawab                         | Sifat                                     |
+| -------------- | -------------------------------- | ----------------------------------------- |
+| `scope`        | "Entity ini dipartisi oleh apa?" | Fakta model data — **tidak** memfilter    |
+| `row_scope`    | "Apa yang ditegakkan saat BACA?" | Ditegakkan server-side, fail closed       |
+| `create_scope` | "Apa yang ditegakkan saat BUAT?" | Baris belum ada → dijepit dari rujukannya |
+| `assignments`  | "Dari mana nilai itu berasal?"   | Sumber nilai untuk `from: session`        |
 
 ```yaml
 # Pada entity yang dipartisi (mis. order)
@@ -468,6 +498,9 @@ spec:
   scope: { dimension: branch, field: branch_id, required: true }
   row_scope:
     - { field: branch_id, op: eq, from: session }
+  create_scope:
+    - { field: branch_id, from: record, ref_field: table_session_id,
+        via: cafe-order.table-session, via_field: branch_id }
 
 # Pada entity yang mencatat penugasan (mis. employee)
 spec:
@@ -482,6 +515,25 @@ spec:
 deklarasinya tidak menjanjikan lebih dari yang dipaksakan bentuk datanya.
 `scope` juga memberi `natural_key_rule.scope_field` acuan generik (§2) dan
 dipakai untuk menurunkan penyaringan otomatis di renderer/permukaan.
+
+**`scope.enforced` — siapa yang menjaga pembaca tetap di dalam dimensinya.**
+Deklarasi dimensi tanpa penegakan tidak bisa dibedakan dari dimensi yang memang
+lintas cabang — dan itulah cara isolasi multi-outlet bocor diam-diam. Karena itu
+`scope` menyatakan pemilik penegakannya:
+
+| `enforced`          | Arti                                                               | Validator menuntut                                       |
+| ------------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
+| `session` (default) | atribut sesi membawanya (`row_scope` `from: session`)              | ada `row_scope` pada `field` dari `session`              |
+| `route`             | parameter permintaan membawanya                                    | ada `row_scope` pada `field` dari `route`                |
+| `none`              | dimensi **memang** lintas cabang di entity ini (mis. promo global) | tidak ada `row_scope` pada `field` (kontradiksi ditolak) |
+| `external`          | ditegakkan di luar entity — grant publik atau `create_scope`       | pengecualian eksplisit                                   |
+
+Nilai ini **deklarasi, bukan saklar runtime**: penegakan tetap apa pun yang
+dikatakan `row_scope`/grant. Yang berubah hanya apakah manifest bisa menjawab
+"siapa penegaknya" — pertanyaan audit yang sebelumnya hanya bisa dijawab dengan
+membaca kode. `session`/`route` yang tidak menemukan `row_scope` yang cocok
+**ditolak** `formspec validate`, dan menentukan field yang berbeda (atau literal)
+juga ditolak: konstanta tidak bisa membawa dimensi milik pemanggil.
 
 **`row_scope` — otorisasi, bukan kenyamanan UI.** Berbeda dari `fixed_filters`
 pada Table/Kanban — yang di-merge di browser dan bisa dihilangkan klien mana
@@ -508,6 +560,45 @@ boleh** berubah menjadi "tanpa filter" — permintaan gagal, bukan melebar.
   tepat dua batas berkoma. Bentuk yang tidak memenuhi syarat operatornya
   **ditolak** (fail closed), bukan dibiarkan menjadi predikat yang tidak
   menyaring.
+
+**`create_scope` — batas yang tidak bisa dinyatakan `row_scope`.** Setiap scope
+lain membatasi **bacaan**, dan bacaan bisa dibatasi karena barisnya sudah ada.
+Pada `create` belum ada baris untuk difilter — penyimpanan **tidak punya**
+predikat di jalur tulis — sehingga tanpa konstruk ini pemanggil cukup mengirim
+nilai dimensi pilihannya sendiri. Terukur pada kafe: tamu anonim dari QR bisa
+mem-POST pesanan (dan sesi meja) dengan `branch_id` cabang lain, karena
+`branch_id` tidak mendeklarasikan `required_permission` sehingga penjaga tulis
+per-field pun tidak melihatnya.
+
+```yaml
+create_scope:
+  # Cabang pesanan baru = cabang sesi meja yang dirujuknya.
+  - {
+      field: branch_id,
+      from: record,
+      ref_field: table_session_id,
+      via: cafe-order.table-session,
+      via_field: branch_id,
+    }
+```
+
+Aturannya:
+
+- **Kondisional pada rujukannya.** Diperiksa hanya bila payload membawa
+  `ref_field`. Pesanan kasir (walk-in/takeaway) tidak punya sesi meja, jadi tidak
+  ada record untuk menurunkan cabangnya — dan deklarasinya tidak boleh berubah
+  menjadi "setiap create wajib punya sesi meja".
+- **Ketidakcocokan DITOLAK, tidak ditimpa.** Menimpa diam-diam membuat permintaan
+  dan baris tersimpan tidak sepakat, tanpa cara bagi pemanggil untuk
+  mengetahuinya. Statusnya **403** — pemanggil minta menulis di luar dimensinya.
+- **Rujukan yang tidak bisa diselesaikan adalah input buruk → 422**
+  (`VALIDATION_ERROR`), bukan 403. Pemanggil boleh, payload-nya salah; ini kelas
+  yang sama dengan relasi menggantung. Menggabungkan kedua kelas ini pernah
+  menjadi regresi nyata (relasi rusak mulai dijawab 403).
+- **Fail closed.** Rujukan yang tidak ada, atau record rujukan yang tidak membawa
+  nilai dimensi, **menolak** permintaan — bukan berarti "tanpa aturan".
+- `field` tidak boleh dideklarasikan dua kali: dua pemeriksaan bisa saling
+  bertentangan, dan mana yang menang bergantung urutan iterasi.
 
 **`assignments` — dari mana nilai atribut berasal.** Token boleh membawa atribut
 langsung di klaim `attrs`. Kalau tidak, server menyelesaikannya dari entity yang

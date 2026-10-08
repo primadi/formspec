@@ -418,7 +418,10 @@ func NewCORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler 
 				w.Header().Set("Vary", "Origin")
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
+			// If-None-Match is listed because file downloads revalidate with it:
+			// without the header in the preflight allowlist, a cross-origin
+			// revalidation never reaches the handler.
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID, If-None-Match")
 
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusNoContent)

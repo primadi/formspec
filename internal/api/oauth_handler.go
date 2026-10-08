@@ -33,8 +33,14 @@ type oauthState struct {
 	// runs OAuthLogin and redirects with a token pair), "link" = explicit
 	// account linking (the callback passes the code through to the SPA link
 	// callback, which POSTs it to the authenticated link endpoint).
-	Mode    string
-	Expires time.Time
+	Mode string
+	// Assignment is the session context the caller chose BEFORE the provider
+	// round-trip, carried through `state` because the round-trip has no step
+	// where a choice could be collected (backend §8.7). Empty means "no choice
+	// yet": the automatic rule applies, and a principal with several contexts
+	// gets redirected back to the picker.
+	Assignment string
+	Expires    time.Time
 }
 
 var (
@@ -44,17 +50,18 @@ var (
 	oauthStateClean = time.Now()
 )
 
-func newOAuthState(workspace, provider, mode, app string) string {
+func newOAuthState(workspace, provider, mode, app, assignment string) string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	state := hex.EncodeToString(b)
 	oauthStateMu.Lock()
 	oauthStates[state] = oauthState{
-		Workspace: workspace,
-		Provider:  provider,
-		App:       app,
-		Mode:      mode,
-		Expires:   time.Now().Add(oauthStateTTL),
+		Workspace:  workspace,
+		Provider:   provider,
+		App:        app,
+		Mode:       mode,
+		Assignment: assignment,
+		Expires:    time.Now().Add(oauthStateTTL),
 	}
 	// Opportunistic cleanup.
 	if time.Since(oauthStateClean) > time.Minute {
@@ -120,7 +127,7 @@ func (b *RouterBuilder) HandleOAuthAuthorize() http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, code, msg)
 			return
 		}
-		state := newOAuthState(workspaceID, providerName, mode, app)
+		state := newOAuthState(workspaceID, providerName, mode, app, r.URL.Query().Get("assignment"))
 		redirectURL := "/" + workspaceID + "/_ui/auth/oauth/" + providerName + "/callback"
 		http.Redirect(w, r, prov.AuthorizeURL(state, redirectURL), http.StatusFound)
 	}
@@ -167,8 +174,20 @@ func (b *RouterBuilder) HandleOAuthCallback() http.HandlerFunc {
 			return
 		}
 
-		pair, err := authService.OAuthLogin(r.Context(), st.Workspace, st.App, providerName, code)
+		pair, err := authService.OAuthLoginAs(r.Context(), st.Workspace, st.App, providerName, code, st.Assignment)
 		if err != nil {
+			// A principal who holds several contexts must CHOOSE one, and a
+			// provider round-trip has no step where that could happen. Sending
+			// them to the App login with the choices in the fragment lets the
+			// SPA show the picker and restart the flow carrying the choice —
+			// rather than reporting a generic failure the caller cannot act on
+			// (and rather than picking a boundary on their behalf, which is the
+			// rule §8.7 exists to prevent).
+			var needContext *auth.ContextRequiredError
+			if errors.As(err, &needContext) {
+				http.Redirect(w, r, b.oauthContextPath(st.Workspace, st.App, providerName, needContext.Choices), http.StatusFound)
+				return
+			}
 			// Redirect to the App's own login with an error fragment so the SPA
 			// can show it. Distinct fragments let the SPA explain the account
 			// pre-hijacking cases (unverified email / explicit link required).
@@ -194,6 +213,35 @@ func (b *RouterBuilder) HandleOAuthCallback() http.HandlerFunc {
 				"&app="+url.QueryEscape(st.App),
 			http.StatusFound)
 	}
+}
+
+// oauthContextPath builds the login redirect that asks the caller to CHOOSE a
+// session context (backend §8.7), carrying the choices so the SPA can render the
+// picker without another round-trip.
+//
+// The choices ride in the URL FRAGMENT: it is never sent to the server and never
+// lands in access logs, and the payload is not a secret — it is the caller's own
+// list of contexts, the same values a 409 body carries over the API. Repeated
+// `c` parameters rather than one delimited string, because a context VALUE is
+// opaque (a branch code, an outlet id) and could contain whatever delimiter we
+// picked.
+//
+// The provider is included so the picker can RESUME the flow: the choice is only
+// useful if it can be handed back to the provider round-trip, which carries it in
+// `state`.
+func (b *RouterBuilder) oauthContextPath(workspace, app, provider string, choices []auth.ContextChoice) string {
+	q := url.Values{}
+	q.Set("oauth", "context_required")
+	q.Set("provider", provider)
+	// The App travels with the choices because resuming the flow means calling
+	// the authorize endpoint again, and that endpoint requires `app`. Sending it
+	// here spares the client from having to derive the App's login path (which
+	// depends on the App's `root_url`, a server-side resolution).
+	q.Set("app", app)
+	for _, c := range choices {
+		q.Add("c", c.ID)
+	}
+	return b.appLoginPath(workspace, app) + "#" + q.Encode()
 }
 
 // appLoginPath builds the in-App login path for a resolved App: the App's own

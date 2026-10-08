@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	appspec "github.com/primadi/formspec/cmd/formspec-registry/app-spec"
@@ -32,6 +33,7 @@ import (
 	"github.com/primadi/formspec/internal/devsecret"
 	"github.com/primadi/formspec/internal/devserver"
 	"github.com/primadi/formspec/internal/vendor"
+	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	formspec "github.com/primadi/formspec/resource"
 	"gopkg.in/yaml.v3"
@@ -123,17 +125,58 @@ func main() {
 		JWTPublicKeyPath: *jwtPublicKey,
 		StrictMode:       *strictMode,
 	}
-	if *webDir != "" {
+	// SPA source, in priority order:
+	//   1. --web-dir                 (explicit; wins over everything)
+	//   2. renderers/react-shadcn/dist   (repo source — freshest in dev)
+	//   3. cmd/formspec-registry/web/dist (the synced copy this binary embeds)
+	//   4. the embedded dist          (deploy: fast, and works without a repo)
+	//
+	// Step 2 exists because `make registry-dev` runs `go run`, which compiles
+	// WITHOUT -tags formspec_spa — so web/embed.go (the real dist) is not part
+	// of the build at all and embed_stub.go answers with a placeholder page.
+	// "There is an embed.go" does not mean the embed is used: the build tag
+	// decides. Auto-detecting the checkout keeps the dev server honest instead
+	// of making the fix "remember to pass --web-dir".
+	//
+	// Step 3 is the same bundle one directory over: `make build-registry` syncs
+	// renderers/react-shadcn/dist into cmd/formspec-registry/web/dist for the
+	// //go:embed, and that copy stays on disk (gitignored) after the build. It
+	// is the fallback when the repo dist is absent — a checkout where only
+	// `make build-registry` was ever run, or dist/ was cleaned. The repo dist
+	// comes first because it is what `npm run build` refreshes.
+	//
+	// Auto-detection is deliberately skipped when the embedded build HAS a real
+	// dist (in-process App plugins, build-tag builds): a package must not have
+	// its UI swapped by whatever checkout happens to sit above its CWD.
+	placeholder := false
+	switch {
+	case *webDir != "":
 		cfg.WebDir = *webDir
 		fmt.Printf("   web:  %s (from --web-dir)\n", *webDir)
-	} else {
+	default:
 		cfg.WebFS = web.DistFS()
-		if web.Embedded {
+		switch {
+		case web.Embedded:
 			fmt.Println("   web:  embedded SPA (web/dist)")
-		} else {
-			fmt.Println("   web:  placeholder — binary built without embedded SPA " +
-				"(go install / tanpa -tags formspec_spa); full UI: make build-registry " +
-				"atau --web-dir")
+		default:
+			// Renderer source first (freshest), then the binary's own synced
+			// copy (same bundle, survives a cleaned renderers/).
+			detected := devserver.FindWebDist()
+			origin := "auto-detected"
+			if detected == "" {
+				detected = devserver.FindDistUpwards("cmd", "formspec-registry", "web", "dist")
+				origin = "auto-detected (synced copy)"
+			}
+			if detected != "" {
+				cfg.WebDir = detected
+				cfg.WebFS = nil
+				fmt.Printf("   web:  %s (%s; go run has no embedded SPA)\n", detected, origin)
+			} else {
+				placeholder = true
+				fmt.Println("   web:  ⚠ placeholder — binary built without embedded SPA " +
+					"(go install / tanpa -tags formspec_spa) and no repository checkout found. " +
+					"Full UI: make build-registry, or --web-dir <renderers/react-shadcn/dist>")
+			}
 		}
 	}
 
@@ -158,7 +201,32 @@ func main() {
 		fmt.Println("ℹ spec: embedded snapshot — edit cmd/formspec-registry/app-spec/spec + restart, or run with --spec cmd/formspec-registry/app-spec/spec for hot-reload")
 	}
 
+	// ── Where to open the UI ──
+	//
+	// The workspace prefix is not decoration: every surface is served under
+	// /{ws}/... (D50), so the bare origin is a 404 and printing it as "the
+	// server is here" sends the visitor straight into that 404. The URL comes
+	// from the resolved Apps (root_url), never from a hardcoded slug or the
+	// retired /{ws}/_admin panel (plan app-scoped-login.md D4) — /_admin now
+	// carries only framework auth routes.
+	appURLs := app.UIAppURLs()
+	if len(appURLs) == 0 {
+		appURLs = []string{spec.SurfaceURL(cfg.WorkspaceID, "/")}
+	}
+	primary := appURLs[0]
+
 	fmt.Printf("✓ Server starting on http://localhost%s\n", *addr)
+	if placeholder {
+		fmt.Println("⚠ The UI is NOT served — the URL below answers with a placeholder page.")
+		fmt.Println("  Fix: make build-registry (embed) atau --web-dir renderers/react-shadcn/dist")
+	}
+	fmt.Printf("  App  : http://localhost%s%s\n", *addr, primary)
+	for _, u := range appURLs[1:] {
+		fmt.Printf("  App  : http://localhost%s%s\n", *addr, u)
+	}
+	fmt.Printf("  Setup: http://localhost%s%s/_admin/setup\n", *addr, strings.TrimSuffix(primary, "/"))
+	fmt.Printf("  Framework routes only (no entity panel; D4): http://localhost%s%s/_admin/{setup,change-password,oauth/callback}\n",
+		*addr, strings.TrimSuffix(primary, "/"))
 	devserver.ServeAppUntilSignal(ctx, app)
 	devserver.CleanupPIDFile(pidFile)
 }

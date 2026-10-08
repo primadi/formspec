@@ -655,13 +655,10 @@ func New(cfg Config) (*App, error) {
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
 	rb.SetUIRegistry(uiReg)
-	rb.SetApps(resolvedApps)
-	if cfg.WebDir != "" {
-		rb.SetWebDir(cfg.WebDir)
-	}
-	if cfg.WebFS != nil {
-		rb.SetWebFS(cfg.WebFS)
-	}
+	wireAppSurfaces(rb, cfg, resolvedApps)
+	// Pre-compress the immutable SPA assets in the background so the first
+	// request for a large chunk is not also the one that pays for gzip.
+	rb.WarmStaticAssets()
 
 	// Auth service (todo 6.1): login + refresh backed by formspec.core
 	// entities (overridable via external/ or auth_config_ref). The issuer
@@ -728,6 +725,9 @@ func New(cfg Config) (*App, error) {
 	rb.SetLinkStore(linkStore)
 	rb.SetUploadLimitMB(envInt("FORMSPEC_UPLOAD_MAX_MB", api.DefaultUploadLimitMB))
 	rb.SetDownloadLimitMB(envInt("FORMSPEC_DOWNLOAD_MAX_MB", api.DefaultDownloadLimitMB))
+	// Browser-side freshness window for downloads (todo 7.17.11). A field may
+	// override it with `storage.download_cache_ttl`.
+	rb.SetDownloadCacheTTL(envDuration("FORMSPEC_DOWNLOAD_CACHE_TTL", api.DefaultDownloadCacheTTL))
 	linkSweeper := api.NewStorageLinkSweeper(linkStore, storageFn, time.Minute)
 
 	appAuths, authErrs := auth.ResolveAppAuth(resolvedApps, configs)
@@ -1074,6 +1074,92 @@ func New(cfg Config) (*App, error) {
 	return app, nil
 }
 
+// ─── App surfaces (mount, SPA source, dev root redirect) ───
+
+// wireAppSurfaces transfers everything the router needs to serve the App
+// surfaces. It exists because a reload builds a FRESH RouterBuilder
+// (ReloadSpec), so each of these wirings is a place where the new builder
+// silently starts empty. The redirect is the newest member of that class and
+// the least visible: it only shows up in the browser address bar, so nothing
+// fails loudly when it is forgotten.
+func wireAppSurfaces(rb *api.RouterBuilder, cfg Config, resolvedApps map[string]*formspec_app.ResolvedApp) {
+	rb.SetApps(resolvedApps)
+	if cfg.WebDir != "" {
+		rb.SetWebDir(cfg.WebDir)
+	}
+	if cfg.WebFS != nil {
+		rb.SetWebFS(cfg.WebFS)
+	}
+	rb.SetRootRedirect(devRootRedirect(cfg, resolvedApps))
+}
+
+// devRootRedirect returns the target for a bare `GET /`, or "" to leave the
+// root alone.
+//
+// Everything FormSpec serves is prefixed with the workspace slug (D50), so `/`
+// matches no route and answers chi's plain-text "404 page not found" — while
+// the SPA itself assumes `/` is a shell URL (App.tsx navigates "/" to
+// "/{workspace}"). In dev the visitor typing the host name lands on that 404
+// and reasonably reads it as a broken server. The redirect is therefore
+// DEV-ONLY: in production the root segment belongs to the edge (subdomain per
+// workspace, ingress rules), and changing it here would silently rewrite the
+// contract for every deployment.
+//
+// Only a single mounted App can be resolved unambiguously. With two Apps
+// nothing says which one owns "/", so the root is left alone rather than
+// guessing (and the redirect would be a coin flip).
+func devRootRedirect(cfg Config, resolvedApps map[string]*formspec_app.ResolvedApp) string {
+	if cfg.ProdMode || len(resolvedApps) != 1 {
+		return ""
+	}
+	for _, a := range resolvedApps {
+		if a == nil || a.Spec == nil {
+			continue
+		}
+		if !a.Spec.MountsWithin(cfg.WorkspaceID) {
+			continue // staged App: mounted nowhere, so its root_url is not routable
+		}
+		return spec.SurfaceURL(cfg.WorkspaceID, a.Spec.RootURL)
+	}
+	return ""
+}
+
+// UIAppURLs returns the workspace-relative URLs of this app's UI surfaces,
+// primary first — e.g. ["/default/"] for an App owning the workspace root, or
+// ["/default/barbershop"] for a free-form mount.
+//
+// Startup banners print these instead of hardcoding a slug and a mount: the
+// workspace is configurable (Config.WorkspaceID) and the surface belongs to the
+// App (root_url). A banner that prints the bare origin, or a retired route such
+// as /{ws}/_admin, advertises a 404 — which is exactly how the registry banner
+// was reported.
+func (a *App) UIAppURLs() []string {
+	a.mu.RLock()
+	rb, cfg := a.rb, a.cfg
+	a.mu.RUnlock()
+	if rb == nil {
+		return nil
+	}
+	mounts := rb.AppMountPaths()
+	if len(mounts) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(mounts))
+	for _, m := range mounts {
+		out = append(out, spec.SurfaceURL(cfg.WorkspaceID, m))
+	}
+	// An App owning the workspace root is the welcoming surface; put it first.
+	for i, m := range mounts {
+		if m == "/" {
+			if i > 0 {
+				out[0], out[i] = out[i], out[0]
+			}
+			break
+		}
+	}
+	return out
+}
+
 // Handler returns a reload-safe REST API handler. The returned handler
 // always delegates to the current internal handler — after a ReloadSpec()
 // call, subsequent requests automatically use the freshly-built routes.
@@ -1379,7 +1465,7 @@ func (a *App) ReloadSpec() error {
 
 	newRB.SetDispatcher(newDisp)
 	newRB.SetUIRegistry(newUIReg)
-	newRB.SetApps(resolvedApps)
+	wireAppSurfaces(newRB, a.cfg, resolvedApps)
 	// Re-resolve the global settings namespace on reload so a changed
 	// `settings:` in a Config manifest takes effect without a full restart.
 	var declaredSettings *spec.Settings
@@ -1420,6 +1506,9 @@ func (a *App) ReloadSpec() error {
 	if a.cfg.WebFS != nil {
 		newRB.SetWebFS(a.cfg.WebFS)
 	}
+	// The rebuild gets a fresh gzip/ETag memo, so re-warm it (background) rather
+	// than leaving the reloaded router cold while the previous one was warm.
+	newRB.WarmStaticAssets()
 
 	// Wire event delivery. The outboxStore and eventLogStore share the
 	// same database tables as before, so the existing outboxWorker
@@ -1889,6 +1978,18 @@ func envInt(key string, def int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
+		}
+	}
+	return def
+}
+
+// envDuration reads a Go-duration env var, returning def when unset or invalid
+// (helper for the download cache window, todo 7.17.11). A literal "0s" is a
+// valid value — it means `no-cache` — so it must not collapse into def.
+func envDuration(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d >= 0 {
+			return d
 		}
 	}
 	return def

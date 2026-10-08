@@ -34,6 +34,11 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		// missing definition.
 		"ParamInput", "ParamsRenderHint", "InputSet",
 		"EntityAuth", "ExposeConfig", "RateLimitSpec", "CacheSpec",
+		// Anonymous intake challenge policy (plan intake-challenge-pow.md):
+		// AppSpec.Intake is a $ref target, and IntakeChallenge/PowDifficulty are
+		// reached through it. Unlisted, every App schema would point at a
+		// missing definition and fail to compile.
+		"IntakeSpec", "IntakeChallenge", "PowDifficulty",
 		// Summary projection contract (Core Extended §6, todo 3.6.4) — these
 		// MUST be listed, or Entity.schema.json emits "$ref: #/$defs/RebuildSpec"
 		// with no matching definition and every Entity fails to compile.
@@ -43,6 +48,10 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		// rendered as "$ref" with no matching definition breaks every Entity
 		// schema in the tree.
 		"ScopeDecl", "AssignmentDecl", "UnitDecl", "InvariantDecl",
+		// CreateScopeSpec is the write-side counterpart of `row_scope`
+		// (plan public-scope-enforcement.md). A $ref target from EntitySpec —
+		// unlisted, every Entity schema would point at a missing definition.
+		"CreateScopeSpec",
 		"ActionUIHint", "FilterSpec", "FormSection", "FormField", "FormAction", "FormSubmit", "FormRenderDecl",
 		"TableColumn", "TableAction", "BackdatePolicy", "ForwardDatePolicy",
 		"SoftDeactivateDecl", "PersistSpec", "ExtendStorage", "RawDDLDecl",
@@ -56,6 +65,10 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"SectionBlock", "SectionCTA", "SectionItem",
 		// Child-field picker (S1 generalized).
 		"PickerDecl", "PickerDisplay", "PickerMap",
+		// PickerLookup is the generic "read one value per picked row from a
+		// related entity" construct. A $ref target from PickerDecl — unlisted,
+		// every Entity schema would point at a missing definition.
+		"PickerLookup",
 		"ReportParam", "ReportColumn", "ReportGroup", "ReportTotal", "ReportSource", "WizardStep",
 		"WizardOnComplete", "WizardSummaryItem", "KanbanColumn", "KanbanCard",
 		"PrintOutput", "PrintPaper", "PrintCustomPaper", "PrintHeader", "PrintBodyItem",

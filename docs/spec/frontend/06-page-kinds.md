@@ -92,19 +92,22 @@ deklarasinya diletakkan di **field child**-nya, bukan di kind atau halaman:
   child:
     picker:
       entity: cafe-master.menu-item
+      lookup:
+        { entity: cafe-master.menu-item-price, key: menu_item_id, field: price }
       display:
         { name_field: name, image_field: photo, columns: 3, search: true }
       map:
         {
           ref_field: menu_item_id,
           name_field: name_snapshot,
-          price_field: unit_price_snapshot,
+          lookup_field: unit_price_snapshot,
           quantity_field: quantity,
           max_quantity: 20,
         }
 ```
 
-Kontraknya (semua aturan, termasuk join harga dari entity lain)
+Kontraknya (semua aturan, termasuk `lookup` — nilai per baris dari entity
+lain, dan `scope`-nya yang ditegakkan server)
 ada di [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1.3.
 
 Yang perlu diketahui di sisi **Page/Form**:

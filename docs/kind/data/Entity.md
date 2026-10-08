@@ -109,6 +109,7 @@ spec:
 | `deliver` | [][`DeliveryDecl`](../../spec/backend/02-core-extended.md) | — |  |  |
 | `indexes` | [][`IndexDecl`](../../spec/backend/01-core-basic.md) | — |  |  |
 | `row_scope` | [][`FilterSpec`](../../spec/frontend/06-page-kinds.md) | — |  | RowScope declares the row-level filters the server enforces on every read |
+| `create_scope` | []`CreateScopeSpec` | — |  | CreateScope pins a dimension field on CREATE from a record the payload |
 | `scope` | `ScopeDecl` | — |  | Scope declares that this entity's rows are partitioned along a named |
 | `assignments` | []`AssignmentDecl` | — |  | Assignments declares that this entity records which principal is assigned |
 | `maintained_by` | `string` | — |  | MaintainedBy names the script that keeps a `characteristic: summary` |

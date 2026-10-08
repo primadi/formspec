@@ -26,6 +26,10 @@
           "description": "§13.1: callback webhook delivery for tracked async jobs",
           "nullable": true
         },
+        "challenge": {
+          "description": "Challenge opts this action into its App's anonymous-intake",
+          "type": "boolean"
+        },
         "conditions": {
           "type": "array",
           "items": {
@@ -859,6 +863,54 @@
       ],
       "additionalProperties": false
     },
+    "CreateScopeSpec": {
+      "description": "CreateScopeSpec pins a dimension field on CREATE from a record the payload\nreferences — the write-side counterpart of `row_scope`.\n\n`row_scope` answers \"which rows may this caller READ\". It cannot answer the\nwrite question, because a row that does not exist yet has no stored value to\nfilter: `create` is not row-scoped anywhere in the storage layer (InsertParams\ncarries no predicates). So the only place to state \"the branch of a new order\nis the branch of the table session it belongs to\" is the create path itself.\n\nThe rule is CONDITIONAL on the reference: when the payload carries a value for\nRefField, the dimension field must equal the referenced record's ViaField.\nWhen it does not (a cashier creating a walk-in order with no table session),\nthere is nothing to derive from and the rule does not apply — which is\ndeliberate, so one declaration serves both surfaces without a mode switch.\n\nA MISMATCH IS REJECTED (403), never silently overwritten. Overwriting would\nmake the payload lie about what was stored, and the caller would have no way\nto learn that their input was discarded.\n",
+      "type": "object",
+      "properties": {
+        "field": {
+          "description": "Dimension field on THIS entity that the create must pin",
+          "type": "string",
+          "examples": [
+            "branch_id"
+          ]
+        },
+        "from": {
+          "description": "Where the expected value comes from at request time. Only `record` is defined: a record the payload references.",
+          "type": "string",
+          "enum": [
+            "record"
+          ]
+        },
+        "ref_field": {
+          "description": "Relation field on this entity holding the reference (id or natural key) to the record to read from",
+          "type": "string",
+          "examples": [
+            "table_session_id"
+          ]
+        },
+        "via": {
+          "description": "The referenced record's entity, as \\\"\u003cmodule\u003e.\u003centity\u003e\\",
+          "type": "string",
+          "examples": [
+            "cafe-order.table-session"
+          ]
+        },
+        "via_field": {
+          "description": "Field on `via` holding the expected value",
+          "type": "string",
+          "examples": [
+            "branch_id"
+          ]
+        }
+      },
+      "required": [
+        "field",
+        "ref_field",
+        "via",
+        "via_field"
+      ],
+      "additionalProperties": false
+    },
     "CurrencySettings": {
       "description": "CurrencySettings configures the default money currency (05-field-types.md §2).\n",
       "type": "object",
@@ -1654,6 +1706,20 @@
           "examples": [
             "paid,in_kitchen,ready"
           ]
+        },
+        "via": {
+          "description": "Entity the `param` value references, as \\\"\u003cmodule\u003e.\u003centity\u003e\\\" — the scope value is read from `via_field` of that record.",
+          "type": "string",
+          "examples": [
+            "cafe-order.table-session"
+          ]
+        },
+        "via_field": {
+          "description": "Field on `via` holding the scope value (required with `via`).",
+          "type": "string",
+          "examples": [
+            "branch_id"
+          ]
         }
       },
       "required": [
@@ -2058,6 +2124,80 @@
       "required": [
         "name"
       ],
+      "additionalProperties": false
+    },
+    "IntakeChallenge": {
+      "description": "IntakeChallenge configures the browser proof-of-work gate.\n",
+      "type": "object",
+      "properties": {
+        "activate_at": {
+          "description": "Fraction (0..1) of the global budget that activates the gate (mode: escalate); absent = 0.7, 0 = activate immediately",
+          "type": "number",
+          "examples": [
+            "0.7"
+          ],
+          "nullable": true
+        },
+        "bind": {
+          "description": "Extra bound attributes (subset of: ip); empty binds only the action",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[ip]"
+          ]
+        },
+        "difficulty": {
+          "$ref": "#/$defs/PowDifficulty",
+          "description": "Difficulty is the proof-of-work range in leading zero bits of SHA-256.",
+          "nullable": true
+        },
+        "global": {
+          "$ref": "#/$defs/RateLimitSpec",
+          "description": "Global is the pressure signal: a rate limit measured across ALL anonymous",
+          "nullable": true
+        },
+        "mode": {
+          "description": "escalate (default, on only under pressure) | always",
+          "type": "string",
+          "enum": [
+            "escalate",
+            "always"
+          ],
+          "examples": [
+            "escalate"
+          ]
+        },
+        "provider": {
+          "description": "Challenge mechanism — only \\\"pow\\\" (self-hosted proof-of-work) is implemented",
+          "type": "string",
+          "enum": [
+            "pow"
+          ],
+          "examples": [
+            "pow"
+          ]
+        },
+        "ttl": {
+          "description": "Challenge lifetime (Go duration string) — bounds the replay window",
+          "type": "string",
+          "examples": [
+            "90s"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "IntakeSpec": {
+      "description": "IntakeSpec declares protection for an App's ANONYMOUS intake surface — the\nendpoints an unauthenticated caller can reach through this App's derived\npublic grants (plan docs_internal/plan/intake-challenge-pow.md).\n\nAuthored on the App because the App is the reviewed unit of \"what may an\nanonymous caller touch\"; an Action opts in with `challenge: true`, and the\npolicy (how hard, when, how long) lives here so it has one owner. An opt-in\nwith no policy is a validation error rather than a silent no-op.\n\nEnforcement is keyed by (module, entity, action), NOT by App: an anonymous\n`_ui/entity` request carries no App (AppFromContext is empty without an\nidentity, and publicGrants() already merges every public App into a single\nmodule/entity map). Where several public Apps declare a policy the\nSTRICTEST wins — sharing a route must never weaken protection.\n",
+      "type": "object",
+      "properties": {
+        "challenge": {
+          "$ref": "#/$defs/IntakeChallenge",
+          "nullable": true
+        }
+      },
       "additionalProperties": false
     },
     "IntegratorCall": {
@@ -2795,6 +2935,11 @@
             "{\\\"is_available\\\": \\\"true\\\"}"
           ]
         },
+        "lookup": {
+          "$ref": "#/$defs/PickerLookup",
+          "description": "Lookup enriches each picked row with a value read from a related entity",
+          "nullable": true
+        },
         "map": {
           "$ref": "#/$defs/PickerMap",
           "description": "Map describes what gets written into the row."
@@ -2853,35 +2998,6 @@
             "name"
           ]
         },
-        "price_entity": {
-          "description": "PriceEntity reads the price from a separate entity — the per-branch price",
-          "type": "string",
-          "examples": [
-            "cafe-master.menu-item-price"
-          ]
-        },
-        "price_field": {
-          "description": "Money field on `price_entity` (required with price_entity).",
-          "type": "string",
-          "examples": [
-            "price"
-          ]
-        },
-        "price_filter": {
-          "description": "Narrows the price rows (typically the branch). Values interpolate like `filter`.",
-          "type": "object",
-          "additionalProperties": {},
-          "examples": [
-            "{\\\"branch_id\\\": \\\"{session.branch_id}\\\"}"
-          ]
-        },
-        "price_match_field": {
-          "description": "Field on `price_entity` holding the source id (required with price_entity).",
-          "type": "string",
-          "examples": [
-            "menu_item_id"
-          ]
-        },
         "search": {
           "description": "Client-side search over the tile title.",
           "type": "boolean"
@@ -2889,10 +3005,65 @@
       },
       "additionalProperties": false
     },
+    "PickerLookup": {
+      "description": "PickerLookup enriches a picked row with a value read from a RELATED entity —\none record per picked row, matched by a key.\n\nGeneric on purpose, and that is the whole point: \"read one value per row from\na table keyed by that row\" is one shape, not a food-ordering feature. Change\nthe nouns and it is a per-outlet price, a per-region tax rate, a per-warehouse\nstock level, a per-clinic fee, a per-tenant quota or a localized label. The\npicker's own entity supplies the ROWS; the lookup supplies the VALUE that goes\nwith each row.\n\nIt is declared on the picker (not on the entity) because the picker is what\ncauses the fetch, so the declaration and the enforcement cannot come from two\ndifferent places.\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "Entity is the related entity the value is read from (`module.entity` or a",
+          "type": "string",
+          "examples": [
+            "cafe-master.menu-item-price"
+          ]
+        },
+        "field": {
+          "description": "Field is the field on `entity` whose value is used.",
+          "type": "string",
+          "examples": [
+            "price"
+          ]
+        },
+        "filter": {
+          "description": "Filter narrows the lookup list IN THE BROWSER. Values interpolate",
+          "type": "object",
+          "additionalProperties": {},
+          "examples": [
+            "{\\\"is_active\\\": \\\"true\\\"}"
+          ]
+        },
+        "key": {
+          "description": "Key is the field on `entity` matched against the picked row's source id",
+          "type": "string",
+          "examples": [
+            "menu_item_id"
+          ]
+        },
+        "scope": {
+          "description": "Scope is the SERVER-ENFORCED row scope for reads of `entity` caused by this",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FilterSpec"
+          }
+        }
+      },
+      "required": [
+        "entity",
+        "key",
+        "field"
+      ],
+      "additionalProperties": false
+    },
     "PickerMap": {
       "description": "PickerMap is the write half of a picker: which row field receives what.\n",
       "type": "object",
       "properties": {
+        "lookup_field": {
+          "description": "LookupField receives `lookup.field` for the picked row (snapshot).",
+          "type": "string",
+          "examples": [
+            "unit_price_snapshot"
+          ]
+        },
         "max_quantity": {
           "description": "Upper bound per row (default 99).",
           "type": "integer",
@@ -2914,13 +3085,6 @@
             "note"
           ]
         },
-        "price_field": {
-          "description": "PriceField receives the source record's price (snapshot).",
-          "type": "string",
-          "examples": [
-            "unit_price_snapshot"
-          ]
-        },
         "quantity_field": {
           "description": "QuantityField accumulates the picked amount. When omitted, a picked row",
           "type": "string",
@@ -2936,7 +3100,7 @@
           ]
         },
         "source_name_field": {
-          "description": "SourceNameField / SourcePriceField override which *source* field the name",
+          "description": "SourceNameField overrides which *source* field the name snapshot reads from",
           "type": "string",
           "examples": [
             "title"
@@ -2970,6 +3134,31 @@
       },
       "required": [
         "approvers"
+      ],
+      "additionalProperties": false
+    },
+    "PowDifficulty": {
+      "description": "PowDifficulty is the proof-of-work difficulty range (leading zero bits of\nSHA-256). Max is capped at 32 in validation: past that the gate is an\noutage, not a filter.\n",
+      "type": "object",
+      "properties": {
+        "max": {
+          "description": "Leading zero bits when saturated (upper bound)",
+          "type": "integer",
+          "examples": [
+            "22"
+          ]
+        },
+        "min": {
+          "description": "Leading zero bits when idle (lower bound)",
+          "type": "integer",
+          "examples": [
+            "16"
+          ]
+        }
+      },
+      "required": [
+        "min",
+        "max"
       ],
       "additionalProperties": false
     },
@@ -3582,6 +3771,16 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]*$"
         },
+        "enforced": {
+          "description": "Who keeps reads inside the dimension: session (default), route, none (cross-cutting by design), external (public grant / create_scope).",
+          "type": "string",
+          "enum": [
+            "session",
+            "route",
+            "none",
+            "external"
+          ]
+        },
         "field": {
           "description": "Field on this entity carrying the dimension value",
           "type": "string"
@@ -3959,6 +4158,10 @@
         "chunk_size_mb": {
           "description": "ChunkSizeMB is the client hint for chunked-upload part size (todo",
           "type": "integer"
+        },
+        "download_cache_ttl": {
+          "description": "DownloadCacheTTL is how long a browser may reuse a downloaded file without",
+          "type": "string"
         },
         "max_count": {
           "type": "integer"
@@ -4718,6 +4921,10 @@
           "description": "§13.1: callback webhook delivery for tracked async jobs",
           "nullable": true
         },
+        "challenge": {
+          "description": "Challenge opts this action into its App's anonymous-intake",
+          "type": "boolean"
+        },
         "conditions": {
           "type": "array",
           "items": {
@@ -5551,6 +5758,54 @@
       ],
       "additionalProperties": false
     },
+    "CreateScopeSpec": {
+      "description": "CreateScopeSpec pins a dimension field on CREATE from a record the payload\nreferences — the write-side counterpart of `row_scope`.\n\n`row_scope` answers \"which rows may this caller READ\". It cannot answer the\nwrite question, because a row that does not exist yet has no stored value to\nfilter: `create` is not row-scoped anywhere in the storage layer (InsertParams\ncarries no predicates). So the only place to state \"the branch of a new order\nis the branch of the table session it belongs to\" is the create path itself.\n\nThe rule is CONDITIONAL on the reference: when the payload carries a value for\nRefField, the dimension field must equal the referenced record's ViaField.\nWhen it does not (a cashier creating a walk-in order with no table session),\nthere is nothing to derive from and the rule does not apply — which is\ndeliberate, so one declaration serves both surfaces without a mode switch.\n\nA MISMATCH IS REJECTED (403), never silently overwritten. Overwriting would\nmake the payload lie about what was stored, and the caller would have no way\nto learn that their input was discarded.\n",
+      "type": "object",
+      "properties": {
+        "field": {
+          "description": "Dimension field on THIS entity that the create must pin",
+          "type": "string",
+          "examples": [
+            "branch_id"
+          ]
+        },
+        "from": {
+          "description": "Where the expected value comes from at request time. Only `record` is defined: a record the payload references.",
+          "type": "string",
+          "enum": [
+            "record"
+          ]
+        },
+        "ref_field": {
+          "description": "Relation field on this entity holding the reference (id or natural key) to the record to read from",
+          "type": "string",
+          "examples": [
+            "table_session_id"
+          ]
+        },
+        "via": {
+          "description": "The referenced record's entity, as \\\"\u003cmodule\u003e.\u003centity\u003e\\",
+          "type": "string",
+          "examples": [
+            "cafe-order.table-session"
+          ]
+        },
+        "via_field": {
+          "description": "Field on `via` holding the expected value",
+          "type": "string",
+          "examples": [
+            "branch_id"
+          ]
+        }
+      },
+      "required": [
+        "field",
+        "ref_field",
+        "via",
+        "via_field"
+      ],
+      "additionalProperties": false
+    },
     "CurrencySettings": {
       "description": "CurrencySettings configures the default money currency (05-field-types.md §2).\n",
       "type": "object",
@@ -6346,6 +6601,20 @@
           "examples": [
             "paid,in_kitchen,ready"
           ]
+        },
+        "via": {
+          "description": "Entity the `param` value references, as \\\"\u003cmodule\u003e.\u003centity\u003e\\\" — the scope value is read from `via_field` of that record.",
+          "type": "string",
+          "examples": [
+            "cafe-order.table-session"
+          ]
+        },
+        "via_field": {
+          "description": "Field on `via` holding the scope value (required with `via`).",
+          "type": "string",
+          "examples": [
+            "branch_id"
+          ]
         }
       },
       "required": [
@@ -6750,6 +7019,80 @@
       "required": [
         "name"
       ],
+      "additionalProperties": false
+    },
+    "IntakeChallenge": {
+      "description": "IntakeChallenge configures the browser proof-of-work gate.\n",
+      "type": "object",
+      "properties": {
+        "activate_at": {
+          "description": "Fraction (0..1) of the global budget that activates the gate (mode: escalate); absent = 0.7, 0 = activate immediately",
+          "type": "number",
+          "examples": [
+            "0.7"
+          ],
+          "nullable": true
+        },
+        "bind": {
+          "description": "Extra bound attributes (subset of: ip); empty binds only the action",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[ip]"
+          ]
+        },
+        "difficulty": {
+          "$ref": "#/$defs/PowDifficulty",
+          "description": "Difficulty is the proof-of-work range in leading zero bits of SHA-256.",
+          "nullable": true
+        },
+        "global": {
+          "$ref": "#/$defs/RateLimitSpec",
+          "description": "Global is the pressure signal: a rate limit measured across ALL anonymous",
+          "nullable": true
+        },
+        "mode": {
+          "description": "escalate (default, on only under pressure) | always",
+          "type": "string",
+          "enum": [
+            "escalate",
+            "always"
+          ],
+          "examples": [
+            "escalate"
+          ]
+        },
+        "provider": {
+          "description": "Challenge mechanism — only \\\"pow\\\" (self-hosted proof-of-work) is implemented",
+          "type": "string",
+          "enum": [
+            "pow"
+          ],
+          "examples": [
+            "pow"
+          ]
+        },
+        "ttl": {
+          "description": "Challenge lifetime (Go duration string) — bounds the replay window",
+          "type": "string",
+          "examples": [
+            "90s"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "IntakeSpec": {
+      "description": "IntakeSpec declares protection for an App's ANONYMOUS intake surface — the\nendpoints an unauthenticated caller can reach through this App's derived\npublic grants (plan docs_internal/plan/intake-challenge-pow.md).\n\nAuthored on the App because the App is the reviewed unit of \"what may an\nanonymous caller touch\"; an Action opts in with `challenge: true`, and the\npolicy (how hard, when, how long) lives here so it has one owner. An opt-in\nwith no policy is a validation error rather than a silent no-op.\n\nEnforcement is keyed by (module, entity, action), NOT by App: an anonymous\n`_ui/entity` request carries no App (AppFromContext is empty without an\nidentity, and publicGrants() already merges every public App into a single\nmodule/entity map). Where several public Apps declare a policy the\nSTRICTEST wins — sharing a route must never weaken protection.\n",
+      "type": "object",
+      "properties": {
+        "challenge": {
+          "$ref": "#/$defs/IntakeChallenge",
+          "nullable": true
+        }
+      },
       "additionalProperties": false
     },
     "IntegratorCall": {
@@ -7487,6 +7830,11 @@
             "{\\\"is_available\\\": \\\"true\\\"}"
           ]
         },
+        "lookup": {
+          "$ref": "#/$defs/PickerLookup",
+          "description": "Lookup enriches each picked row with a value read from a related entity",
+          "nullable": true
+        },
         "map": {
           "$ref": "#/$defs/PickerMap",
           "description": "Map describes what gets written into the row."
@@ -7545,35 +7893,6 @@
             "name"
           ]
         },
-        "price_entity": {
-          "description": "PriceEntity reads the price from a separate entity — the per-branch price",
-          "type": "string",
-          "examples": [
-            "cafe-master.menu-item-price"
-          ]
-        },
-        "price_field": {
-          "description": "Money field on `price_entity` (required with price_entity).",
-          "type": "string",
-          "examples": [
-            "price"
-          ]
-        },
-        "price_filter": {
-          "description": "Narrows the price rows (typically the branch). Values interpolate like `filter`.",
-          "type": "object",
-          "additionalProperties": {},
-          "examples": [
-            "{\\\"branch_id\\\": \\\"{session.branch_id}\\\"}"
-          ]
-        },
-        "price_match_field": {
-          "description": "Field on `price_entity` holding the source id (required with price_entity).",
-          "type": "string",
-          "examples": [
-            "menu_item_id"
-          ]
-        },
         "search": {
           "description": "Client-side search over the tile title.",
           "type": "boolean"
@@ -7581,10 +7900,65 @@
       },
       "additionalProperties": false
     },
+    "PickerLookup": {
+      "description": "PickerLookup enriches a picked row with a value read from a RELATED entity —\none record per picked row, matched by a key.\n\nGeneric on purpose, and that is the whole point: \"read one value per row from\na table keyed by that row\" is one shape, not a food-ordering feature. Change\nthe nouns and it is a per-outlet price, a per-region tax rate, a per-warehouse\nstock level, a per-clinic fee, a per-tenant quota or a localized label. The\npicker's own entity supplies the ROWS; the lookup supplies the VALUE that goes\nwith each row.\n\nIt is declared on the picker (not on the entity) because the picker is what\ncauses the fetch, so the declaration and the enforcement cannot come from two\ndifferent places.\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "Entity is the related entity the value is read from (`module.entity` or a",
+          "type": "string",
+          "examples": [
+            "cafe-master.menu-item-price"
+          ]
+        },
+        "field": {
+          "description": "Field is the field on `entity` whose value is used.",
+          "type": "string",
+          "examples": [
+            "price"
+          ]
+        },
+        "filter": {
+          "description": "Filter narrows the lookup list IN THE BROWSER. Values interpolate",
+          "type": "object",
+          "additionalProperties": {},
+          "examples": [
+            "{\\\"is_active\\\": \\\"true\\\"}"
+          ]
+        },
+        "key": {
+          "description": "Key is the field on `entity` matched against the picked row's source id",
+          "type": "string",
+          "examples": [
+            "menu_item_id"
+          ]
+        },
+        "scope": {
+          "description": "Scope is the SERVER-ENFORCED row scope for reads of `entity` caused by this",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FilterSpec"
+          }
+        }
+      },
+      "required": [
+        "entity",
+        "key",
+        "field"
+      ],
+      "additionalProperties": false
+    },
     "PickerMap": {
       "description": "PickerMap is the write half of a picker: which row field receives what.\n",
       "type": "object",
       "properties": {
+        "lookup_field": {
+          "description": "LookupField receives `lookup.field` for the picked row (snapshot).",
+          "type": "string",
+          "examples": [
+            "unit_price_snapshot"
+          ]
+        },
         "max_quantity": {
           "description": "Upper bound per row (default 99).",
           "type": "integer",
@@ -7606,13 +7980,6 @@
             "note"
           ]
         },
-        "price_field": {
-          "description": "PriceField receives the source record's price (snapshot).",
-          "type": "string",
-          "examples": [
-            "unit_price_snapshot"
-          ]
-        },
         "quantity_field": {
           "description": "QuantityField accumulates the picked amount. When omitted, a picked row",
           "type": "string",
@@ -7628,7 +7995,7 @@
           ]
         },
         "source_name_field": {
-          "description": "SourceNameField / SourcePriceField override which *source* field the name",
+          "description": "SourceNameField overrides which *source* field the name snapshot reads from",
           "type": "string",
           "examples": [
             "title"
@@ -7662,6 +8029,31 @@
       },
       "required": [
         "approvers"
+      ],
+      "additionalProperties": false
+    },
+    "PowDifficulty": {
+      "description": "PowDifficulty is the proof-of-work difficulty range (leading zero bits of\nSHA-256). Max is capped at 32 in validation: past that the gate is an\noutage, not a filter.\n",
+      "type": "object",
+      "properties": {
+        "max": {
+          "description": "Leading zero bits when saturated (upper bound)",
+          "type": "integer",
+          "examples": [
+            "22"
+          ]
+        },
+        "min": {
+          "description": "Leading zero bits when idle (lower bound)",
+          "type": "integer",
+          "examples": [
+            "16"
+          ]
+        }
+      },
+      "required": [
+        "min",
+        "max"
       ],
       "additionalProperties": false
     },
@@ -8274,6 +8666,16 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]*$"
         },
+        "enforced": {
+          "description": "Who keeps reads inside the dimension: session (default), route, none (cross-cutting by design), external (public grant / create_scope).",
+          "type": "string",
+          "enum": [
+            "session",
+            "route",
+            "none",
+            "external"
+          ]
+        },
         "field": {
           "description": "Field on this entity carrying the dimension value",
           "type": "string"
@@ -8651,6 +9053,10 @@
         "chunk_size_mb": {
           "description": "ChunkSizeMB is the client hint for chunked-upload part size (todo",
           "type": "integer"
+        },
+        "download_cache_ttl": {
+          "description": "DownloadCacheTTL is how long a browser may reuse a downloaded file without",
+          "type": "string"
         },
         "max_count": {
           "type": "integer"
@@ -9539,6 +9945,11 @@
                 "db: pg-main"
               ]
             },
+            "intake": {
+              "$ref": "#/$defs/IntakeSpec",
+              "description": "Intake declares protection for this App's ANONYMOUS intake surface",
+              "nullable": true
+            },
             "logo": {
               "description": "Brand mark icon (lucide name) next to the title in the shell brand bar",
               "type": "string",
@@ -9873,6 +10284,13 @@
             },
             "characteristic": {
               "$ref": "#/$defs/Characteristic"
+            },
+            "create_scope": {
+              "description": "CreateScope pins a dimension field on CREATE from a record the payload",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CreateScopeSpec"
+              }
             },
             "deliver": {
               "type": "array",

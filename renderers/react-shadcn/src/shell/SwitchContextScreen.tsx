@@ -17,11 +17,11 @@
 import { useState } from "react"
 
 import { ContextPicker } from "@/shell/ContextPicker"
+import { switchSessionContext } from "@/lib/api/switchContext"
 import { useAppNavigate } from "@/lib/navigation"
 import {
   defaultContextChoice,
   readContextPreference,
-  writeContextPreference,
 } from "@/lib/session-context"
 import { useSessionStore } from "@/stores/session"
 import type { ContextChoice } from "@/types/manifest"
@@ -42,50 +42,21 @@ export function SwitchContextScreen({
   loginPath,
 }: SwitchContextScreenProps) {
   const navigate = useAppNavigate()
+  // The refresh token proves which session is being replaced, and it lives in
+  // the store rather than in the route: it is the only credential the switch
+  // needs, and the props already carry the workspace/App it belongs to.
   const refreshToken = useSessionStore((s) => s.refreshToken)
-  const setSession = useSessionStore((s) => s.setSession)
-  const clearPendingContext = useSessionStore((s) => s.clearPendingContext)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // One implementation for both callers (this screen and the user-menu
+  // switcher): the switch revokes the previous session, so the order of
+  // operations — and the reload that re-fetches the bundle — must not differ.
   const submit = async (assignment: string) => {
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(`/${workspace}/_ui/auth/switch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          refresh_token: refreshToken,
-          assignment,
-          app,
-        }),
-      })
-      if (!res.ok) {
-        // The chosen assignment was rejected too (revoked between the two
-        // calls) — the surface must keep asking, not fall back silently.
-        const body = (await res.json().catch(() => null)) as {
-          error?: { message?: string }
-        } | null
-        throw new Error(
-          body?.error?.message ?? `Could not switch context (${res.status})`,
-        )
-      }
-      const body = (await res.json()) as {
-        data: { access_token: string; refresh_token: string }
-      }
-      writeContextPreference(workspace, app, assignment)
-      clearPendingContext()
-      // setSession boots nothing by itself — reload so the surface re-runs
-      // boot() with the new token and the bundle is refetched under the new
-      // context's permissions (a role switch changes what is visible).
-      setSession(
-        workspace,
-        body.data.access_token,
-        body.data.refresh_token,
-        app,
-      )
-      window.location.reload()
+      await switchSessionContext({ workspace, app, refreshToken, assignment })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not switch context")
       setBusy(false)

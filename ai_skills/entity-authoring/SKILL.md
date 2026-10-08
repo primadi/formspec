@@ -108,20 +108,29 @@ Form): `options: [{value, label}]` menyatakan nilai + caption-nya, dan
       picker:
         entity: cafe-master.menu-item
         filter: { is_available: "true" }
+        lookup: # OPSIONAL — satu nilai per baris dari entity terkait
+          entity: cafe-master.menu-item-price
+          key: menu_item_id
+          field: price
         display:
           { name_field: name, image_field: photo, columns: 3, search: true }
         map:
           ref_field: menu_item_id # WAJIB
           name_field: name_snapshot # snapshot
-          price_field: unit_price_snapshot # snapshot
+          lookup_field: unit_price_snapshot # menerima lookup.field
           quantity_field: quantity
           max_quantity: 20 # WAJIB bila ada quantity_field
   ```
 
   Field di `map` harus ada di `child.fields`. Tanpa `quantity_field`, satu pilih
-  = satu baris (daftar/jurnal). Harga boleh dari entity lain via
-  `display.price_entity` + `price_match_field` + `price_field`. Form menaruhnya
-  dengan `render: { picker_panel: inline | aside }`.
+  = satu baris (daftar/jurnal). Nilai per baris dari entity lain dinyatakan
+  dengan `lookup` (`entity` + `key` + `field`); `map.lookup_field` menerimanya
+  dan **server yang mengisinya** (nilai turunan — kiriman klien diganti, dan
+  baris tanpa pasangan ditolak). Bila pembacaan itu terjadi di permukaan publik,
+  sertakan `lookup.scope` (bentuk `row_scope`, termasuk `from: route` + `via`
+  untuk nilai yang diturunkan dari record yang dirujuk request) — tanpa itu
+  grant anonim tidak punya pembatas apa pun. Form menaruhnya dengan
+  `render: { picker_panel: inline | aside }`.
 
 - **Nilai yang tidak diisi user → `default_from` + `widget: hidden`**, bukan
   field yang tampil terisi. Contoh: `{ field: branch_id, widget: hidden,

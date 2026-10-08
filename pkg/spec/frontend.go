@@ -545,6 +545,27 @@ type FilterSpec struct {
 	Attr string `yaml:"attr,omitempty" json:"attr,omitempty"`
 	// @schema {description: "Query parameter name for `from: route`. Defaults to the field name.", example: "token"}
 	Param string `yaml:"param,omitempty" json:"param,omitempty"`
+	// Via resolves the value through a RECORD the parameter names, instead of
+	// using the parameter's raw value (kafe 10.76).
+	//
+	// Without it, `from: route` means "the caller states the value". That is
+	// right when the parameter IS the credential (an unguessable guest token),
+	// but wrong when the value must be DERIVED: a menu price list is scoped by
+	// the branch of the table session the guest is sitting at, and a
+	// client-supplied `?branch_id=` is exactly the value that must not be
+	// trusted — it would let any guest read every branch's prices.
+	//
+	// With `via`, the parameter is a reference (id or natural key) to a record,
+	// and the scope value is read from that record's `via_field`. The caller
+	// therefore states WHICH session it is (already visible in the URL), never
+	// which branch it may see.
+	//
+	// Only meaningful with `from: route` — refused otherwise, because a session
+	// attribute and a literal are not references to anything.
+	// @schema {description: "Entity the `param` value references, as \"<module>.<entity>\" — the scope value is read from `via_field` of that record.", example: "cafe-order.table-session"}
+	Via string `yaml:"via,omitempty" json:"via,omitempty"`
+	// @schema {description: "Field on `via` holding the scope value (required with `via`).", example: "branch_id"}
+	ViaField string `yaml:"via_field,omitempty" json:"via_field,omitempty"`
 	// @schema {description: "For select filters: show the \"All\" (clear) option. Default true."}
 	ShowAll *bool `yaml:"show_all,omitempty" json:"show_all,omitempty"`
 	// @schema {description: "For select filters: caption of the \"All\" (clear) option. Default \"(ALL)\"."}

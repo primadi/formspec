@@ -55,7 +55,7 @@ konstruk yang membuat renderer mengirim request ke entity API yang memberi aksi:
 | Form `mode: view` / kosong                                            | `find`            | `find`                             |
 | `context: {source: entity}`                                           | `find` by id      | `find`                             |
 | field child `picker.entity`                                           | `list`            | `list`                             |
-| `picker.display.price_entity`                                         | `list`            | `list`                             |
+| `picker.lookup.entity`                                                | `list`            | `list`                             |
 | field `relation` yang ter-render (`RelationPicker`)                   | `list` + `find`   | `list`, `find`                     |
 | `registered_views: [{entity: X}]`                                     | derived CRUD      | `list`, `find`, `create`, `update` |
 

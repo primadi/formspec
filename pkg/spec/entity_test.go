@@ -104,10 +104,18 @@ func TestValidateEntitySpec_ScopeDimension(t *testing.T) {
 		e    *EntitySpec
 	}{
 		{"required dimension", base(func(e *EntitySpec) {
-			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true}
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true, Enforced: "external"}
 		})},
 		{"optional dimension", base(func(e *EntitySpec) {
-			e.Scope = &ScopeDecl{Dimension: "branch", Field: "note"}
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "note", Enforced: "none"}
+		})},
+		{"session-enforced with a matching row_scope", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true}
+			e.RowScope = []FilterSpec{{Field: "branch_id", From: "session"}}
+		})},
+		{"route-enforced with a matching row_scope", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true, Enforced: "route"}
+			e.RowScope = []FilterSpec{{Field: "branch_id", From: "route", Param: "token"}}
 		})},
 	}
 	for _, c := range ok {
@@ -121,19 +129,43 @@ func TestValidateEntitySpec_ScopeDimension(t *testing.T) {
 		e    *EntitySpec
 	}{
 		{"missing dimension", base(func(e *EntitySpec) {
-			e.Scope = &ScopeDecl{Field: "branch_id"}
+			e.Scope = &ScopeDecl{Field: "branch_id", Enforced: "external"}
 		})},
 		{"bad dimension name", base(func(e *EntitySpec) {
-			e.Scope = &ScopeDecl{Dimension: "Branch", Field: "branch_id"}
+			e.Scope = &ScopeDecl{Dimension: "Branch", Field: "branch_id", Enforced: "external"}
 		})},
 		{"missing field", base(func(e *EntitySpec) {
-			e.Scope = &ScopeDecl{Dimension: "branch"}
+			e.Scope = &ScopeDecl{Dimension: "branch", Enforced: "external"}
 		})},
 		{"unknown field", base(func(e *EntitySpec) {
-			e.Scope = &ScopeDecl{Dimension: "branch", Field: "outlet_id"}
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "outlet_id", Enforced: "external"}
 		})},
 		{"required disagrees with the field", base(func(e *EntitySpec) {
-			e.Scope = &ScopeDecl{Dimension: "branch", Field: "note", Required: true}
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "note", Required: true, Enforced: "none"}
+		})},
+		// The class this validation exists for: a declared dimension nobody
+		// keeps readers inside of. It used to pass silently.
+		{"declared dimension with no enforcement", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true}
+		})},
+		{"enforced session but the filter reads from route", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true}
+			e.RowScope = []FilterSpec{{Field: "branch_id", From: "route", Param: "token"}}
+		})},
+		{"enforced session but the filter is a literal", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true}
+			e.RowScope = []FilterSpec{{Field: "branch_id", Op: "eq", Value: "B1"}}
+		})},
+		{"row_scope on a different field does not count", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true}
+			e.RowScope = []FilterSpec{{Field: "note", From: "session"}}
+		})},
+		{"enforced none but a filter is declared", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true, Enforced: "none"}
+			e.RowScope = []FilterSpec{{Field: "branch_id", From: "session"}}
+		})},
+		{"unknown enforced value", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true, Enforced: "whoever"}
 		})},
 	}
 	for _, c := range bad {

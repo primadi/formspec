@@ -167,6 +167,7 @@ kebijakan aksesnya lewat blok `storage`:
     max_size_mb: 10
     max_count: 5 # hanya untuk field multi-file
     visibility: private # public | private | signed
+    download_cache_ttl: 5m # jendela segar unduhan (0s = no-cache)
     signed_url_ttl: 15m # TTL URL akses terbatas-waktu (visibility: signed)
     one_time: false # true = objek dihapus setelah link didownload
     ttl: 168h # objek dihapus bila tidak didownload dalam durasi ini
@@ -198,6 +199,18 @@ GONE`. Penegakan atomic di server (budget download), bukan konvensi klien.
   download/link. Limit efektif = min(limit global `FORMSPEC_DOWNLOAD_MAX_MB`,
   nilai per-field); pelanggaran → `413 FILE_TOO_LARGE` **sebelum** objek
   dimuat (cek ukuran via stat, todo 7.17.7).
+- **Caching unduhan** — respons unduhan membawa `ETag` yang diturunkan dari
+  **object key** (bukan hash body), sehingga `If-None-Match` dijawab `304`
+  tanpa membaca objek; `Content-Length` selalu diset. `Cache-Control`
+  `private, max-age=<download_cache_ttl>` untuk `public`/`private` — `private`
+  karena respons bergantung permission pemanggil, dan jendela pendek karena URL
+  unduhan stabil sementara baris bisa di-repoint ke key baru (unggah ulang),
+  sehingga `immutable` dilarang di sini. Untuk `visibility: signed` dan route
+  link-consume, respons `no-store` tanpa validator (kredensial sekali-pakai).
+- `download_cache_ttl` — jendela segar (freshness) unduhan di browser. Durasi
+  Go (`60s`, `10m`). Per-field menang atas global `FORMSPEC_DOWNLOAD_CACHE_TTL`
+  (default 5m). **`0s` berarti `no-cache`** — selalu revalidasi (ETag tetap
+  dikirim, jadi biayanya 304, bukan unduh ulang).
 - `cdn` — passthrough CDN untuk objek `public`; detail delivery adalah urusan
   primitif storage ([`../platform/06-datastore.md`](../platform/06-datastore.md) §2).
 - `transform` — spesifikasi turunan image (resize/thumbnail). Turunan

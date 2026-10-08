@@ -377,13 +377,17 @@ func (b *grantBuilder) visitField(module string, f *spec.Field) {
 		b.addRef(module, f.Relation.Resource, "find", nil)
 		return
 	}
-	// Child field with a picker → PickerPanel fetches the source list and,
-	// when a price entity is declared, joins it client-side with its own list.
+	// Child field with a picker → PickerPanel fetches the source list and, when
+	// the picker declares a `lookup`, the related entity's list as well.
 	if f.Type == "child" && f.Child != nil && f.Child.Picker != nil {
 		p := f.Child.Picker
 		b.addRef(module, p.Entity, "list", nil)
-		if p.Display.PriceEntity != "" {
-			b.addRef(module, p.Display.PriceEntity, "list", nil)
+		if p.Lookup != nil && p.Lookup.Entity != "" {
+			// The lookup is a READ of another entity, and on a public surface that
+			// read is anonymous. When the picker declares a `scope` for it, the
+			// derived grant carries it, so the anonymous fetch is filtered by the
+			// server instead of by a client-computed filter the caller can widen.
+			b.addRef(module, p.Lookup.Entity, "list", p.Lookup.Scope)
 		}
 	}
 }

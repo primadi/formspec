@@ -7,6 +7,7 @@
 //     binary holding the port, error out for foreign processes (EnsurePort)
 //   - Spec hot-reload watcher — fsnotify on the spec directory, debounced
 //     App.ReloadSpec() (WatchSpec)
+//   - SPA source discovery for repository checkouts (FindWebDist)
 //
 // Extracted from cmd/formspec/dev.go so native binaries that boot via
 // App.ListenAndServe() get the same DX without duplicating logic.
@@ -27,6 +28,51 @@ import (
 	"github.com/fsnotify/fsnotify"
 	formspec "github.com/primadi/formspec/resource"
 )
+
+// ─── SPA source discovery ───
+
+// FindDistUpwards walks up from CWD looking for a directory named by segments
+// (e.g. "renderers/react-shadcn/dist") and returns the absolute path, or ""
+// when there is none.
+//
+// A directory only counts when it holds index.html. Both producers are
+// non-atomic (`make build-spa` writes into place, `make build-registry` does
+// `rm -rf` then `cp -r`), so an interrupted build can leave a dist/ with assets
+// but no shell. Serving that yields a blank page for a reason no one can see
+// from the browser; rejecting it lets the caller fall through to the next
+// candidate and say so.
+func FindDistUpwards(segments ...string) string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(append([]string{dir}, segments...)...)
+		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			if shell, err := os.Stat(filepath.Join(candidate, "index.html")); err == nil && !shell.IsDir() {
+				return candidate
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break // reached filesystem root
+		}
+		dir = parent
+	}
+	return ""
+}
+
+// FindWebDist locates the repository's renderer build (renderers/react-shadcn/dist).
+//
+// Every command that can serve the SPA needs this: the frontend lives in the
+// repository, not in a user project, so a dev server started from anywhere
+// inside the checkout must find the built bundle instead of falling back to an
+// embedded snapshot. It was private to `formspec dev` (cmd/formspec/dev.go)
+// until formspec-registry needed the same thing — a copy would have drifted on
+// the one detail that matters (walking up, not just checking CWD).
+func FindWebDist() string {
+	return FindDistUpwards("renderers", "react-shadcn", "dist")
+}
 
 // ─── PID File ───
 

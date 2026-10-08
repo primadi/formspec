@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // `allowed_types` grammar (gap #4b).
@@ -62,6 +63,28 @@ func ValidateStorageSpec(fieldName string, s *StorageSpec) error {
 	}
 	if s.MaxSizeMB < 0 {
 		return fmt.Errorf("field %q: storage.max_size_mb must be positive", fieldName)
+	}
+	// Durations are validated, not merely parsed later: an unparsable value used
+	// to be ignored at runtime, so a typo ("15min" instead of "15m") silently
+	// fell back to the default and the manifest appeared to work.
+	for _, d := range []struct {
+		key, value string
+	}{
+		{"signed_url_ttl", s.SignedURLTTL},
+		{"download_cache_ttl", s.DownloadCacheTTL},
+		{"ttl", s.TTL},
+	} {
+		if strings.TrimSpace(d.value) == "" {
+			continue
+		}
+		parsed, err := time.ParseDuration(d.value)
+		if err != nil {
+			return fmt.Errorf("field %q: storage.%s (%s) is not a Go duration — use a unit suffix, e.g. `60s`, `15m`, `24h`",
+				fieldName, d.key, d.value)
+		}
+		if parsed < 0 {
+			return fmt.Errorf("field %q: storage.%s (%s) must not be negative", fieldName, d.key, d.value)
+		}
 	}
 	return nil
 }

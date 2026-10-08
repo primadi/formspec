@@ -379,13 +379,13 @@ menandai entry-nya `completed` — jadi tidak ada satu pun data yang menunjukkan
 konsekuensinya tidak pernah terjadi. Karena itu status tiap kanal dinyatakan di
 sini, dan **ditegakkan**:
 
-| Kanal                                                              | Status       | Catatan                                                                                  |
-| ------------------------------------------------------------------ | ------------ | ---------------------------------------------------------------------------------------- |
-| `audit_log` · `websocket` · `pubsub` · `reliable_event`            | **terkirim** | —                                                                                        |
-| `queue` (pada `events[].deliver[]`)                                | **terkirim** | berjalan di **worker outbox** — job = Service action (di bawah)                          |
-| `notification`                                                     | **terkirim** | baris in-app ditulis framework (module `formspec/notify`); `handler:` opsional untuk email/WA/push |
-| `webhook` (keluar)                                                 | **terkirim** | **UNSIGNED**: tanpa HMAC, tanpa registry subscriber; endpoint dideklarasikan di manifest |
-| blok `delivery:` Tier-2 pada `kind: Subscription`                  | **inert**    | field-nya tidak dibaca runtime sama sekali — termasuk `retry`/`dead_letter` yang orang wajar harapkan ikut berlaku |
+| Kanal                                                   | Status       | Catatan                                                                                                            |
+| ------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `audit_log` · `websocket` · `pubsub` · `reliable_event` | **terkirim** | —                                                                                                                  |
+| `queue` (pada `events[].deliver[]`)                     | **terkirim** | berjalan di **worker outbox** — job = Service action (di bawah)                                                    |
+| `notification`                                          | **terkirim** | baris in-app ditulis framework (module `formspec/notify`); `handler:` opsional untuk email/WA/push                 |
+| `webhook` (keluar)                                      | **terkirim** | **UNSIGNED**: tanpa HMAC, tanpa registry subscriber; endpoint dideklarasikan di manifest                           |
+| blok `delivery:` Tier-2 pada `kind: Subscription`       | **inert**    | field-nya tidak dibaca runtime sama sekali — termasuk `retry`/`dead_letter` yang orang wajar harapkan ikut berlaku |
 
 Mekanisme pelaporan tetap ada untuk kanal berikutnya yang ditambahkan tanpa
 cabang delivery: `pkg/spec/delivery_channels.go` memuat daftar
@@ -400,11 +400,11 @@ menulis baris `formspec.core.notification` untuk penerima yang disebut
 deliver:
   - channel: notification
     notification:
-      recipient: "customer_id"          # lintasan payload → recipient_id
+      recipient: "customer_id" # lintasan payload → recipient_id
       title: "Pesanan {number} dibayar" # template `{path}` atas payload
       body: "Total {total}"
-      level: info                       # info | warning | critical
-    handler: "notify-jobs.send-email"   # OPSIONAL: Service action untuk kanal luar
+      level: info # info | warning | critical
+    handler: "notify-jobs.send-email" # OPSIONAL: Service action untuk kanal luar
 ```
 
 `recipient` **wajib**: `recipient_id` inilah yang dicocokkan `row_scope` entity
@@ -420,7 +420,7 @@ konsekuensinya berada:
 deliver:
   - channel: webhook
     webhook:
-      url: "https://example.com/hooks/order-paid"   # ATAU url_from di bawah
+      url: "https://example.com/hooks/order-paid" # ATAU url_from di bawah
       # url_from: { config: billing.webhook_url }   # endpoint milik deployment
       headers: { X-Order: "{number}" }
 ```
@@ -1205,6 +1205,87 @@ spec:
 `ip` = per alamat IP, `global` = satu kuota lintas semua pemanggil). Rate limit
 di-override per-action **menimpa** default resource untuk action itu saja.
 Pemanggil yang melampaui kuota ditolak `429` sebelum handler berjalan.
+
+### 17.1 Intake Challenge (Proof-of-Work) untuk Permukaan Anonim
+
+`rate_limit` saja tidak cukup untuk permukaan yang terbuka bagi pengunjung
+anonim (mis. pesanan mandiri dari QR): `scope: ip` bukan identitas — ia mudah
+diganti, dan seluruh pengunjung di balik satu NAT berbagi kuota yang sama
+sehingga saling memblokir. `intake.challenge` menambahkan biaya kedua yang
+**tidak dibagi**: pengunjung harus memecahkan puzzle sebelum action yang
+memintanya berjalan.
+
+```yaml
+# kind: App — policy milik App
+spec:
+  access: public
+  intake:
+    challenge:
+      provider: pow # satu-satunya nilai
+      mode: escalate # escalate (default) | always
+      activate_at: 0.7 # fraksi budget `global` yang menyalakan gate
+      global: { max: 300, per: 1m } # sinyal tekanan, diukur se-aksi
+      difficulty: { min: 16, max: 22 } # leading zero bit sha256
+      ttl: 90s
+      bind: [ip] # atribut yang ikut ditandatangani (subset: ip)
+```
+
+```yaml
+# kind: Entity — opt-in per action
+spec:
+  actions:
+    - { name: create, challenge: true }
+```
+
+| Field                | Arti                                                                           |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `provider`           | Mekanisme challenge — `pow`                                                    |
+| `mode`               | `escalate` (menyala saat tekanan tinggi) \| `always` (setiap request anonim)   |
+| `activate_at`        | Fraksi `global` (0..1) yang menyalakan gate; absen = `0.7`                     |
+| `global`             | Sinyal tekanan: kuota SE-ACTION lintas semua pemanggil anonim                  |
+| `difficulty.min/max` | Rentang leading zero bit SHA-256; server memilih di antaranya sesuai tekanan   |
+| `ttl`                | Masa berlaku challenge (Go duration) — membatasi jendela replay                |
+| `bind`               | Atribut tambahan yang diikat ke tanda tangan (mis. `ip`); empty = hanya action |
+
+**Deklarasi dua tingkat, tanpa parameter yang bisa menyimpang.** App memiliki
+policy; action hanya menulis **boolean** `challenge`. Action yang opt-in tanpa
+policy App adalah **error validasi** (gate yang tak pernah menyala tidak boleh
+terlihat seperti gate yang bekerja).
+
+**Cakupan.** Gate hanya berlaku untuk pemanggil **anonim**. Pemanggil
+terautentikasi, klien ber-API-key, dan action `Service` ber-`public: true`
+(dipakai klien non-browser) tidak pernah diminta memecahkan puzzle. `_meta/*`,
+aset, dan `_ui/auth/*` juga dikecualikan — menggating-nya memutus render SPA
+anonim.
+
+**Kontrak wire.** Permintaan yang harus di-gate ditolak `403` dengan kode
+`CHALLENGE_REQUIRED`, dan challenge dibawa **di dalam error envelope**:
+
+```json
+{
+  "error": {
+    "code": "CHALLENGE_REQUIRED",
+    "message": "…",
+    "challenge": {
+      "token": "<base64url(payload)>.<base64url(hmac-sha256)>",
+      "difficulty": 18,
+      "alg": "sha256",
+      "ttl_seconds": 90
+    }
+  }
+}
+```
+
+Klien mencari `solution` sehingga `sha256(token + ":" + solution)` memiliki
+sekurang-kurangnya `difficulty` leading zero bit, lalu mengirim ulang permintaan
+yang sama dengan header `X-Forma-Intake: <token>:<solution>`. Verifikasi server
+bersifat stateless (HMAC + TTL) dan memeriksa tanda tangan, kedaluwarsa, binding,
+lalu proof-of-work.
+
+**Batasan yang dinyatakan, bukan disembunyikan.** Ini bukan anti-DDoS: serangan
+volumetrik tidak menjalankan skrip dan harus diserap di edge. Challenge bersifat
+stateless, sehingga satu solusi tetap sah sampai `ttl` habis — jendela replay
+diperkecil (TTL pendek + binding + rate limit di bawahnya), tidak ditutup.
 
 ## 18. `ctx.secrets`
 

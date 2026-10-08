@@ -138,6 +138,37 @@ func TestPublicGrantScope_KafeQR_GuestToken(t *testing.T) {
 	}
 }
 
+// TestPublicGrantScope_KafeQR_PriceBranchFromTheSession pins kafe 10.76: the
+// price list's branch is derived from the guest's TABLE SESSION, not taken from
+// the request.
+//
+// The declaration lives on the picker (`lookup.scope`) because the picker
+// is what causes the fetch, and the derived grant inherits it — so the
+// declaration and the enforcement cannot come from two different places. The
+// scope names a REFERENCE (`session_id`) and the field to read from that record
+// (`table-session.branch_id`), which is what keeps a client-supplied
+// `?branch_id=` from widening the view.
+//
+// Calibration: removing `lookup.scope` from
+// examples/kafe/spec/modules/cafe-order/transaction/order/entity.yaml makes this
+// test fail — and, with it, re-opens the leak the e2e test
+// TestKafe_PriceListBranchComesFromTheTableSession closes.
+func TestPublicGrantScope_KafeQR_PriceBranchFromTheSession(t *testing.T) {
+	b := kafePublicRouter(t)
+
+	scope := b.publicScope("cafe-master", "menu-item-price")
+	if len(scope) != 1 {
+		t.Fatalf("publicScope(menu-item-price) = %#v, want one scope (without it an anonymous guest may list every branch's prices)", scope)
+	}
+	got := scope[0]
+	if got.Field != "branch_id" || got.From != "route" || got.Param != "session_id" {
+		t.Fatalf("price scope = %#v, want {field: branch_id, from: route, param: session_id}", got)
+	}
+	if got.Via != "cafe-order.table-session" || got.ViaField != "branch_id" {
+		t.Fatalf("price scope = %#v, want the value DERIVED through cafe-order.table-session.branch_id (a raw parameter would be a client-supplied branch)", got)
+	}
+}
+
 // TestPublicGrant_PrivateAppGrantsNothing keeps the secure-by-default rule: a
 // private App exposes nothing anonymously, whatever its views look like.
 func TestPublicGrant_PrivateAppGrantsNothing(t *testing.T) {

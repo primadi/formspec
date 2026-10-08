@@ -33,9 +33,19 @@ build-sidecar:
 build-operator:
 	go build -o bin/formspec-operator ./cmd/formspec-operator
 
+# Jalur SPA hasil build + langkah brotli. Dijalankan SEKALI, setelah `npm run
+# build` dan SEBELUM siapa pun meng-copy dist/ (build-formspec, build-registry,
+# release). Urutannya load-bearing: kalau kompresi terjadi setelah salah satu
+# copy, build itu kehilangan .br tanpa error — hanya kehilangan 7–16% byte.
+# Predikat "layak dikompres" hidup di kode Go yang sama yang menyajikan aset
+# (internal/api), bukan salinan shell/Node yang bisa drift.
+SPA_DIR := renderers/react-shadcn/dist
+SPA_COMPRESS := go run ./cmd/formspec spa compress --dir $(SPA_DIR)
+
 # Build the frontend SPA. Requires npm dependencies installed (make web-deps).
 build-spa: web-deps
 	cd renderers/react-shadcn && npm run build
+	$(SPA_COMPRESS)
 
 # formspec-resource is a Go library (import "github.com/formspec/formspec"), not a
 # binary — see docs/runtimes/02-formspec-resource.md. examples/reference-app
@@ -328,6 +338,7 @@ web-typecheck:
 
 web-build: web-typecheck
 	cd renderers/react-shadcn && npm run build
+	$(SPA_COMPRESS)
 
 # Browser end-to-end untuk alur sesi meja kafe (QR → bayar → occupied → served
 # → release). Harness ini boot SENDIRI: backend Go + Vite dijalankan oleh

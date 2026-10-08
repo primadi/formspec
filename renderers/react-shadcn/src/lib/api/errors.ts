@@ -47,6 +47,7 @@ export interface ApiErrorEnvelope {
     message?: string
     details?: ErrorDetailItem[]
     choices?: ErrorDetail["choices"]
+    challenge?: ErrorDetail["challenge"]
   }
 }
 
@@ -87,6 +88,7 @@ export function buildFormaApiError(
     err?.message ?? statusText,
     err?.details,
     err?.choices,
+    err?.challenge,
   )
 }
 

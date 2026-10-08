@@ -33,7 +33,13 @@ formspec dev --spec ./my-app/spec
 ```
 
 - Backend API di `:8080`
-- SPA tersedia di `http://localhost:8080/default/_admin`
+- SPA tersedia di `http://localhost:8080/{workspace}/` — yaitu `root_url` App
+  yang ter-resolve (`/default/` bila workspace default dan App memakai
+  `root_url: /`). URL dicetak saat boot; `/` sendiri **bukan** route (semua
+  permukaan di-prefix slug workspace, D50).
+- `/default/_admin` hanya membawa rute framework (`setup`, `change-password`,
+  `oauth/callback`) — permukaan panel entity derived sudah dipensiunkan
+  (plan `app-scoped-login.md` D4), jadi rute itu bukan "admin panel".
 - Tidak perlu npm, Vite, atau build frontend
 
 ### Persona B — Vite HMR
@@ -156,6 +162,14 @@ formspec dev --listen local_http --app-endpoint local_http --runtime php
 2. **`//go:embed`** — SPA embedded di binary (release build)
 3. **Auto-detect** — cari `renderers/react-shadcn/dist/index.html`, `./dist/index.html`, `./index.html`
 4. **Tidak ditemukan** — API-only, warning "SPA not found"
+
+Aset disajikan dengan caching HTTP dan kompresi gzip: chunk ber-hash
+(`assets/*-<hash8>.js`) dapat `Cache-Control: immutable` setahun, shell
+`index.html` selalu direvalidate (ETag), dan gzip hanya dikenakan pada berkas
+≥ 1 KiB yang kompresibel dan benar-benar menyusut. Kontrak lengkapnya di
+[Engine API Layer §2.2](../runtimes/05-engine-api-layer.md). Setelah `npm run
+build`, refresh memuat bundle baru tanpa perlu clear cache — nama chunk berganti,
+dan `index.html` direvalidasi.
 
 ---
 

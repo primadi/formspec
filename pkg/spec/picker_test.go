@@ -31,13 +31,18 @@ func pickerEntity() *EntitySpec {
 					{Name: "note", Type: FieldString},
 				},
 				Picker: &PickerDecl{
-					Entity:  "cafe-master.menu-item",
-					Filter:  map[string]string{"is_available": "true"},
+					Entity: "cafe-master.menu-item",
+					Filter: map[string]string{"is_available": "true"},
+					Lookup: &PickerLookup{
+						Entity: "cafe-master.menu-item-price",
+						Key:    "menu_item_id",
+						Field:  "price",
+					},
 					Display: PickerDisplay{NameField: "name", Columns: 3, Search: true},
 					Map: PickerMap{
 						RefField:      "menu_item_id",
 						NameField:     "name_snapshot",
-						PriceField:    "unit_price_snapshot",
+						LookupField:   "unit_price_snapshot",
 						QuantityField: "quantity",
 						NoteField:     "note",
 						MaxQuantity:   20,
@@ -80,7 +85,7 @@ func TestValidateEntitySpec_PickerRequired(t *testing.T) {
 func TestValidateEntitySpec_PickerMapTargetsChildFields(t *testing.T) {
 	cases := []struct{ name, want string }{
 		{"map.name_field", "map.name_field"},
-		{"map.price_field", "map.price_field"},
+		{"map.lookup_field", "map.lookup_field"},
 		{"map.quantity_field", "map.quantity_field"},
 		{"map.note_field", "map.note_field"},
 	}
@@ -93,8 +98,8 @@ func TestValidateEntitySpec_PickerMapTargetsChildFields(t *testing.T) {
 			switch tc.name {
 			case "map.name_field":
 				m.NameField = "tidak_ada"
-			case "map.price_field":
-				m.PriceField = "tidak_ada"
+			case "map.lookup_field":
+				m.LookupField = "tidak_ada"
 			case "map.quantity_field":
 				m.QuantityField = "tidak_ada"
 			case "map.note_field":
@@ -131,31 +136,92 @@ func TestValidateEntitySpec_PickerQuantityNeedsBound(t *testing.T) {
 	}
 }
 
-// TestValidateEntitySpec_PickerPriceEntityContract — a price join is declared,
-// never guessed.
-func TestValidateEntitySpec_PickerPriceEntityContract(t *testing.T) {
+// TestValidateEntitySpec_PickerLookupContract — a value read from a related
+// entity is DECLARED, never guessed: the entity, the key that matches a picked
+// row, and the field read out of it are all required, because a half-declared
+// lookup renders tiles with no value and refuses every submit.
+func TestValidateEntitySpec_PickerLookupContract(t *testing.T) {
+	withLookup := func(mutate func(*PickerLookup)) *EntitySpec {
+		e := pickerEntity()
+		p := e.Fields[2].Child.Picker
+		p.Lookup = &PickerLookup{
+			Entity: "cafe-master.menu-item-price",
+			Key:    "menu_item_id",
+			Field:  "price",
+		}
+		p.Map.LookupField = "unit_price_snapshot"
+		if mutate != nil {
+			mutate(p.Lookup)
+		}
+		return e
+	}
+
+	if err := ValidateEntitySpec(withLookup(nil)); err != nil {
+		t.Fatalf("a declared lookup must validate, got: %v", err)
+	}
+
+	// The lookup is optional: a picker that only chooses rows needs none, and
+	// then there is no receiving field either.
+	bare := pickerEntity()
+	bare.Fields[2].Child.Picker.Lookup = nil
+	bare.Fields[2].Child.Picker.Map.LookupField = ""
+	if err := ValidateEntitySpec(bare); err != nil {
+		t.Fatalf("a picker without a lookup must validate, got: %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*PickerLookup)
+		want   string
+	}{
+		{"no entity", func(l *PickerLookup) { l.Entity = "" }, "lookup.entity is required"},
+		{"no key", func(l *PickerLookup) { l.Key = "" }, "lookup.key is required"},
+		{"no field", func(l *PickerLookup) { l.Field = "" }, "lookup.field is required"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateEntitySpec(withLookup(tc.mutate))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want %q, got: %v", tc.want, err)
+			}
+		})
+	}
+}
+
+// TestValidateEntitySpec_PickerLookupFieldNeedsLookup — a receiving field with
+// nothing to fill it can never work, and (because the server resolves it) the
+// submit would be refused with no clue why.
+func TestValidateEntitySpec_PickerLookupFieldNeedsLookup(t *testing.T) {
 	e := pickerEntity()
-	e.Fields[2].Child.Picker.Display.PriceEntity = "cafe-master.menu-item-price"
-	e.Fields[2].Child.Picker.Display.PriceMatchField = "menu_item_id"
-	e.Fields[2].Child.Picker.Display.PriceField = "price"
-	if err := ValidateEntitySpec(e); err != nil {
-		t.Fatalf("a declared price join must validate, got: %v", err)
-	}
-
-	e = pickerEntity()
-	e.Fields[2].Child.Picker.Display.PriceEntity = "cafe-master.menu-item-price"
-	e.Fields[2].Child.Picker.Display.PriceField = "price"
+	e.Fields[2].Child.Picker.Lookup = nil
+	e.Fields[2].Child.Picker.Map.LookupField = "unit_price_snapshot"
 	err := ValidateEntitySpec(e)
-	if err == nil || !strings.Contains(err.Error(), "price_match_field is required") {
-		t.Fatalf("want price_match_field required, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "declared without picker.lookup") {
+		t.Fatalf("want the missing lookup named, got: %v", err)
+	}
+}
+
+// TestValidateEntitySpec_PickerLookupScopeShape — the lookup's `scope` is a
+// SERVER-enforced narrowing, so it is held to the same shape rule as any other
+// row scope (including the `via` pairing).
+func TestValidateEntitySpec_PickerLookupScopeShape(t *testing.T) {
+	e := pickerEntity()
+	p := e.Fields[2].Child.Picker
+	p.Lookup = &PickerLookup{Entity: "a.b", Key: "k", Field: "f"}
+	p.Map.LookupField = "unit_price_snapshot"
+	p.Lookup.Scope = []FilterSpec{{Field: "branch_id", From: "route", Param: "session_id", Via: "c.d", ViaField: "branch_id"}}
+	if err := ValidateEntitySpec(e); err != nil {
+		t.Fatalf("a route scope with via must validate, got: %v", err)
 	}
 
 	e = pickerEntity()
-	e.Fields[2].Child.Picker.Display.PriceEntity = "cafe-master.menu-item-price"
-	e.Fields[2].Child.Picker.Display.PriceMatchField = "menu_item_id"
-	err = ValidateEntitySpec(e)
-	if err == nil || !strings.Contains(err.Error(), "price_field is required") {
-		t.Fatalf("want price_field required, got: %v", err)
+	p = e.Fields[2].Child.Picker
+	p.Lookup = &PickerLookup{Entity: "a.b", Key: "k", Field: "f"}
+	p.Map.LookupField = "unit_price_snapshot"
+	// via without via_field: the value would come from nowhere.
+	p.Lookup.Scope = []FilterSpec{{Field: "branch_id", From: "route", Via: "c.d"}}
+	if err := ValidateEntitySpec(e); err == nil {
+		t.Fatal("via without via_field must be refused")
 	}
 }
 

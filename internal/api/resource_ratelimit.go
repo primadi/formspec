@@ -90,17 +90,7 @@ func (rl *ResourceRateLimiter) Allow(rs *spec.RateLimitSpec, key string) bool {
 	defer rl.mu.Unlock()
 
 	now := time.Now()
-	b, ok := rl.buckets[key]
-	if !ok {
-		b = &resourceBucket{
-			tokens:      float64(rs.Max),
-			last:        now,
-			windowStart: now,
-			windowCount: 0,
-			prevCount:   0,
-		}
-		rl.buckets[key] = b
-	}
+	b := rl.ensureBucket(key, rs, now)
 
 	switch rs.Strategy {
 	case "sliding_window":
@@ -110,14 +100,75 @@ func (rl *ResourceRateLimiter) Allow(rs *spec.RateLimitSpec, key string) bool {
 	}
 }
 
-func (rl *ResourceRateLimiter) allowTokenBucket(b *resourceBucket, rs *spec.RateLimitSpec, perSec float64, now time.Time) bool {
+// Observe records one hit for key and returns the current utilization — the
+// fraction of the budget in use (0 empty, 1 exhausted). It never denies.
+//
+// It exists for the intake gate's pressure signal (plan
+// docs_internal/plan/intake-challenge-pow.md): the signal must count every
+// anonymous request, including those the gate is not yet challenging, because a
+// signal that only counted while the gate was already on could never turn it on.
+// The key is dedicated to that signal, so consuming a token here is the point.
+func (rl *ResourceRateLimiter) Observe(rs *spec.RateLimitSpec, key string) float64 {
+	if rs == nil || rs.Max <= 0 {
+		return 0
+	}
+	perSec := parsePer(rs.Per)
+	if perSec <= 0 {
+		return 0
+	}
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	b := rl.ensureBucket(key, rs, now)
+
+	var u float64
+	if rs.Strategy == "sliding_window" {
+		u = rl.observeSlidingWindow(b, rs, perSec, now)
+	} else {
+		u = rl.observeTokenBucket(b, rs, perSec, now)
+	}
+	if u < 0 {
+		u = 0
+	}
+	if u > 1 {
+		u = 1
+	}
+	return u
+}
+
+// ensureBucket returns the bucket for key, creating a full one when absent.
+// Callers hold rl.mu.
+func (rl *ResourceRateLimiter) ensureBucket(key string, rs *spec.RateLimitSpec, now time.Time) *resourceBucket {
+	b, ok := rl.buckets[key]
+	if !ok {
+		b = &resourceBucket{
+			tokens:      float64(rs.Max),
+			last:        now,
+			windowStart: now,
+		}
+		rl.buckets[key] = b
+	}
+	return b
+}
+
+// refillBucket adds the tokens accrued since the last call, capped at Max.
+// Callers hold rl.mu.
+func (rl *ResourceRateLimiter) refillBucket(b *resourceBucket, rs *spec.RateLimitSpec, perSec float64, now time.Time) {
 	elapsed := now.Sub(b.last).Seconds()
-	refillRate := float64(rs.Max) / perSec
-	b.tokens += elapsed * refillRate
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	b.tokens += elapsed * (float64(rs.Max) / perSec)
 	if b.tokens > float64(rs.Max) {
 		b.tokens = float64(rs.Max)
 	}
 	b.last = now
+}
+
+func (rl *ResourceRateLimiter) allowTokenBucket(b *resourceBucket, rs *spec.RateLimitSpec, perSec float64, now time.Time) bool {
+	rl.refillBucket(b, rs, perSec, now)
 	if b.tokens >= 1 {
 		b.tokens--
 		return true
@@ -125,22 +176,45 @@ func (rl *ResourceRateLimiter) allowTokenBucket(b *resourceBucket, rs *spec.Rate
 	return false
 }
 
-func (rl *ResourceRateLimiter) allowSlidingWindow(b *resourceBucket, rs *spec.RateLimitSpec, perSec float64, now time.Time) bool {
+// observeTokenBucket refills, consumes the hit, and reports utilization.
+func (rl *ResourceRateLimiter) observeTokenBucket(b *resourceBucket, rs *spec.RateLimitSpec, perSec float64, now time.Time) float64 {
+	rl.refillBucket(b, rs, perSec, now)
+	if b.tokens >= 1 {
+		b.tokens--
+	} else {
+		b.tokens = 0
+	}
+	return 1 - b.tokens/float64(rs.Max)
+}
+
+// slidingWindowEstimate advances the window(s) and returns the weighted
+// estimate (previous window scaled by the elapsed fraction + current window).
+// Callers hold rl.mu.
+func slidingWindowEstimate(b *resourceBucket, perSec float64, now time.Time) (float64, time.Duration) {
 	window := time.Duration(perSec * float64(time.Second))
-	// Advance windows.
 	for !now.Before(b.windowStart.Add(window)) {
 		b.prevCount = b.windowCount
 		b.windowCount = 0
 		b.windowStart = b.windowStart.Add(window)
 	}
-	// Weighted estimate: previous window scaled by elapsed fraction + current.
 	elapsedFrac := now.Sub(b.windowStart).Seconds() / window.Seconds()
-	estimate := float64(b.prevCount)*(1-elapsedFrac) + float64(b.windowCount)
+	return float64(b.prevCount)*(1-elapsedFrac) + float64(b.windowCount), window
+}
+
+func (rl *ResourceRateLimiter) allowSlidingWindow(b *resourceBucket, rs *spec.RateLimitSpec, perSec float64, now time.Time) bool {
+	estimate, _ := slidingWindowEstimate(b, perSec, now)
 	if estimate >= float64(rs.Max) {
 		return false
 	}
 	b.windowCount++
 	return true
+}
+
+// observeSlidingWindow counts the hit and reports utilization.
+func (rl *ResourceRateLimiter) observeSlidingWindow(b *resourceBucket, rs *spec.RateLimitSpec, perSec float64, now time.Time) float64 {
+	estimate, _ := slidingWindowEstimate(b, perSec, now)
+	b.windowCount++
+	return (estimate + 1) / float64(rs.Max)
 }
 
 // rateLimitKey derives the limiter key for a request under a scope.

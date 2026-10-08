@@ -17,12 +17,17 @@ import (
 //   - every session-scoped entity must have a resolvable source, or every read
 //     fails closed (the 1.8 gate refuses that shape, and this test keeps the
 //     kafe tree itself honest);
-//   - the entities read by ANONYMOUS surfaces must not be scoped on the session
-//     at all — an anonymous caller has no branch, and those reads are constrained
-//     by the public grant's own scope instead.
+//   - an entity that is ALSO read by an anonymous surface needs BOTH halves: the
+//     session scope for staff, and a scope the public grant inherits for guests.
 //
-// The runtime half (kasir B1 vs B2, `read_all` owner, fail-closed probe) is
-// recorded in the ledger with the exact requests and results.
+// The second rule replaced an older "never both" rule, which treated the two
+// surfaces as mutually exclusive. That reading is what let `menu-item-price` be
+// listed anonymously with NO server-side scope at all: the entity was scoped
+// nowhere, because scoping it on the session looked like a rule violation and
+// the guest's branch lived in a client-side filter (kafe 10.76). The
+// runtime supports having both — a session `row_scope` is skipped for an
+// anonymous caller carrying a public grant scope, since there is no session
+// attribute to read — so the tree is expected to declare both.
 func TestKafeRowScopeSpec_ScopeAndSource(t *testing.T) {
 	const specPath = "../../examples/kafe/spec"
 	res, err := manifest.NewLoader(specPath).LoadAll()
@@ -30,12 +35,14 @@ func TestKafeRowScopeSpec_ScopeAndSource(t *testing.T) {
 		t.Fatalf("load spec tree: %v", err)
 	}
 
-	// Entities that are legitimately scoped on the session: read only through
-	// authenticated surfaces (POS, KDS, admin/report).
+	// Entities that are legitimately scoped on the session: read through
+	// authenticated surfaces (POS, KDS, admin/report) — and, for a price list,
+	// also read anonymously with a scope the public grant carries.
 	wantScoped := map[string]bool{
 		"order": true, "payment": true, "shift": true, "cash-movement": true,
 		"stock-level": true, "stock-movement": true, "purchase-order": true,
 		"stock-opname": true, "waste-entry": true, "menu-cost": true,
+		"menu-item-price": true,
 	}
 
 	scoped := map[string]bool{}
@@ -85,13 +92,54 @@ func TestKafeRowScopeSpec_ScopeAndSource(t *testing.T) {
 		}
 	}
 
-	// Anonymous-read entities are constrained by their public grant instead.
-	if scoped["menu-item-price"] {
-		t.Error("menu-item-price is listed anonymously by the QR catalog picker: scope it in the public grant, not on the session")
+	// The anonymous half. `menu-item-price` is read by the guest catalog, so its
+	// session scope is not enough on its own: the picker that fetches it must
+	// declare the scope the guest read is filtered by, or the anonymous list is
+	// unscoped (kafe 10.76). Asserted on the DECLARATION here; the derived grant
+	// it feeds is asserted in internal/api (TestPublicGrantScope_KafeQR_*).
+	if !scoped["menu-item-price"] {
+		t.Error("menu-item-price must be scoped on the session for staff — a cashier would otherwise see every branch's prices")
+	}
+	if got := kafePickerLookupScope(res.Manifests); got != "branch_id" {
+		t.Errorf("the QR picker must declare a branch lookup.scope (got %q) — without it the anonymous lookup list has no server-side scope", got)
 	}
 	if !branchSource {
 		t.Fatal("row_scope is on, but nothing declares an `assignments` mapping for `branch` — every scoped read would fail closed")
 	}
+}
+
+// kafePickerLookupScope returns the field a child-field picker declares in its
+// `lookup.scope`, or "" when none does. It walks the manifests rather
+// than the spec types so a declaration that failed to survive YAML decoding
+// still shows up as missing.
+func kafePickerLookupScope(manifests []manifest.RawManifest) string {
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindEntity || m.Metadata.Name != "order" {
+			continue
+		}
+		sm, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		es, err := manifest.RawSpecToEntitySpec(sm)
+		if err != nil {
+			continue
+		}
+		for i := range es.Fields {
+			f := &es.Fields[i]
+			if f.Child == nil || f.Child.Picker == nil {
+				continue
+			}
+			if lk := f.Child.Picker.Lookup; lk != nil {
+				for i := range lk.Scope {
+					if lk.Scope[i].Field != "" {
+						return lk.Scope[i].Field
+					}
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // The runtime resolves `from: session` through the registry's assignment

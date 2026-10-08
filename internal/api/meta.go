@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	formspec_app "github.com/primadi/formspec/internal/app"
+	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
@@ -39,6 +40,28 @@ type metaIdentity struct {
 	// OAuthProvider is the external identity linked to this account (e.g.
 	// "google"). Empty = password-only account. Omitted for anonymous callers.
 	OAuthProvider string `json:"oauth_provider,omitempty"`
+	// Context is the session context this caller is ACTING IN (backend §8.7):
+	// the single role, and the dimension value the session is bound to. Omitted
+	// for a boundary-less session (owner / service account).
+	//
+	// It is reported because a client cannot otherwise answer the two questions a
+	// switcher asks — "which context am I in?" and "how do I leave it?" — from
+	// `roles` alone: `roles` says what the principal IS, never what the session
+	// is scoped to, and with a context-scoped session the token deliberately
+	// carries one role plus its `attrs`.
+	Context *metaContext `json:"context,omitempty"`
+	// ContextChoices lists every context this principal MAY act in, so a client
+	// can offer the switch without first triggering a 409 to discover them.
+	// Same shape as the `choices` a 409 CONTEXT_REQUIRED carries, and validated
+	// by the same server code when one is submitted.
+	ContextChoices []auth.ContextChoice `json:"context_choices,omitempty"`
+}
+
+// metaContext is the (role, dimension, value) triple a session acts in.
+type metaContext struct {
+	Role      string `json:"role"`
+	Dimension string `json:"dimension,omitempty"`
+	Value     string `json:"value,omitempty"`
 }
 
 // callerChecker returns a PermissionChecker for the request's identity.
@@ -417,6 +440,60 @@ func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 	}
 }
 
+// sessionContextOf reports the context a session is acting in, plus the contexts
+// its principal may act in.
+//
+// Two sources, deliberately: the CHOICES come from the principal's assignments
+// (the authority on what they may become), while the ACTIVE context is read off
+// the session's own identity (`role` + `attrs`) — that is what authorization
+// actually uses, so reporting it from anywhere else could disagree with the
+// enforced boundary.
+//
+// The dimension NAME is recovered by matching the token's attribute against the
+// assignments: the token carries only `{branch_id: "KFE-JKT-01"}`, and the
+// switcher needs to say which dimension that is. When nothing matches (a revoked
+// assignment, or a token issued before the assignment list changed) the raw
+// attribute is reported rather than pretending the session has no boundary —
+// the next refresh will ask for a choice anyway.
+func sessionContextOf(id *auth.Identity, u *auth.User) (*metaContext, []auth.ContextChoice) {
+	choices := make([]auth.ContextChoice, 0, len(u.Assignments))
+	for _, a := range u.Assignments {
+		if !a.Complete() {
+			continue
+		}
+		choices = append(choices, auth.ContextChoice{
+			ID: a.ID(), Role: a.Role, Dimension: a.Dimension, Value: a.Value,
+		})
+	}
+
+	// A context-scoped session carries exactly one role; several means the
+	// session is boundary-less (legacy union), so there is no single role to
+	// report.
+	role := ""
+	if len(id.Roles) == 1 {
+		role = id.Roles[0]
+	}
+	ctx := &metaContext{Role: role}
+	for _, a := range choices {
+		if a.Role != role {
+			continue
+		}
+		if v, ok := id.Attributes[a.Dimension]; ok && v == a.Value {
+			ctx.Dimension, ctx.Value = a.Dimension, a.Value
+			break
+		}
+	}
+	if ctx.Dimension == "" && len(id.Attributes) == 1 {
+		for k, v := range id.Attributes {
+			ctx.Dimension, ctx.Value = k, v
+		}
+	}
+	if ctx.Role == "" && ctx.Dimension == "" {
+		return nil, choices
+	}
+	return ctx, choices
+}
+
 // HandleMetaMe serves the caller's identity and effective permissions —
 // the source for client-side permission gating (Frontend §1.4, UX only;
 // the server re-checks every call).
@@ -439,6 +516,7 @@ func (b *RouterBuilder) HandleMetaMe() http.HandlerFunc {
 				if u, err := authService.GetUserByID(r.Context(), id.WorkspaceID, id.UserID); err == nil {
 					me.EmailVerified = u.EmailVerified
 					me.OAuthProvider = u.OAuthProvider
+					me.Context, me.ContextChoices = sessionContextOf(id, u)
 				}
 			}
 		}

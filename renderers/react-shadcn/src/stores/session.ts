@@ -18,6 +18,8 @@ import {
 import { createApiClient, fetchMe } from "@/lib/api"
 import { onSessionExpired } from "@/lib/api/sessionEvents"
 import { can } from "@/engine/permissions"
+import { peekIntakeSolution } from "@/lib/intake/pow"
+import { useIntakeStore } from "@/stores/intake"
 
 // KyInstance is a generic HTTP client type from the ky library
 
@@ -372,6 +374,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       getToken: () => get().token,
       onUnauthorized: () => get().refreshSession(),
       needsContext: () => get().pendingContext !== null,
+      // Anonymous intake gate (plan intake-challenge-pow.md): a client that can
+      // read a solved challenge and solve a fresh one. Both are wired here
+      // rather than in the client itself so every API surface built from the
+      // session (entity CRUD, picker lookups, …) inherits the gate without
+      // repeating the wiring.
+      getIntakeSolution: () => peekIntakeSolution(),
+      onChallengeRequired: (challenge) =>
+        useIntakeStore.getState().solve(challenge),
     }) as unknown as KyInstance
   },
 

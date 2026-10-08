@@ -22,7 +22,7 @@
 | **Marketplace & signing**      | `module list\|install\|uninstall\|publish`, `sign`, `override adopt\|diff\|list`, `verify` |
 | **Scripting**                  | `script validate\|test`                                                                    |
 | **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace`                                                     |
-| **Ops**                        | `workspace create\|list\|delete`, `logs`, `spa install\|path\|remove`, `upgrade`           |
+| **Ops**                        | `workspace create\|list\|delete`, `logs`, `spa install\|compress\|path\|remove`, `upgrade` |
 
 ---
 
@@ -140,7 +140,7 @@ formspec schema clear                     # hapus seluruh cache
 Registry bisa di-override via env `FORMSPEC_SCHEMA_REGISTRY` atau
 `schema-registry:` di `formspec-app.yaml`.
 
-### `formspec spa install|path|remove`
+### `formspec spa install|compress|path|remove`
 
 UI untuk binary yang dibangun tanpa embedded SPA (mis. hasil `go install` —
 `go install` hanya menjalankan compiler Go, tidak bisa menjalankan npm).
@@ -152,6 +152,7 @@ lalu extract ke cache `~/.formspec/spa/<versi>/`.
 ```bash
 formspec spa install             # download + verify + extract ke cache
 formspec spa install --force     # download ulang meski sudah ada
+formspec spa compress            # tulis sidecar .br (brotli q11) untuk dist/
 formspec spa path                # path cache (untuk scripting / --web-dir)
 formspec spa remove              # hapus cache versi ini
 formspec spa remove --all        # hapus semua versi cache
@@ -163,6 +164,31 @@ formspec spa remove --all        # hapus semua versi cache
 - Binary build `dev` menolak `spa install` (tidak ada tag rilis untuk
   di-match) — gunakan auto-detect repo atau `--dev-ui`.
 - Base URL bisa di-override via env `FORMSPEC_SPA_URL`.
+
+#### `formspec spa compress`
+
+Menulis sidecar `<file>.br` (brotli) untuk aset yang layak dikompres di
+`renderers/react-shadcn/dist`, dan menghapus sidecar yang sumbernya tidak lagi
+layak. Dijalankan **setelah** build SPA — dipanggil otomatis oleh
+`make build-spa` dan `make web-build`, jadi tidak perlu dijalankan manual
+kecuali bekerja di luar Makefile.
+
+```bash
+formspec spa compress                          # default: q11, dir repo
+formspec spa compress --dir /path/to/dist
+formspec spa compress --quality 5              # lebih cepat build, byte lebih besar
+```
+
+Kenapa saat build, bukan saat request: encoder q11 ≈ 1,7 s/MiB. Dijalankan
+sekali di sini, biayanya tidak pernah terlihat pengguna — dan klien tidak
+membayar apa pun untuk kualitas tinggi itu (decode q11 ≈ decode q5, karena `q`
+adalah knob _encode_). Terukur pada bundle kafe: 1.839.789 byte raw → 438.994
+byte `.br`, versus 608.324 byte gzip (−27,8%). Gzip runtime tetap ada sebagai
+fallback untuk klien tanpa brotli.
+
+Predikat “layak dikompres” (tipe, ambang 1 KiB, dan syarat benar-benar
+menyusut) dibagi dengan kode yang menyajikan aset, jadi langkah build ini tidak
+bisa menyimpang dari apa yang benar-benar disajikan server.
 
 ### `formspec upgrade`
 

@@ -436,8 +436,42 @@ export interface PickerDecl {
   filter?: Record<string, string>
   /** How a source record is presented as a tile. */
   display: PickerDisplay
+  /** Enrich each picked row with a value read from a related entity. */
+  lookup?: PickerLookup
   /** What gets written into the row. */
   map: PickerMap
+}
+
+/** `ChildDecl.picker.lookup` — read one value per picked row from a related
+ *  entity, matched by a key. Generic: per-outlet price, per-region tax rate,
+ *  per-warehouse stock, per-tenant quota. */
+export interface PickerLookup {
+  /** Related entity the value is read from (`module.entity` or a bare name). */
+  entity: string
+  /** Field on `entity` matched against the picked row's source id. */
+  key: string
+  /** Field on `entity` whose value is used. */
+  field: string
+  /** CLIENT-side narrowing of the lookup list; values interpolate `{token}`.
+   *  Not a boundary — any client can omit or widen it. Use `scope` for a
+   *  narrowing the server must enforce. */
+  filter?: Record<string, string>
+  /** SERVER-enforced row scope for reads of `entity` caused by this lookup.
+   *  The derived public grant inherits it, so an anonymous lookup is filtered by
+   *  the server. With `from: "route"` + `via`, the param is a REFERENCE and the
+   *  value is read from that record — the guest states which session it is,
+   *  never which dimension it may see. */
+  scope?: PickerScopeEntry[]
+}
+
+export interface PickerScopeEntry {
+  field: string
+  from?: string
+  param?: string
+  via?: string
+  via_field?: string
+  op?: string
+  value?: string
 }
 
 export interface PickerDisplay {
@@ -449,15 +483,6 @@ export interface PickerDisplay {
   description_field?: string
   /** Source relation/enum field rendered as filter chips. */
   category_field?: string
-  /** Read the price from a separate entity (per-branch price lists); the client
-   *  joins it onto the source rows. A row without a price cannot be picked. */
-  price_entity?: string
-  /** Field on `price_entity` holding the source id (required with `price_entity`). */
-  price_match_field?: string
-  /** Money field on `price_entity` (required with `price_entity`). */
-  price_field?: string
-  /** Narrows the price rows (typically the branch); values interpolate `{token}`. */
-  price_filter?: Record<string, string>
   /** Tile grid columns, 2–4 (default 3). */
   columns?: number
   search?: boolean
@@ -469,8 +494,9 @@ export interface PickerMap {
   ref_field: string
   /** Row field receiving the source display name (snapshot). */
   name_field?: string
-  /** Row field receiving the source price (snapshot). */
-  price_field?: string
+  /** Row field receiving `lookup.field` (snapshot). The server resolves this
+   *  value from the lookup entity, so a caller-supplied value is replaced. */
+  lookup_field?: string
   /** Row field accumulating the picked amount; omit for one row per pick. */
   quantity_field?: string
   /** Free-text per-row note (typed, not copied). */
@@ -1645,6 +1671,17 @@ export interface MeResponse {
   email_verified?: boolean
   /** External identity linked to this account (e.g. "google"). Empty = password-only. */
   oauth_provider?: string
+  /** The session context this caller is ACTING IN (backend §8.7) — the single
+   *  role plus the dimension value the session is bound to. Absent for a
+   *  boundary-less session (owner / service account). This is what lets a
+   *  switcher show "as which role, in which branch" without guessing from
+   *  `roles`, which says what the principal IS, not what the session is scoped
+   *  to. */
+  context?: { role: string; dimension?: string; value?: string }
+  /** Every context this principal MAY act in, so a switcher can be offered
+   *  without first triggering a 409 to discover the options. Same shape as the
+   *  `choices` a 409 CONTEXT_REQUIRED carries. */
+  context_choices?: ContextChoice[]
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1709,6 +1746,30 @@ export interface ErrorDetail {
    * shows a picker and re-sends login with the chosen `id` as `assignment`.
    */
   choices?: ContextChoice[]
+  /**
+   * Present on 403 `CHALLENGE_REQUIRED` only: the anonymous intake
+   * proof-of-work challenge to solve before retrying (plan
+   * docs_internal/plan/intake-challenge-pow.md). It rides the error envelope
+   * rather than a separate endpoint, so the client can solve and retry
+   * without a round-trip.
+   */
+  challenge?: IntakeChallenge
+}
+
+/**
+ * An anonymous intake proof-of-work challenge — mirrors the Go
+ * `api.intakeChallengeBody`. The client searches for a `solution` such that
+ * `sha256(token + ":" + solution)` has at least `difficulty` leading zero bits,
+ * then resends the request with the header
+ * `X-Forma-Intake: <token>:<solution>`.
+ */
+export interface IntakeChallenge {
+  token: string
+  difficulty: number
+  /** Hash named by the server — only "sha256" today. */
+  alg: string
+  /** How long the challenge stays verifiable; bounds the replay window. */
+  ttl_seconds: number
 }
 
 /**
@@ -1769,6 +1830,11 @@ export class FormaApiError extends Error {
    * login with the chosen `id` as `assignment` (backend §8.7).
    */
   choices?: ContextChoice[]
+  /**
+   * The intake challenge carried by a 403 `CHALLENGE_REQUIRED` — see
+   * {@link IntakeChallenge}. Set only for that code.
+   */
+  challenge?: IntakeChallenge
 
   constructor(
     status: number,
@@ -1776,6 +1842,7 @@ export class FormaApiError extends Error {
     message: string,
     details?: ErrorDetailItem[],
     choices?: ContextChoice[],
+    challenge?: IntakeChallenge,
   ) {
     super(message)
     this.name = "FormaApiError"
@@ -1783,6 +1850,7 @@ export class FormaApiError extends Error {
     this.code = code
     this.details = details
     this.choices = choices
+    this.challenge = challenge
   }
 }
 

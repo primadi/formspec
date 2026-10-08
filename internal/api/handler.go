@@ -43,11 +43,13 @@ type HandlerFactory struct {
 	storage          func() (Storage, error) // optional — enables file upload/download routes (todo 7.17.1)
 	assetRoots       []string                // manifest roots for module asset serving (todo 5.9.1)
 	rateLimiter      *ResourceRateLimiter    // optional — per-resource/per-action rate limits (todo 7.12)
+	intakePolicies   map[string]IntakePolicy // optional — anonymous intake challenges, keyed by intakeKey (plan intake-challenge-pow.md)
 	jobTracker       *job.Tracker            // optional — tracked async jobs (call: async + track: true, todo 7.13)
 	entityCache      *EntityCache            // optional — read-through find-by-id cache (Fase 14, opt-in via spec.cache)
 	linkStore        *db.StorageLinkStore    // optional — enables link routes (todo 7.17.6); nil → link routes return 503
 	uploadLimitMB    int                     // global upload limit (FORMSPEC_UPLOAD_MAX_MB, default 100)
 	downloadLimitMB  int                     // global download limit (FORMSPEC_DOWNLOAD_MAX_MB, default 200)
+	downloadCacheTTL time.Duration           // global download cache lifetime (FORMSPEC_DOWNLOAD_CACHE_TTL, default 5m); per-field download_cache_ttl overrides
 	// grantScopeLookup resolves the row scope the caller's ROLE GRANTS attach to
 	// one permission — the per-role half of row authorization that `row_scope`
 	// on the entity cannot express (it is per-entity and filters by WHO).
@@ -78,10 +80,11 @@ func (f *HandlerFactory) SetGrantScopeLookup(lookup func(ctx context.Context, wo
 // NewHandlerFactory creates a handler factory.
 func NewHandlerFactory(registry EntityStoreProvider) *HandlerFactory {
 	return &HandlerFactory{
-		registry:        registry,
-		dispatcher:      action.NewDispatcher(),
-		uploadLimitMB:   DefaultUploadLimitMB,
-		downloadLimitMB: DefaultDownloadLimitMB,
+		registry:         registry,
+		dispatcher:       action.NewDispatcher(),
+		uploadLimitMB:    DefaultUploadLimitMB,
+		downloadLimitMB:  DefaultDownloadLimitMB,
+		downloadCacheTTL: DefaultDownloadCacheTTL,
 	}
 }
 
@@ -98,6 +101,14 @@ func (f *HandlerFactory) SetUploadLimitMB(mb int) {
 func (f *HandlerFactory) SetDownloadLimitMB(mb int) {
 	if mb > 0 {
 		f.downloadLimitMB = mb
+	}
+}
+
+// SetDownloadCacheTTL wires the global download cache lifetime
+// (FORMSPEC_DOWNLOAD_CACHE_TTL). A per-field `download_cache_ttl` overrides it.
+func (f *HandlerFactory) SetDownloadCacheTTL(d time.Duration) {
+	if d >= 0 {
+		f.downloadCacheTTL = d
 	}
 }
 
@@ -229,6 +240,16 @@ func (f *HandlerFactory) SetAssetRoots(roots []string) {
 // (todo 7.12). When nil, rate limiting is a no-op.
 func (f *HandlerFactory) SetResourceRateLimiter(rl *ResourceRateLimiter) {
 	f.rateLimiter = rl
+}
+
+// SetIntakePolicies wires the resolved anonymous intake gates (plan
+// docs_internal/plan/intake-challenge-pow.md). The map is keyed by
+// intakeKey(module, entity, action); an empty/nil map disables the gate
+// entirely, which is the state of every deployment that declares no
+// `intake` policy. It is resolved once at router build (BuildHTTP) so
+// enforcement never has to decide which App governed a request.
+func (f *HandlerFactory) SetIntakePolicies(p map[string]IntakePolicy) {
+	f.intakePolicies = p
 }
 
 // SetJobTracker wires the async job tracker (todo 7.13). When nil, tracked
@@ -416,28 +437,34 @@ func emitsOf(a *spec.Action) string {
 	return a.Emits
 }
 
-// rateLimitFor resolves the entity spec and enforces the resource/per-action
-// rate limit (todo 7.12). Returns true when the request may proceed; when
-// false, a 429 has already been written.
-func (f *HandlerFactory) rateLimitFor(w http.ResponseWriter, r *http.Request, module, entity, action string) bool {
+// intakeGateFor resolves the entity spec and runs the request gates for one
+// action: the resource/per-action rate limit (todo 7.12) first, then the
+// anonymous intake challenge (plan docs_internal/plan/intake-challenge-pow.md).
+// Returns true when the request may proceed; when false a response (429, or
+// 403 CHALLENGE_REQUIRED) has already been written.
+//
+// One gate, one ordering: the rate limit rejects a flood before a challenge is
+// minted, and keeping both behind a single call site is what stops a later
+// edit from reordering them by accident.
+func (f *HandlerFactory) intakeGateFor(w http.ResponseWriter, r *http.Request, module, entity, action string) bool {
 	var es *spec.EntitySpec
 	if f.specLookup != nil {
 		es, _ = f.specLookup(module, entity)
 	}
-	return f.checkRateLimit(w, r, es, action)
+	return f.checkIntakeAction(w, r, es, nil, module, entity, action)
 }
 
-// rateLimitForAction is rateLimitFor for a caller that already resolved the
+// intakeGateForAction is intakeGateFor for a caller that already resolved the
 // action through the registry union (declared `actions:` ∪ transition `via`).
 // Prefer it wherever the resolved spec is in hand: `resolveAction` reads
 // `actions:` only, so a `rate_limit` declared on a transition `via` would
 // otherwise be ignored on the custom-action route (kafe 10.60a).
-func (f *HandlerFactory) rateLimitForAction(w http.ResponseWriter, r *http.Request, module, entity, action string, actionSpec *spec.Action) bool {
+func (f *HandlerFactory) intakeGateForAction(w http.ResponseWriter, r *http.Request, module, entity, action string, actionSpec *spec.Action) bool {
 	var es *spec.EntitySpec
 	if f.specLookup != nil {
 		es, _ = f.specLookup(module, entity)
 	}
-	return f.checkRateLimitAction(w, r, es, actionSpec, action)
+	return f.checkIntakeAction(w, r, es, actionSpec, module, entity, action)
 }
 
 // HandleList returns a GET / handler for the given entity.
@@ -449,7 +476,7 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
 			return
 		}
-		if !f.rateLimitFor(w, r, module, entity, "list") {
+		if !f.intakeGateFor(w, r, module, entity, "list") {
 			return
 		}
 
@@ -687,7 +714,7 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
 			return
 		}
-		if !f.rateLimitFor(w, r, module, entity, "find") {
+		if !f.intakeGateFor(w, r, module, entity, "find") {
 			return
 		}
 
@@ -830,7 +857,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
 			return
 		}
-		if !f.rateLimitFor(w, r, module, entity, "create") {
+		if !f.intakeGateFor(w, r, module, entity, "create") {
 			return
 		}
 
@@ -856,6 +883,23 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		if !f.denyForbiddenFieldWrites(w, entitySpec, IdentityFromContext(ctx), body) {
 			return
 		}
+		// Dimension pin (create_scope): a row that does not exist yet cannot be
+		// row-filtered, so create had no scope at all — an anonymous QR guest
+		// could POST an order claiming another branch (measured on kafe: `branch_id`
+		// carries no `required_permission`, and InsertParams has no predicates).
+		//
+		// The two failure classes are kept apart on purpose: a MISMATCH is an
+		// authorization refusal (403), while an unresolvable reference is bad
+		// INPUT (422) — the same class as a broken relation, which is how it
+		// answered before this check existed.
+		if status, err := f.enforceCreateScope(ctx, module, entity, entitySpec, body); err != nil {
+			code := "FORBIDDEN"
+			if status == http.StatusUnprocessableEntity {
+				code = "VALIDATION_ERROR"
+			}
+			writeError(w, status, code, err.Error())
+			return
+		}
 		actionSpec := resolveAction(entitySpec, "create")
 		var hooks []spec.HookDecl
 		if entitySpec != nil {
@@ -865,6 +909,25 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		// Canonicalize money fields before hooks and storage see them: one shape
 		// {amount, currency}, currency resolved (never guessed). Gap #46.
 		if err := f.normalizeMoneyFields(entitySpec, body); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+			return
+		}
+
+		// Picker rows: the quantity is BOUNDED (at least 1, at most the declared
+		// `map.max_quantity`) and the lookup value is DERIVED from the related
+		// entity — never accepted from the request. Resolved before hooks/insert so
+		// everything downstream (totals, tax, journal) agrees on one number.
+		if err := f.preparePickerRows(ctx, module, entity, entitySpec, body, nil); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+			return
+		}
+
+		// Conditional requirements (`required_when`) are a LIST/MANIFEST invariant
+		// the renderer honoured and the server did not: without this, a declaration
+		// like "a manual discount must carry a reason" was advisory only, and a
+		// direct API call could skip it. Checked on the resolved payload so the
+		// condition sees the same values that get stored.
+		if err := f.enforceConditionalRequired(entitySpec, body, nil); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
 			return
 		}
@@ -977,7 +1040,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
 			return
 		}
-		if !f.rateLimitFor(w, r, module, entity, "update") {
+		if !f.intakeGateFor(w, r, module, entity, "update") {
 			return
 		}
 
@@ -1033,6 +1096,25 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		current, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id, RowPredicates: rowPreds})
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
+
+		// Picker rows on update: the quantity is bounded, a NEW row is priced from
+		// the lookup entity, and an existing one keeps the stored value (kafe
+		// 10.79). Reading the frozen values off `current` is what makes them FROZEN
+		// rather than re-derived — an edit that only changes a quantity must not
+		// silently re-price a record the caller already agreed to.
+		if err := f.preparePickerRows(ctx, module, entity, updateEntitySpec, body, current.Data); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+			return
+		}
+
+		// Conditional requirements on update are evaluated over the MERGED view
+		// (`current` overlaid by `body`), so a PATCH that sets the trigger without
+		// the consequence fails, while one that leaves an already-satisfied
+		// requirement untouched still passes.
+		if err := f.enforceConditionalRequired(updateEntitySpec, body, current.Data); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
 			return
 		}
 
@@ -1334,7 +1416,7 @@ func (f *HandlerFactory) HandleDelete(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
 			return
 		}
-		if !f.rateLimitFor(w, r, module, entity, "delete") {
+		if !f.intakeGateFor(w, r, module, entity, "delete") {
 			return
 		}
 
@@ -1818,6 +1900,11 @@ type ErrorDetail struct {
 	Code    string            `json:"code"`
 	Message string            `json:"message"`
 	Details []ErrorDetailItem `json:"details,omitempty"`
+	// Challenge carries a fresh proof-of-work challenge when Code is
+	// CHALLENGE_REQUIRED (plan docs_internal/plan/intake-challenge-pow.md).
+	// Riding the error envelope means the client can solve without a round-trip
+	// and there is no separate issue endpoint to protect. Absent otherwise.
+	Challenge *intakeChallengeBody `json:"challenge,omitempty"`
 }
 
 // ErrorDetailItem is a single structured error detail.
@@ -2294,10 +2381,11 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		userID := userFromContext(ctx)
 		resourceID := r.PathValue("id")
 
-		// Rate limit (todo 7.12): per-action override wins over resource default.
-		// `actionSpec` comes from the registry union, so a `rate_limit` declared
-		// on a transition `via` is enforced here too (kafe 10.60a).
-		if !f.rateLimitForAction(w, r, module, entity, actionName, &actionSpec) {
+		// Rate limit (todo 7.12) + anonymous intake challenge: per-action
+		// override wins over the resource default. `actionSpec` comes from the
+		// registry union, so a `rate_limit` declared on a transition `via` is
+		// enforced here too (kafe 10.60a).
+		if !f.intakeGateForAction(w, r, module, entity, actionName, &actionSpec) {
 			return
 		}
 
@@ -3075,7 +3163,11 @@ func (f *HandlerFactory) HandleServiceAction(module, serviceName, actionName str
 		userID := userFromContext(ctx)
 
 		// Rate limit (todo 7.12): per-action override wins over resource default.
-		if !f.rateLimitFor(w, r, module, serviceName, actionName) {
+		// No intake challenge here: `public: true` on a Service action exists so
+		// non-browser clients (curl, SDKs, server-to-server) can call it, and a
+		// proof-of-work gate would lock them out for no gain. Anonymous Entity
+		// access is the surface the gate protects.
+		if !f.intakeGateFor(w, r, module, serviceName, actionName) {
 			return
 		}
 

@@ -21,6 +21,7 @@ import { UiHost } from "@/shell/UiHost"
 import { DownloadTray } from "@/shell/DownloadTray"
 
 import { useSessionStore } from "@/stores/session"
+import { useIntakeStore } from "@/stores/intake"
 import { detectApp, useMetaStore } from "@/stores/meta"
 import { usePrefsStore } from "@/stores/prefs"
 import { usePageTransitionEffect } from "@/lib/navigation"
@@ -32,6 +33,7 @@ import {
   buildRoutes,
 } from "@/shell"
 import { SwitchContextScreen } from "@/shell/SwitchContextScreen"
+import { ChallengeScreen } from "@/shell/ChallengeScreen"
 import { pickLandingEntity } from "@/shell/landing"
 import ThemeRenderer from "@/kinds/theme/ThemeRenderer"
 import { useTheme } from "@/hooks/useTheme"
@@ -221,6 +223,7 @@ function SurfaceShell({
   const token = useSessionStore((s) => s.token)
   const boot = useSessionStore((s) => s.boot)
   const pendingContext = useSessionStore((s) => s.pendingContext)
+  const intakeSolving = useIntakeStore((s) => s.solving)
   const storedBundle = useMetaStore((s) => s.bundle)
   const metaApp = useMetaStore((s) => s.loadedApp)
   // The meta store holds ONE bundle for the whole SPA. A bundle resolved for a
@@ -455,6 +458,14 @@ function SurfaceShell({
         loginPath={loginPath}
       />
     )
+  }
+
+  // Anonymous intake gate (plan intake-challenge-pow.md): while a
+  // proof-of-work challenge is being solved the surface blocks, mirroring the
+  // `pendingContext` screen above. A dismissible dialog would not be a gate,
+  // and an unexplained multi-second pause reads as a broken page.
+  if (intakeSolving) {
+    return <ChallengeScreen />
   }
 
   // First-run setup: the workspace has no users yet → show the setup wizard

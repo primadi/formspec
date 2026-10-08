@@ -53,6 +53,11 @@
         "db: pg-main"
       ]
     },
+    "intake": {
+      "$ref": "#/$defs/IntakeSpec",
+      "description": "Intake declares protection for this App's ANONYMOUS intake surface",
+      "nullable": true
+    },
     "logo": {
       "description": "Brand mark icon (lucide name) next to the title in the shell brand bar",
       "type": "string",

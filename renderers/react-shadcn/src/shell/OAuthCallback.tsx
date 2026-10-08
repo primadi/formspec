@@ -10,12 +10,27 @@ import { useEffect, useState } from "react"
 import { useAppNavigate } from "@/lib/navigation"
 import { useParams } from "react-router-dom"
 import { useSessionStore } from "@/stores/session"
+import { ContextPicker } from "@/shell/ContextPicker"
+import {
+  defaultContextChoice,
+  readContextPreference,
+} from "@/lib/session-context"
+import {
+  oauthAuthorizeURL,
+  parseOAuthContextHash,
+  type OAuthContextResume,
+} from "@/lib/oauthContext"
 
 export function OAuthCallback() {
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const navigate = useAppNavigate()
   const boot = useSessionStore((s) => s.boot)
   const [error, setError] = useState<string | null>(null)
+  // Set when the round-trip came back asking for a context, with the App the
+  // flow was started from (needed to resume it).
+  const [resume, setResume] = useState<
+    (OAuthContextResume & { app: string }) | null
+  >(null)
 
   useEffect(() => {
     let cancelled = false
@@ -29,6 +44,16 @@ export function OAuthCallback() {
       // because login is per-App (plan app-scoped-login.md D1). Without it the
       // session cannot be booted under the right App.
       const app = params.get("app") ?? ""
+      // Several session contexts and no way to choose one DURING a provider
+      // round-trip: the backend sends the choices here rather than picking a
+      // boundary on the caller's behalf (backend §8.7). Handled right here
+      // rather than bounced to the login screen, because a pure-OAuth account
+      // has no password to fall back to — the flow has to RESUME.
+      const resume = parseOAuthContextHash(window.location.hash)
+      if (resume) {
+        if (!cancelled) setResume({ ...resume, app })
+        return
+      }
       if (params.get("oauth") === "error" || !token || !app) {
         if (!cancelled) setError("Authentication failed. Please try again.")
         return
@@ -75,7 +100,31 @@ export function OAuthCallback() {
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-sm space-y-4 px-4 text-center">
         <h1 className="text-2xl font-bold tracking-tight">FormSpec</h1>
-        {error ? (
+        {resume ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              You can act in more than one context. Choose the one to continue
+              in — signing in again is not needed.
+            </p>
+            <ContextPicker
+              choices={resume.choices}
+              defaultId={defaultContextChoice(
+                resume.choices,
+                readContextPreference(workspace, resume.app),
+              )}
+              onSubmit={(assignment) => {
+                // Resume the SAME flow, now carrying the choice in `state` so
+                // it survives the provider round-trip.
+                window.location.href = oauthAuthorizeURL(
+                  workspace,
+                  resume.app,
+                  resume.provider,
+                  assignment,
+                )
+              }}
+            />
+          </>
+        ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : (
           <p className="text-sm text-muted-foreground">Completing sign in...</p>

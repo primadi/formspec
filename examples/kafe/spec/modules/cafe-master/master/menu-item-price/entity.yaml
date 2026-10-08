@@ -9,7 +9,22 @@ spec:
   characteristic: master
   plural: menu-item-prices
   # S5: harga berlaku per cabang — satu menu boleh beda harga antar cabang.
+  #
+  # Dua permukaan membacanya, dan keduanya butuh cabang yang berbeda sumbernya:
+  #   - STAF (POS/kasir): `row_scope` di bawah — cabang dari atribut sesi kasir.
+  #     Tanpa ini kasir melihat harga cabang lain, dan picker POS tak punya
+  #     pembatas apa pun (dulu hanya `price_filter` klien yang justru tidak
+  #     resolve di sana).
+  #   - TAMU anonim (katalog QR): `row_scope` entity DILEWATI untuk pemanggil
+  #     anonim yang datang dengan scope grant publik (`entityRowScopePredicates`),
+  #     dan cabangnya diambil dari SESI TAMU lewat `scope` pada `lookup` picker
+  #     `order.lines` → grant turunan `menu-item-price` (10.76). Itu sebabnya
+  #     `enforced` di sini tetap menyebut SESI: deklarasi ini menjelaskan
+  #     penegakan milik entity, sementara grant menambahkan pembatas per-permukaan
+  #     di atasnya.
   scope: { dimension: branch, field: branch_id, required: true }
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: branch_id
       type: relation

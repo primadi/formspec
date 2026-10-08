@@ -15,12 +15,13 @@ import {
   clampQuantity,
   DEFAULT_MAX_QUANTITY,
   interpolateFilter,
+  lookupScopeParams,
   interpolateTokens,
   pickRow,
   pickedCount,
   pickedTotal,
   pickerTiles,
-  priceIndex,
+  lookupIndex,
   removeRow,
   resolveDefault,
   rowTotal,
@@ -31,16 +32,16 @@ import {
 } from "./picker"
 
 const idr = (amount: string) => ({ amount, currency: "IDR" })
-const source = (ref: string, name: string, price?: unknown) => ({
+const source = (ref: string, name: string, lookup?: unknown) => ({
   ref,
   name,
-  price,
+  lookup,
 })
 
 const map: PickerMap = {
   ref_field: "menu_item_id",
   name_field: "name_snapshot",
-  price_field: "unit_price_snapshot",
+  lookup_field: "unit_price_snapshot",
   quantity_field: "quantity",
   note_field: "note",
   max_quantity: 20,
@@ -49,7 +50,7 @@ const map: PickerMap = {
 describe("picking rows", () => {
   it("adds a row with quantity 1", () => {
     expect(pickRow([], source("m1", "Kopi", idr("25000")), map)).toEqual([
-      { ref: "m1", name: "Kopi", price: idr("25000"), quantity: 1 },
+      { ref: "m1", name: "Kopi", lookup: idr("25000"), quantity: 1 },
     ])
   })
 
@@ -98,8 +99,8 @@ describe("picking rows", () => {
 
 describe("picked totals (display only)", () => {
   const rows: PickedRow[] = [
-    { ref: "m1", name: "Kopi", price: idr("25000"), quantity: 2 },
-    { ref: "m2", name: "Roti", price: idr("12500.50"), quantity: 1 },
+    { ref: "m1", name: "Kopi", lookup: idr("25000"), quantity: 2 },
+    { ref: "m2", name: "Roti", lookup: idr("12500.50"), quantity: 1 },
   ]
 
   it("multiplies money by quantity exactly", () => {
@@ -113,10 +114,10 @@ describe("picked totals (display only)", () => {
 
   it("does not treat a non-money price as zero-with-meaning", () => {
     expect(
-      rowTotal({ ref: "x", name: "X", price: "bukan angka", quantity: 2 }),
+      rowTotal({ ref: "x", name: "X", lookup: "bukan angka", quantity: 2 }),
     ).toBeUndefined()
     expect(
-      pickedTotal([{ ref: "x", name: "X", price: null, quantity: 2 }]),
+      pickedTotal([{ ref: "x", name: "X", lookup: null, quantity: 2 }]),
     ).toBe(0)
   })
 })
@@ -126,7 +127,7 @@ describe("row mapping — the entity contract", () => {
     const row: PickedRow = {
       ref: "menu-1",
       name: "Kopi Susu",
-      price: idr("25000"),
+      lookup: idr("25000"),
       quantity: 2,
       note: "tanpa gula",
     }
@@ -234,23 +235,88 @@ describe("templates — default_from and filters", () => {
     )
     expect(interpolateFilter(undefined, ctx)).toEqual({})
   })
+
+  // A SERVER-enforced lookup scope sends the REFERENCE the server resolves the
+  // value from — e.g. the session id already in the route — rather than a
+  // client-computed dimension value. The caller states which referenced record
+  // it is, never which dimension value it may see.
+  describe("lookupScopeParams", () => {
+    const routeCtx = { route: { params: { session_id: "sess-42" } } }
+
+    it("sends the route parameter the scope names", () => {
+      expect(
+        lookupScopeParams(
+          [
+            {
+              field: "branch_id",
+              from: "route",
+              param: "session_id",
+              via: "cafe-order.table-session",
+              via_field: "branch_id",
+            },
+          ],
+          routeCtx,
+        ),
+      ).toEqual({ session_id: "sess-42" })
+    })
+
+    it("falls back to the field name when param is omitted", () => {
+      expect(
+        lookupScopeParams([{ field: "session_id", from: "route" }], routeCtx),
+      ).toEqual({ session_id: "sess-42" })
+    })
+
+    it("sends nothing when the scope is absent or not route-sourced", () => {
+      expect(lookupScopeParams(undefined, routeCtx)).toEqual({})
+      expect(lookupScopeParams([], routeCtx)).toEqual({})
+      // Literal and session-sourced entries are resolved entirely on the
+      // server; the client has no parameter to send for them.
+      expect(
+        lookupScopeParams(
+          [
+            { field: "branch_id", from: "session" },
+            { field: "is_active", value: "true" },
+          ],
+          routeCtx,
+        ),
+      ).toEqual({})
+    })
+
+    // An absent parameter must NOT be sent as a literal `{...}` template: the
+    // server would then report a reference that cannot resolve, which sends the
+    // reader looking for a missing record instead of a missing declaration.
+    it("sends nothing when the route parameter is missing", () => {
+      expect(
+        lookupScopeParams(
+          [{ field: "branch_id", from: "route", param: "session_id" }],
+          { route: { params: {} } },
+        ),
+      ).toEqual({})
+      expect(
+        lookupScopeParams(
+          [{ field: "branch_id", from: "route", param: "session_id" }],
+          {},
+        ),
+      ).toEqual({})
+    })
+  })
 })
 
-describe("source pricing — join from a price entity", () => {
-  const priceRows = [
+describe("lookup join — a value read from a related entity", () => {
+  const lookupRows = [
     { menu_item_id: "m1", price: idr("25000") },
     { menu_item_id: "m2", price: idr("12500") },
   ]
 
-  it("indexes price rows by the declared match field", () => {
-    const index = priceIndex(priceRows, "menu_item_id", "price")
+  it("indexes lookup rows by the declared key", () => {
+    const index = lookupIndex(lookupRows, "menu_item_id", "price")
     expect(index.get("m1")).toEqual(idr("25000"))
     expect(index.size).toBe(2)
   })
 
-  it("skips rows without a usable key or price", () => {
+  it("skips rows without a usable key or value", () => {
     expect(
-      priceIndex(
+      lookupIndex(
         [
           { menu_item_id: "", price: 1000 },
           { menu_item_id: "m3" },
@@ -262,38 +328,38 @@ describe("source pricing — join from a price entity", () => {
     ).toBe(0)
   })
 
-  it("marks a source without a price as not pickable", () => {
+  it("marks a source row without a looked-up value as not pickable", () => {
     const tiles = pickerTiles({
       rows: [
         { id: "m1", name: "Kopi Susu" },
         { id: "m9", name: "Menu Baru" },
       ],
       nameField: "name",
-      priceField: "price",
-      prices: priceIndex(priceRows, "menu_item_id", "price"),
+      valueField: "price",
+      lookups: lookupIndex(lookupRows, "menu_item_id", "price"),
     })
     expect(tiles[0].pickable).toBe(true)
-    expect(tiles[0].price).toEqual(idr("25000"))
+    expect(tiles[0].lookup).toEqual(idr("25000"))
     expect(tiles[1].pickable).toBe(false)
-    expect(tiles[1].price).toBeUndefined()
+    expect(tiles[1].lookup).toBeUndefined()
   })
 
-  it("uses the row's own price field when no price entity is declared", () => {
+  it("reads the source row's own field when no lookup is declared", () => {
     const tiles = pickerTiles({
       rows: [{ id: "m1", name: "Kopi", price: idr("9000") }],
       nameField: "name",
-      priceField: "price",
+      valueField: "price",
     })
     expect(tiles[0].pickable).toBe(true)
-    expect(tiles[0].price).toEqual(idr("9000"))
+    expect(tiles[0].lookup).toEqual(idr("9000"))
   })
 
-  it("does not require a price when the picker declares none", () => {
-    // A checklist picker has no money in it at all.
+  it("does not restrict pickability when the picker reads no value", () => {
+    // A checklist picker takes no value at all.
     const tiles = pickerTiles({
       rows: [{ id: "i1", name: "Langkah A" }],
       nameField: "name",
-      priceField: "",
+      valueField: "",
     })
     expect(tiles[0].pickable).toBe(true)
   })
@@ -301,17 +367,30 @@ describe("source pricing — join from a price entity", () => {
 
 describe("picker declaration shape (docs parity)", () => {
   it("the kafe order lines picker maps onto the declared child fields", () => {
+    // The declaration is generic vocabulary — a source list, an optional lookup
+    // that reads one value per row, and a map onto the child's own fields.
     const decl: PickerDecl = {
       entity: "cafe-master.menu-item",
       filter: { is_available: "true" },
+      lookup: {
+        entity: "cafe-master.menu-item-price",
+        key: "menu_item_id",
+        field: "price",
+        filter: { is_active: "true" },
+        scope: [
+          {
+            field: "branch_id",
+            from: "route",
+            param: "session_id",
+            via: "cafe-order.table-session",
+            via_field: "branch_id",
+          },
+        ],
+      },
       display: {
         name_field: "name",
         image_field: "photo",
         category_field: "menu_category_id",
-        price_entity: "cafe-master.menu-item-price",
-        price_match_field: "menu_item_id",
-        price_field: "price",
-        price_filter: { branch_id: "{session.branch_id}" },
         columns: 3,
         search: true,
       },

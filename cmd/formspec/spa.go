@@ -29,6 +29,8 @@ func runSpa(args []string) {
 	switch args[0] {
 	case "install":
 		runSpaInstall(args[1:])
+	case "compress":
+		runSpaCompress(args[1:])
 	case "path":
 		runSpaPath()
 	case "remove":
@@ -47,6 +49,7 @@ func spaUsage() {
 
 Subcommands:
   install          Download & verify SPA artifact versi binary ini ke cache
+  compress         Tulis sidecar .br (brotli) untuk dist/ — dijalankan setelah build SPA
   path             Print path cache SPA versi ini (untuk --web-dir)
   remove [--all]   Hapus cache SPA versi ini / semua versi
 `)

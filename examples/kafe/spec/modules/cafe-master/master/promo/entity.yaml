@@ -12,7 +12,12 @@ spec:
   soft_deactivate: { enabled: true }
   # S5: promo boleh berlaku di semua cabang (branch_id kosong = global), jadi
   # dimensinya tidak `required`.
-  scope: { dimension: branch, field: branch_id }
+  #
+  # `enforced: none` — dimensi ini MEMANG lintas cabang: baris tanpa
+  # `branch_id` berlaku di semua cabang, jadi memfilter per cabang justru
+  # menyembunyikan promo global yang sah. Menyatakan `none` di sini membuat
+  # "sengaja tidak difilter" berbeda dari "lupa menulis row_scope".
+  scope: { dimension: branch, field: branch_id, enforced: none }
   fields:
     - name: code
       type: string

@@ -31,6 +31,13 @@
     "characteristic": {
       "$ref": "#/$defs/Characteristic"
     },
+    "create_scope": {
+      "description": "CreateScope pins a dimension field on CREATE from a record the payload",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CreateScopeSpec"
+      }
+    },
     "deliver": {
       "type": "array",
       "items": {

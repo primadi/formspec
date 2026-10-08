@@ -36,7 +36,7 @@ spec:
   #   cafe-order.table-session    create, find
   #   cafe-master.dining-table    find         (dari context: {source: entity})
   #   cafe-master.menu-item       list         (dari picker child field `lines`)
-  #   cafe-master.menu-item-price list         (dari picker.display.price_entity)
+  #   cafe-master.menu-item-price list         (dari picker `lookup.entity`)
   #
   # Perhatikan yang TIDAK ikut — inilah presisinya:
   #   * `menu-category` tidak di-grant: chip kategori dibaca dari baris yang
@@ -48,15 +48,11 @@ spec:
   #   * `member`, `employee`, `shift`, `cash-movement` tidak pernah ikut hanya
   #     karena se-modul.
   #
-  # ⚠️ SATU DELTA YANG DISENGAJA TERBUKA (kafe 10.69 ⏸️): `menu-item-price`
-  # sebelumnya ber-scope `{field: branch_id, from: route}`; turunan TIDAK bisa
-  # mereproduksinya, jadi grant-nya kini `list` tanpa scope. Sebabnya:
-  # price_filter picker bernilai `{session.branch_id}` — cabang datang dari
-  # record sesi (di-resolve lewat `session_id`), bukan dari parameter route pada
-  # entity harga, dan `from: session` memang ditolak untuk permukaan publik.
-  # Artinya anonim kini bisa membaca harga SEMUA cabang, bukan hanya cabangnya.
-  # Tidak ada PII di sana, tetapi ini pelemahan nyata dibanding manifest lama —
-  # dicatat sebagai item, bukan disembunyikan.
+  # ⚠️ CATATAN (diperbarui 2026-10-07): pelemahan `menu-item-price` yang dulu
+  # tercatat di sini (item 10.76) kini TERBUKA SUDAH DITUTUP — grant-nya membawa
+  # scope `branch_id` yang diwarisi dari `picker.lookup.scope`, dengan nilainya
+  # dibaca dari meja (`via: cafe-order.table-session`). Anonim tetap boleh
+  # `list`, tetapi hanya untuk cabang mejanya.
   #
   # Update/delete tidak pernah anonim: pembatalan lewat approval supervisor
   # (pada transisi `void-order`), bukan tombol pelanggan.
@@ -77,6 +73,35 @@ spec:
     - { view: cafe-order/table-open }
     - { view: cafe-order/menu-catalog }
     - { view: cafe-order/order-status-page }
+  # ── Perlindungan intake anonim (plan docs_internal/plan/intake-challenge-pow.md) ──
+  #
+  # Tamu memesan dari QR tanpa login, jadi permukaan ini hanya dibatasi
+  # `rate_limit` — dan itu pun cacat: tamu di balik satu NAT berbagi satu kuota,
+  # sementara IP dinamis membuat pembatasnya mudah dilewati. Policy ini
+  # menambahkan biaya kedua yang tidak dibagi: tamu harus memecahkan puzzle
+  # proof-of-work sebelum action yang memintanya berjalan.
+  #
+  # `mode: escalate` — gate MENYALA SENDIRI hanya saat tekanan naik, jadi
+  # kafe yang sepi tidak pernah menampilkan puzzle ke tamunya. Sinyalnya
+  # GLOBAL se-aksi (`global`), bukan per-IP: serangan terdistribusi membuat
+  # tiap IP di bawah ambangnya sendiri, sehingga sinyal per-IP justru melaporkan
+  # "aman" tepat saat serangan berlangsung.
+  #
+  # Yang TIDAK di-gate: `_meta/*`, aset, dan `/auth/*` (kalau tidak, SPA
+  # anonim tak pernah bisa render), serta staf yang login dan klien ber-API-key
+  # (mereka punya identitas; gate ini hanya untuk yang anonim).
+  #
+  # `bind: [ip]` mengikat solusi ke IP pengirim — memperkecil jendela di mana
+  # satu solusi bisa dipindahkan ke pemanggil lain dalam masa berlaku TTL-nya.
+  intake:
+    challenge:
+      provider: pow
+      mode: escalate
+      activate_at: 0.7 # fraksi budget `global`; 0.7 = menyala saat 70% terpakai
+      global: { max: 300, per: 1m }
+      difficulty: { min: 16, max: 22 } # leading zero bit; naik mengikuti tekanan
+      ttl: 90s
+      bind: [ip]
   # menu dikosongkan: `no-nav` default tidak merender nav sama sekali.
   # Halaman pelanggan sudah ada: `cafe-order/pages/menu-catalog.yaml`
   # (katalog + keranjang + kirim pesanan). UX itu datang dari `picker` pada child

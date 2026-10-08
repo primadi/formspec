@@ -684,7 +684,7 @@ func (s *Service) GrantRoles(ctx context.Context, workspaceID, username string, 
 // app scopes the resulting session to one App (plan app-scoped-login.md D1):
 // permissions are resolved for that App, and an App-scoped session with no
 // permission is refused (ErrNoAppAccess) rather than issued dead.
-func (s *Service) OAuthLogin(ctx context.Context, workspaceID, app, providerName, code string) (*TokenPair, error) {
+func (s *Service) oauthResolveUser(ctx context.Context, workspaceID, app, providerName, code string) (*User, error) {
 	prov := s.OAuthProvider(providerName)
 	if prov == nil {
 		return nil, ErrInvalidCredentials
@@ -705,7 +705,7 @@ func (s *Service) OAuthLogin(ctx context.Context, workspaceID, app, providerName
 				return nil, ErrInvalidCredentials
 			}
 			user.App = app
-			return s.issuePair(ctx, user)
+			return user, nil
 		}
 	}
 
@@ -732,7 +732,7 @@ func (s *Service) OAuthLogin(ctx context.Context, workspaceID, app, providerName
 			user.OAuthSub = info.ID
 			s.notifyAccountLinked(ctx, user)
 			user.App = app
-			return s.issuePair(ctx, user)
+			return user, nil
 		}
 		// Verified email. A password account is never silently merged with a
 		// different external identity — require explicit linking.
@@ -747,7 +747,7 @@ func (s *Service) OAuthLogin(ctx context.Context, workspaceID, app, providerName
 		}
 		s.notifyAccountLinked(ctx, user)
 		user.App = app
-		return s.issuePair(ctx, user)
+		return user, nil
 	}
 
 	// 3. New user — create with a derived username, status per policy.
@@ -792,7 +792,44 @@ func (s *Service) OAuthLogin(ctx context.Context, workspaceID, app, providerName
 		return nil, err
 	}
 	user.App = app
+	return user, nil
+}
+
+// OAuthLoginAs is OAuthLogin with an explicitly chosen session context
+// (backend §8.7).
+//
+// The choice has to arrive from OUTSIDE the flow: a provider round-trip has no
+// step where the caller could pick, so when a principal holds several contexts
+// the first attempt fails with ErrContextRequired and the client shows the
+// picker. It then restarts the flow carrying this id (the OAuth `state` keeps
+// it across the round-trip), and the login completes in the chosen boundary —
+// rather than the server picking one, or a boundary-less session quietly
+// granting the union of every role.
+//
+// An id that no longer resolves fails closed (ErrContextRequired), exactly like
+// an explicit login: a revoked assignment must never degrade to "no boundary".
+func (s *Service) OAuthLoginAs(ctx context.Context, workspaceID, app, providerName, code, assignmentID string) (*TokenPair, error) {
+	user, err := s.oauthResolveUser(ctx, workspaceID, app, providerName, code)
+	if err != nil {
+		return nil, err
+	}
+	if assignmentID != "" {
+		assignment, err := resolveAssignment(user, assignmentID)
+		if err != nil {
+			return nil, err
+		}
+		user.Context = assignment
+	}
+	user.App = app
 	return s.issuePair(ctx, user)
+}
+
+// OAuthLogin runs the flow with no pre-chosen context: the automatic rule
+// applies (none → boundary-less, exactly one → that one, several →
+// ErrContextRequired). Kept as the plain entry point for callers with no choice
+// to apply.
+func (s *Service) OAuthLogin(ctx context.Context, workspaceID, app, providerName, code string) (*TokenPair, error) {
+	return s.OAuthLoginAs(ctx, workspaceID, app, providerName, code, "")
 }
 
 // LinkOAuthIdentity explicitly links an external identity to the signed-in

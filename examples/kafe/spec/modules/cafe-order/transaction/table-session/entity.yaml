@@ -13,7 +13,19 @@ spec:
   # S5: sesi tamu berjalan di satu cabang. Perhatikan: ini deklarasi dimensi,
   # BUKAN filter — token tamu tetap `row_scope from: route` (S3/item 2.2),
   # sedangkan penyaringan otomatis per permukaan adalah item 3.5.
-  scope: { dimension: branch, field: branch_id, required: true }
+  #
+  # `enforced: external` — baris ini dibuat DAN dibaca anonim dari token QR
+  # (`guest_token`), bukan dari sesi; `branch_id`-nya sendiri datang dari meja
+  # (`dining-table.branch_id`) lewat form intake, bukan dari klien. Penegakan
+  # barisnya ada di grant publik (`find` ber-scope token), bukan di `row_scope`
+  # entity — staf (kasir) membaca baris yang sama secara lintas cabang.
+  scope: { dimension: branch, field: branch_id, required: true, enforced: external }
+  # Write-side pin, lubang kembar dengan `order`: form intake mengisi `branch_id`
+  # dari meja (`{table.branch_id}`), tetapi nilai itu datang dari KLIEN — tanpa
+  # deklarasi ini tamu anonim bisa membuka sesi meja di cabang mana pun.
+  # Cabang sebuah sesi adalah cabang mejanya, dan itu satu-satunya sumbernya.
+  create_scope:
+    - { field: branch_id, from: record, ref_field: dining_table_id, via: cafe-master.dining-table, via_field: branch_id }
   fields:
     - name: transaction_date
       type: datetime

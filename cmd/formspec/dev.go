@@ -349,12 +349,26 @@ func runDev(args []string) {
 	go watchSpecForChanges(ctx, app, cfg.SpecPath, viteHMRURL)
 
 	// ── 14. SPA info ──
-	if cfg.DevUI {
-		log.Printf("[formspec] Frontend: http://localhost%s/default/_admin (proxied to Vite HMR)", cfg.Addr)
-		log.Printf("[formspec]   Vite direct: http://localhost:%s/default/_admin", vitePort)
-	} else if cfg.WebDir == "" {
-		log.Printf("[formspec] SPA embedded — open http://localhost%s/default/_admin", cfg.Addr)
+	// The URL is derived from the resolved Apps, never hardcoded: the workspace
+	// slug is configurable (--workspace-id) and each App owns its own root_url.
+	// Printing "/default/_admin" advertised a route whose panel was retired
+	// (plan app-scoped-login.md D4) — /{ws}/_admin now carries only the
+	// framework auth routes (setup, change-password, oauth callbacks).
+	appURLs := app.UIAppURLs()
+	if len(appURLs) == 0 {
+		appURLs = []string{spec.SurfaceURL(cfg.WorkspaceID, "/")}
 	}
+	primary := appURLs[0]
+	if cfg.DevUI {
+		log.Printf("[formspec] Frontend: http://localhost%s%s (proxied to Vite HMR)", cfg.Addr, primary)
+		log.Printf("[formspec]   Vite direct: http://localhost:%s%s", vitePort, primary)
+	} else if cfg.WebDir == "" {
+		log.Printf("[formspec] SPA embedded — open http://localhost%s%s", cfg.Addr, primary)
+	}
+	for _, u := range appURLs[1:] {
+		log.Printf("[formspec] App: http://localhost%s%s", cfg.Addr, u)
+	}
+	log.Printf("[formspec] Framework: http://localhost%s%s/_admin/setup", cfg.Addr, strings.TrimSuffix(primary, "/"))
 
 	// ── 15. Serve ──
 	// Start the outbox worker (durable event delivery, todo 7.3.1) before
@@ -434,26 +448,13 @@ func chdirIfPositionalArg(args []string) []string {
 	return args[1:]
 }
 
-// findWebDist walks up from CWD looking for renderers/react-shadcn/dist/ directory.
-// Returns the absolute path if found, empty string otherwise.
-func findWebDist() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	for {
-		candidate := filepath.Join(dir, "renderers", "react-shadcn", "dist")
-		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
-			return candidate
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break // reached filesystem root
-		}
-		dir = parent
-	}
-	return ""
-}
+// findWebDist walks up from CWD looking for renderers/react-shadcn/dist/.
+//
+// The implementation lives in internal/devserver so formspec-registry (which
+// serves the same repository checkout during development) resolves the SPA
+// identically — a second copy would drift on the detail that matters (walking
+// up, not just checking CWD).
+func findWebDist() string { return devserver.FindWebDist() }
 
 func parseDevFlags(args []string) DevConfig {
 	fs := flag.NewFlagSet("dev", flag.ExitOnError)

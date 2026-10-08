@@ -12,7 +12,14 @@ spec:
   soft_deactivate: { enabled: true }
   # S5: meja milik satu cabang — dimensi ini punya sumbernya di
   # `cafe-master.employee.assignments` (username → branch_id).
-  scope: { dimension: branch, field: branch_id, required: true }
+  #
+  # `enforced: external` — meja dibaca ANONIM dari QR (`qr_token`), bukan dari
+  # sesi: tamu tidak punya assignment, jadi `from: session` mustahil resolve.
+  # Pembatasnya token QR itu sendiri (natural_key, tidak bisa ditebak), dan
+  # grant publik memakai `find` ber-token. Lihat catatan penegakannya di
+  # `apps/kafe-qr.yaml` — bukan `row_scope` entity karena baris yang sama dibaca
+  # juga oleh staf (kasir) yang memang lintas cabang.
+  scope: { dimension: branch, field: branch_id, required: true, enforced: external }
   fields:
     - name: branch_id
       type: relation
